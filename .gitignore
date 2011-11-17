@@ -1,3 +1,7 @@
 deps/*
 ebin/*
-itest/*.beam
+.eunit
+*~
+*.beam
+
+
