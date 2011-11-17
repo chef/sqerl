@@ -38,6 +38,8 @@ init([]) ->
                   {pass, Pass}, {db, Db},
                   {prepared_statement_source, PreparedStatement}
                  ],
+    error_logger:info_msg("sqerl starting ~p connections to ~s(~p) database running on ~s:~p~n",
+                          [MaxPool, Db, Type, Host, Port]),
     {ok, {{one_for_one, 5, 10},[{sqerl_pool, {poolboy, start_link, [PoolConfig]},
                                   permanent, 5000, worker, [poolboy]}]}}.
 
