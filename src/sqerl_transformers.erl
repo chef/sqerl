@@ -36,8 +36,11 @@ rows(Result) ->
     {ok, Result}.
 
 rows_as_records(RecName, RecordInfo, Rows) ->
-    {ok, [list_to_tuple([RecName | [proplists:get_value(atom_to_binary(Field), Row) || Field <- RecordInfo]])
-          || Row <- Rows]}.
+    {ok, [ begin
+               Vals = [ proplists:get_value(erlang:atom_to_binary(Field, utf8), Row)
+                        || Field <- RecordInfo ],
+               list_to_tuple([RecName | Vals])
+           end || Row <- Rows ]}.
 
 count(Count) ->
     {ok, Count}.
@@ -52,6 +55,3 @@ first_as_record(_RecName, _RecInfo, []) ->
 first_as_record(RecName, RecInfo, [H|_]) ->
     {ok, [First|_]} = rows_as_records(RecName, RecInfo, [H]),
     {ok, First}.
-
-atom_to_binary(Atom) ->
-    list_to_binary(atom_to_list(Atom)).
