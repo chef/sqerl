@@ -41,7 +41,7 @@ itest_clean:
 
 itest: compile itest_create
 	@cd itest;erlc *.erl
-	@erl -pa deps/*/ebin -pa ebin -pa itest -noshell -eval "itest:test()." \
+	@erl -pa deps/*/ebin -pa ebin -pa itest -noshell -eval "eunit:test(itest, [verbose])" \
 	-s erlang halt -host ${DB_HOST} -port ${DB_PORT} -db ${DB_NAME} -db_type ${DB_TYPE}
 	@make itest_clean
 	@rm -f itest/*.beam
