@@ -78,3 +78,21 @@ rows_test() ->
 count_test() ->
     CountTransformer = sqerl_transformers:count(),
     ?assertEqual({ok, 666}, CountTransformer(666)).
+
+rows_as_scalars_test() ->
+    ScalarTransformer = sqerl_transformers:rows_as_scalars(username),
+
+    Rows = [[{<<"id">>, 123},
+             {<<"authz_id">>, <<"authz_id">>},
+             {<<"username">>, <<"clownco">>},
+             {<<"pubkey_version">>, <<"XXX">>},
+             {<<"public_key">>, <<"abcdef0123456789">>}],
+            [{<<"id">>, 1234},{<<"authz_id">>, <<"authz_id2">>},
+             {<<"username">>, <<"skynet">>},
+             {<<"pubkey_version">>, <<"XXX">>},
+             {<<"public_key">>, <<"9876543210fedcab">>}]],
+
+
+    ?assertEqual({ok, none}, ScalarTransformer([])),
+    ?assertEqual({ok, [<<"clownco">>,<<"skynet">>]},
+                 ScalarTransformer(Rows)).

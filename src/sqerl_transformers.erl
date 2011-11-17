@@ -9,6 +9,7 @@
 -module(sqerl_transformers).
 -export([rows/0,
          rows_as_records/2,
+         rows_as_scalars/1,
          count/0,
          first/0,
          first_as_record/2]).
@@ -18,6 +19,9 @@ rows() ->
 
 rows_as_records(RecName, RecInfo) ->
     fun(Result) -> rows_as_records(RecName, RecInfo, Result) end.
+
+rows_as_scalars(Field) ->
+    fun (Results) -> rows_as_scalars(Field, Results) end.
 
 count() ->
     fun count/1.
@@ -41,6 +45,11 @@ rows_as_records(RecName, RecordInfo, Rows) ->
                         || Field <- RecordInfo ],
                list_to_tuple([RecName | Vals])
            end || Row <- Rows ]}.
+
+rows_as_scalars(_Field, []) ->
+    {ok, none};
+rows_as_scalars(Field, Results) ->
+    {ok, [ proplists:get_value(atom_to_binary(Field, utf8), Row) || Row <- Results ]}.
 
 count(Count) ->
     {ok, Count}.
