@@ -1,0 +1,10 @@
+{application, sqerl,
+ [
+  {description, "Simple database abstraction layer"},
+  {vsn, "0.1"},
+  {registered, []},
+  {applications, [kernel,
+                  stdlib]},
+  {mod, { sqerl_app, []}},
+  {env, []}
+ ]}.
