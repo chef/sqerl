@@ -4,7 +4,8 @@
   {vsn, "0.1"},
   {registered, []},
   {applications, [kernel,
-                  stdlib]},
+                  stdlib,
+		  emysql]},
   {mod, { sqerl_app, []}},
   {env, []}
  ]}.
