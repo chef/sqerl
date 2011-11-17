@@ -13,14 +13,15 @@
 -include_lib("eunit/include/eunit.hrl").
 
 rows_as_records_test() ->
-    Rows = [[{id, 123},{authz_id, "authz_id"},{username, "clownco"},{pubkey_version, "XXX"},{public_key, "abcdef0123456789"}],
-            [{id, 1234},{authz_id, "authz_id2"},{username, "skynet"},{pubkey_version, "XXX"},{public_key, "9876543210fedcab"}]],
-
+    Rows = [[{<<"id">>, 123},{<<"authz_id">>, <<"authz_id">>},{<<"username">>, <<"clownco">>},
+             {<<"pubkey_version">>, <<"XXX">>},{<<"public_key">>, <<"abcdef0123456789">>}],
+            [{<<"id">>, 1234},{<<"authz_id">>, <<"authz_id2">>},{<<"username">>, <<"skynet">>},
+             {<<"pubkey_version">>, <<"XXX">>},{<<"public_key">>, <<"9876543210fedcab">>}]],
     UserTransformer = sqerl_transformers:rows_as_records(user, record_info(fields, user)),
 
     ?assertEqual(UserTransformer(Rows),
-                 {ok, [#user{id=123, authz_id="authz_id", username="clownco", pubkey_version="XXX", public_key="abcdef0123456789"},
-                  #user{id=1234, authz_id="authz_id2", username="skynet", pubkey_version="XXX", public_key="9876543210fedcab"}]}).
+                 {ok, [#user{id=123, authz_id= <<"authz_id">>, username= <<"clownco">>, pubkey_version= <<"XXX">>, public_key= <<"abcdef0123456789">>},
+                  #user{id=1234, authz_id= <<"authz_id2">>, username= <<"skynet">>, pubkey_version= <<"XXX">>, public_key= <<"9876543210fedcab">>}]}).
 
 
 first_test() ->
@@ -38,10 +39,12 @@ first_as_record_test() ->
     Empty = [],
     ?assertEqual(ChefUserFirstAsRecord(Empty), {ok, none}),
 
-    Rows = [[{id, 123},{authz_id, "authz_id"},{username, "clownco"},{pubkey_version, "XXX"},{public_key, "abcdef0123456789"}],
-            [{id, 1234},{authz_id, "authz_id2"},{username, "skynet"},{pubkey_version, "XXX"},{public_key, "9876543210fedcab"}]],
+    Rows = [[{<<"id">>, 123},{<<"authz_id">>, <<"authz_id">>},{<<"username">>, <<"clownco">>},
+             {<<"pubkey_version">>, <<"XXX">>},{<<"public_key">>, <<"abcdef0123456789">>}],
+            [{<<"id">>, 1234},{<<"authz_id">>, <<"authz_id2">>},{<<"username">>, <<"skynet">>},
+             {<<"pubkey_version">>, <<"XXX">>},{<<"public_key">>, <<"9876543210fedcab">>}]],
     ?assertEqual(ChefUserFirstAsRecord(Rows),
-                 {ok, #user{id=123, authz_id="authz_id", username="clownco", pubkey_version="XXX", public_key="abcdef0123456789"}}).
+                 {ok, #user{id=123, authz_id= <<"authz_id">>, username= <<"clownco">>, pubkey_version= <<"XXX">>, public_key= <<"abcdef0123456789">>}}).
 
 rows_test() ->
     RowsTransformer = sqerl_transformers:rows(),
