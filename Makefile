@@ -1,10 +1,17 @@
 DEPS = deps/emysql deps/meck deps/automeck deps/gen_bunny \
        deps/poolboy deps/epgsql
 
+#DB_HOST = "localhost"
+#DB_PORT = 3306
+#DB_NAME = itest
+#DB_TYPE = mysql
+#DB_CMD = mysql -u root --host=${DB_HOST} --protocol=TCP
+
 DB_HOST = "localhost"
-DB_PORT = 3306
+DB_PORT = 5432
 DB_NAME = itest
-DB_TYPE = mysql
+DB_TYPE = pgsql
+DB_CMD = psql -U itest -d ${DB_NAME} -h ${DB_HOST} -p ${DB_PORT} -f -
 
 all: compile eunit
 
@@ -34,10 +41,10 @@ eunit: compile
 test: eunit
 
 itest_create:
-	@mysql -u root --host=${DB_HOST} --protocol=TCP < itest/itest_${DB_TYPE}_create.sql
+	${DB_CMD} < itest/itest_${DB_TYPE}_create.sql
 
 itest_clean:
-	@mysql -u root --host=${DB_HOST} --protocol=TCP < itest/itest_${DB_TYPE}_clean.sql
+	${DB_CMD} < itest/itest_${DB_TYPE}_clean.sql
 
 itest: compile itest_create
 	@cd itest;erlc *.erl
