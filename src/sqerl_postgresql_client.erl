@@ -108,7 +108,7 @@ load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
 %%     {_, Row} = lists:foldl(F, {1, []}, Fields),
 %%     unpack_rows(Fields, T, [lists:reverse(Row)|Accum]).
 
--spec unpack_rows([], [array()]) -> [[tuple()]].
+-spec unpack_rows([binary()], [[any()]]) -> [[{any(), any()}]].
 unpack_rows(Columns, RowData) ->
     Rows = [ lists:zip(Columns, Row) || Row <- RowData ], 
     ?debugVal(Rows),
