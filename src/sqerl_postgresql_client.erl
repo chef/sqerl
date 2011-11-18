@@ -25,12 +25,13 @@
 start_link(Config) ->
     sqerl_client:start_link(?MODULE, Config).
 
-exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
-    ok = pgsql:bind(Cn, Name, Args),
+exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements}=State) ->
+    {Columns, Stmt} = dict:lookup(Name, Statements),
+    ok = pgsql:bind(Cn, Stmt, Args),
     %% Note: we might get partial results here for big selects!
-    case pgsql:execute(Cn, Name, Args) of
+    case pgsql:execute(Cn, Stmt, Args) of
         {ok, _Count, RowData} ->
-            Rows = unpack_rows(RowData),
+            Rows = unpack_rows(Columns, RowData),
             {{ok, Rows}, State};
         Result ->
             {{error, Result}, State}
@@ -72,9 +73,11 @@ init(Config) ->
 load_statements(_Connection, [], Dict) ->
     {ok, Dict};
 load_statements(Connection, [{Name, SQL}|T], Dict) ->
-    case pgsql:parse(Connection, SQL) of
+    case pgsql:parse(Connection, atom_to_list(Name), SQL, []) of
         {ok, Statement} ->
-            load_statements(Connection, T, dict:store(Name, Statement, Dict));
+            {ok, {statement, _Name, Desc}} = pgsql:describe(Connection, Statement),
+            Columns = [ ColName || {_,ColName, _, _, _,_} <- Desc],
+            load_statements(Connection, T, dict:store(Name, {Columns, Statement}, Dict));
         Error ->
             %% TODO: Discover what errors can flow out of this, and write tests.
             Error
@@ -98,6 +101,7 @@ load_statements(Connection, [{Name, SQL}|T], Dict) ->
 %%     {_, Row} = lists:foldl(F, {1, []}, Fields),
 %%     unpack_rows(Fields, T, [lists:reverse(Row)|Accum]).
 
-unpack_rows(X) ->
-    ?debugVal(X),
-    X.
+unpack_rows(Columns, RowData) ->
+    Rows = [ lists:zip(Columns, Row) || Row <- RowData ], 
+    ?debugVal(Rows),
+    Rows.
