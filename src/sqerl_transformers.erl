@@ -12,7 +12,8 @@
          rows_as_scalars/1,
          count/0,
          first/0,
-         first_as_record/2]).
+         first_as_record/2,
+         identity/0]).
 
 rows() ->
     fun rows/1.
@@ -31,6 +32,9 @@ first() ->
 
 first_as_record(RecName, RecInfo) ->
     fun(Result) -> first_as_record(RecName, RecInfo, Result) end.
+
+identity() ->
+    fun(Result) -> Result end.
 
 %% Internal functions
 

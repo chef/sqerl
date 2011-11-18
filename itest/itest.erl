@@ -1,6 +1,7 @@
 -module(itest).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("sqerl.hrl").
 
 -record(user, {id, first_name, last_name}).
 
@@ -59,33 +60,20 @@ basic_test_() ->
      ]}.
 
 insert_data() ->
-    F = fun(Conn) ->
-                [sqerl_client:exec_prepared_statement(Conn, new_user, Name) ||
-                    Name <- ?NAMES],
-                ok end,
-    ok = sqerl:with_db(F).
+    ?assertMatch([1,1,1], [sqerl:statement(new_user, Name) || Name <- ?NAMES]).
 
 select_data() ->
-    F = fun(Conn) ->
-                {ok, [User]} = sqerl_client:exec_prepared_select(Conn, find_user_by_lname, ["Smith"]),
-                User end,
-    User = sqerl:with_db(F),
+    {ok, User} = sqerl:select(find_user_by_lname, ["Smith"], first),
     ?assertMatch(<<"Kevin">>, proplists:get_value(<<"first_name">>, User)),
     ?assertMatch(<<"Smith">>, proplists:get_value(<<"last_name">>, User)),
     ?assert(is_integer(proplists:get_value(<<"id">>, User))).
 
 select_data_as_record() ->
-    F = fun(Conn) ->
-                XForm = sqerl_transformers:first_as_record(user, record_info(fields, user)),
-                {ok, User} = sqerl_client:exec_prepared_select(Conn, find_user_by_lname, ["Anderson"]),
-                XForm(User) end,
-    {ok, User} = sqerl:with_db(F),
+    {ok, User} = sqerl:select(find_user_by_lname, ["Anderson"], ?FIRST(user)),
     ?assertMatch(<<"Mark">>, User#user.first_name),
     ?assertMatch(<<"Anderson">>, User#user.last_name),
     ?assert(is_integer(User#user.id)).
 
 delete_data() ->
-    F = fun(Conn) ->
-                [sqerl_client:exec_prepared_statement(Conn, delete_user_by_lname, [LName]) ||
-                    [_, LName] <- ?NAMES] end,
-    ?assertMatch([{ok, 1}, {ok, 1}, {ok, 1}], sqerl:with_db(F)).
+    ?assertMatch([1,1,1], [sqerl:statement(delete_user_by_lname, [LName]) ||
+                          [_, LName] <- ?NAMES]).

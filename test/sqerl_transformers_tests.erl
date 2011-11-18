@@ -4,11 +4,11 @@
 %% @copyright 2011 Opscode, Inc.
 -module(sqerl_transformers_tests).
 
--record(user, {'id',
-               'authz_id',
-               'username',
-               'pubkey_version',
-               'public_key'}).
+-record(user, {id,
+               authz_id,
+               username,
+               pubkey_version,
+               public_key}).
 
 -include_lib("eunit/include/eunit.hrl").
 

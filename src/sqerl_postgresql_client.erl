@@ -76,7 +76,7 @@ init(Config) ->
     end.
 
 %% Internal functions
--spec load_statements(connection(), [tuple()], dict()) -> {ok, dict()} |  {error, any()}.                           
+-spec load_statements(connection(), [tuple()], dict()) -> {ok, dict()} |  {error, any()}.
 load_statements(_Connection, [], Dict) ->
     {ok, Dict};
 load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
@@ -110,6 +110,6 @@ load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
 
 -spec unpack_rows([binary()], [[any()]]) -> [[{any(), any()}]].
 unpack_rows(Columns, RowData) ->
-    Rows = [ lists:zip(Columns, Row) || Row <- RowData ], 
+    Rows = [ lists:zip(Columns, Row) || Row <- RowData ],
     ?debugVal(Rows),
     Rows.

@@ -45,11 +45,12 @@ itest_create:
 	${DB_CMD} < itest/itest_${DB_TYPE}_create.sql
 
 itest_clean:
+	@rm -f itest/*.beam
 	${DB_CMD} < itest/itest_${DB_TYPE}_clean.sql
 
-itest: compile itest_create
-	@cd itest;erlc *.erl
+itest: itest_create itest_run itest_clean
+
+itest_run:
+	cd itest;erlc -I ../include *.erl
 	@erl -pa deps/*/ebin -pa ebin -pa itest -noshell -eval "eunit:test(itest, [verbose])" \
 	-s erlang halt -host ${DB_HOST} -port ${DB_PORT} -db ${DB_NAME} -db_type ${DB_TYPE}
-	@make itest_clean
-	@rm -f itest/*.beam
