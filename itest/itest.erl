@@ -37,7 +37,7 @@ setup_env() ->
     case Type of
         mysql ->
             application:start(emysql);
-	postgresql ->
+	pgsql ->
 	    application:start(epgsql)
     end.
 

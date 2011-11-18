@@ -11,7 +11,8 @@ DB_HOST = "localhost"
 DB_PORT = 5432
 DB_NAME = itest
 DB_TYPE = pgsql
-DB_CMD = psql -U itest -d ${DB_NAME} -h ${DB_HOST} -p ${DB_PORT} -f -
+# using the postges database keeps us from having errors about droping current database
+DB_CMD = psql -d postgres -h ${DB_HOST} -p ${DB_PORT} -f -
 
 all: compile eunit
 
