@@ -36,7 +36,9 @@ setup_env() ->
     application:start(crypto),
     case Type of
         mysql ->
-            application:start(emysql)
+            application:start(emysql);
+	postgresql ->
+	    application:start(epgsql)
     end.
 
 basic_test_() ->

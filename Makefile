@@ -34,10 +34,10 @@ eunit: compile
 test: eunit
 
 itest_create:
-	@mysql -u root < itest/itest_create.sql
+	@mysql -u root --host=${DB_HOST} --protocol=TCP < itest/itest_create.sql
 
 itest_clean:
-	@mysql -u root < itest/itest_clean.sql
+	@mysql -u root --host=${DB_HOST} --protocol=TCP < itest/itest_clean.sql
 
 itest: compile itest_create
 	@cd itest;erlc *.erl
