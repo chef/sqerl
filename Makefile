@@ -1,18 +1,18 @@
 DEPS = deps/emysql deps/meck deps/automeck deps/gen_bunny \
        deps/poolboy deps/epgsql
 
-#DB_HOST = "localhost"
-#DB_PORT = 3306
-#DB_NAME = itest
-#DB_TYPE = mysql
-#DB_CMD = mysql -u root --host=${DB_HOST} --protocol=TCP
-
 DB_HOST = "localhost"
-DB_PORT = 5432
+DB_PORT = 3306
 DB_NAME = itest
-DB_TYPE = pgsql
-# using the postges database keeps us from having errors about droping current database
-DB_CMD = psql -d postgres -h ${DB_HOST} -p ${DB_PORT} -f -
+DB_TYPE = mysql
+DB_CMD = mysql -u root --host=${DB_HOST} --protocol=TCP
+
+#DB_HOST = "localhost"
+#DB_PORT = 5432
+#DB_NAME = itest
+#DB_TYPE = pgsql
+## using the postges database keeps us from having errors about droping current database
+#DB_CMD = psql -d postgres -h ${DB_HOST} -p ${DB_PORT} -f -
 
 all: compile eunit
 
