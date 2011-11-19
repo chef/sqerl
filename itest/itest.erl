@@ -44,6 +44,7 @@ setup_env() ->
 
 basic_test_() ->
     setup_env(),
+    application:start(sqerl),
     {foreach,
      fun() -> error_logger:tty(false) end,
      fun(_) -> error_logger:tty(true) end,
