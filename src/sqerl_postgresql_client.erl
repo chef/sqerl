@@ -31,9 +31,11 @@ start_link(Config) ->
 -spec exec_prepared_select(atom(), [], state()) -> {{ok, [[tuple()]]} | {error, any()}, state()}.
 exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements}=State) ->
     {Columns, Stmt} = dict:fetch(Name, Statements),
+    ?debugVal(Name), ?debugVal(Args), ?debugVal(Stmt),
+    ?debugVal(Cn),
     ok = pgsql:bind(Cn, Stmt, Args),
     %% Note: we might get partial results here for big selects!
-    case pgsql:execute(Cn, Stmt, Args) of
+    case pgsql:execute(Cn, Stmt) of
         {ok, _Count, RowData} ->
             Rows = unpack_rows(Columns, RowData),
             {{ok, Rows}, State};
@@ -44,14 +46,25 @@ exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements}=State) ->
 -spec exec_prepared_statement(atom(), [], any()) -> {{ok, integer()} | {error, any()}, state()}.
 exec_prepared_statement(Name, Args, #state{cn=Cn, statements=Statements}=State) ->
     {_Columns, Stmt} = dict:fetch(Name, Statements),
+    ?debugVal(Name), ?debugVal(Args), ?debugVal(Stmt),
+    ?debugVal(Cn),
     ok = pgsql:bind(Cn, Stmt, Args),
+    ?debugVal(foobar),
     %% Note: we might get partial results here for big selects!
-    case pgsql:execute(Cn, Stmt, Args) of
-        {ok, Count} -> 
-            {{ok, Count}, State};
-        Result ->
-            {{error, Result}, State}
-    end.
+    Rv =
+        try 
+            case pgsql:execute(Cn, Stmt) of
+                {ok, Count} -> 
+                    {{ok, Count}, State};
+                Result ->
+                    {{error, Result}, State}
+            end
+        catch 
+            _:X -> ?debugVal(X), ?debugVal(erlang:get_stacktrace())
+        end,
+    ?debugVal(Rv),
+    ?debugVal(pgsql:squery(Cn, "COMMIT")),
+    Rv.
 
 init(Config) ->
     {host, Host} = lists:keyfind(host, 1, Config),
@@ -70,6 +83,7 @@ init(Config) ->
             %% the socket
             erlang:link(Connection),
             erlang:process_flag(trap_exit, true),
+            ?debugVal(Connection),
             {ok, Statements} = file:consult(PreparedStatementFile),
             {ok, Prepared} = load_statements(Connection, Statements, dict:new()),
             {ok, #state{cn=Connection, statements=Prepared}}
@@ -82,7 +96,7 @@ load_statements(_Connection, [], Dict) ->
 load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
     case pgsql:parse(Connection, atom_to_list(Name), SQL, []) of
         {ok, Statement} ->
-            {ok, {statement, _Name, Desc}} = pgsql:describe(Connection, Statement),
+            {ok, {statement, _Name, Desc, _DataTypes}} = pgsql:describe(Connection, Statement),
             Columns = [ ColName || {_,ColName, _, _, _,_} <- Desc],
             load_statements(Connection, T, dict:store(Name, {Columns, Statement}, Dict));
         Error ->

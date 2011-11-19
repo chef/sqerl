@@ -6,6 +6,8 @@
 
 -behaviour(supervisor).
 
+-include_lib("eunit/include/eunit.hrl").
+
 %% API
 -export([start_link/0,
          new_connection/5]).
@@ -30,7 +32,9 @@ init([]) ->
     {ok, MaxPool} = application:get_env(sqerl, db_pool_size),
     {ok, Type} = application:get_env(sqerl, db_type),
     {ok, PreparedStatement} = application:get_env(sqerl, db_prepared_statements),
+    ?debugVal(Type),
     ClientMod = db_client_mod(Type),
+    ?debugVal(ClientMod),
     PoolConfig = [{name, {local, sqerl}},
                   {worker_module, ClientMod},
                   {size, MaxPool}, {max_overflow, MaxPool},
@@ -45,5 +49,7 @@ init([]) ->
 
 db_client_mod(mysql) ->
     sqerl_mysql_client;
+db_client_mod(pgsql) ->
+    sqerl_postgresql_client;
 db_client_mod(postgres) ->
-    sqerl_postgres_client.
+    sqerl_postgresql_client.

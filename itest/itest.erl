@@ -1,5 +1,7 @@
 -module(itest).
 
+-exports([setup_env/0, basic_test_/0]).
+
 -include_lib("eunit/include/eunit.hrl").
 -include("sqerl.hrl").
 
@@ -33,18 +35,16 @@ setup_env() ->
     ok = application:set_env(sqerl, db_name, ?GET_ARG(db, Info)),
     ok = application:set_env(sqerl, db_pool_size, 3),
     ok = application:set_env(sqerl, db_type, Type),
-    ok = application:set_env(sqerl, db_prepared_statements, "itest/statements.conf"),
+    ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_pgsql.conf"),
     application:start(crypto),
-    case Type of
-        mysql ->
-            application:start(emysql);
-	pgsql ->
-	    application:start(epgsql)
-    end.
+    ?debugVal(application:start(emysql)),
+    ?debugVal(application:start(public_key)),
+    ?debugVal(application:start(ssl)),
+    ?debugVal(application:start(epgsql)).   
 
 basic_test_() ->
     setup_env(),
-    application:start(sqerl),
+    ?debugVal(application:start(sqerl)),
     {foreach,
      fun() -> error_logger:tty(false) end,
      fun(_) -> error_logger:tty(true) end,

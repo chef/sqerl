@@ -2,6 +2,8 @@
 
 -behaviour(application).
 
+-include_lib("eunit/include/eunit.hrl").
+
 %% Application callbacks
 -export([start/2, stop/1]).
 
@@ -10,7 +12,9 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    sqerl_sup:start_link().
+    V = sqerl_sup:start_link(),
+    ?debugVal(V),
+    V.
 
 stop(_State) ->
     ok.

@@ -16,6 +16,8 @@
          statement/3,
          statement/4]).
 
+-include_lib("eunit/include/eunit.hrl").
+
 checkout() ->
     poolboy:checkout(sqerl).
 
@@ -23,6 +25,7 @@ checkin(Connection) ->
     poolboy:checkin(sqerl, Connection).
 
 with_db(Call) ->
+    ?debugVal(sqlerl),
     case poolboy:checkout(sqerl) of
         {error, timeout} ->
             {error, timeout};
