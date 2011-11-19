@@ -37,14 +37,13 @@ setup_env() ->
     ok = application:set_env(sqerl, db_type, Type),
     ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_pgsql.conf"),
     application:start(crypto),
-    ?debugVal(application:start(emysql)),
-    ?debugVal(application:start(public_key)),
-    ?debugVal(application:start(ssl)),
-    ?debugVal(application:start(epgsql)).   
+    application:start(emysql),
+    application:start(public_key),
+    application:start(ssl),
+    application:start(epgsql).   
 
 basic_test_() ->
     setup_env(),
-    ?debugVal(application:start(sqerl)),
     {foreach,
      fun() -> error_logger:tty(false) end,
      fun(_) -> error_logger:tty(true) end,
