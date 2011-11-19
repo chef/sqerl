@@ -34,11 +34,9 @@ exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements}=State) ->
     ok = pgsql:bind(Cn, Stmt, Args),
     %% Note: we might get partial results here for big selects!
     Result = pgsql:execute(Cn, Stmt),
-    ?debugVal(Result),
     case Result of
         {ok, RowData} ->
             Rows = unpack_rows(Columns, RowData),
-            ?debugVal(Rows),
             {{ok, Rows}, State};
         Result ->
             {{error, Result}, State}
@@ -47,10 +45,7 @@ exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements}=State) ->
 -spec exec_prepared_statement(atom(), [], any()) -> {{ok, integer()} | {error, any()}, state()}.
 exec_prepared_statement(Name, Args, #state{cn=Cn, statements=Statements}=State) ->
     {_Columns, Stmt} = dict:fetch(Name, Statements),
-    ?debugVal(Name), ?debugVal(Args), ?debugVal(Stmt),
-    ?debugVal(Cn),
     ok = pgsql:bind(Cn, Stmt, Args),
-    ?debugVal(foobar),
     %% Note: we might get partial results here for big selects!
     Rv =
         try 
@@ -63,8 +58,7 @@ exec_prepared_statement(Name, Args, #state{cn=Cn, statements=Statements}=State) 
         catch 
             _:X -> ?debugVal(X), ?debugVal(erlang:get_stacktrace())
         end,
-    ?debugVal(Rv),
-    ?debugVal(pgsql:squery(Cn, "COMMIT")),
+    pgsql:squery(Cn, "COMMIT"),
     Rv.
 
 init(Config) ->
@@ -84,7 +78,6 @@ init(Config) ->
             %% the socket
             erlang:link(Connection),
             erlang:process_flag(trap_exit, true),
-            ?debugVal(Connection),
             {ok, Statements} = file:consult(PreparedStatementFile),
             {ok, Prepared} = load_statements(Connection, Statements, dict:new()),
             {ok, #state{cn=Connection, statements=Prepared}}

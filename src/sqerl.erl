@@ -25,7 +25,6 @@ checkin(Connection) ->
     poolboy:checkin(sqerl, Connection).
 
 with_db(Call) ->
-    ?debugVal(sqlerl),
     case poolboy:checkout(sqerl) of
         {error, timeout} ->
             {error, timeout};

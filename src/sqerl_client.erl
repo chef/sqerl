@@ -42,7 +42,6 @@ behaviour_info(_) ->
 -spec exec_prepared_select(pid(), atom(), [any()]) -> [] | [{any(), any()}] | {error, any()}.
 exec_prepared_select(Cn, Name, Args) when is_pid(Cn),
                                                     is_atom(Name) ->
-    ?debugVal({Cn, Name, Args}),
     gen_server:call(Cn, {exec_prepared_select, Name, Args}, infinity).
 
 %%% Unlike a select statement, this just returns an integer or an error.
@@ -56,7 +55,6 @@ start_link(CallbackMod, Config) ->
     gen_server:start_link(?MODULE, [CallbackMod, Config], []).
 
 init([CallbackMod, Config]) ->
-    ?debugVal(CallbackMod),
     case CallbackMod:init(Config) of
         {ok, CallbackState} ->
             {ok, #state{cb_mod=CallbackMod, cb_state=CallbackState}};
