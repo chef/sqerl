@@ -35,7 +35,13 @@ setup_env() ->
     ok = application:set_env(sqerl, db_name, ?GET_ARG(db, Info)),
     ok = application:set_env(sqerl, db_pool_size, 3),
     ok = application:set_env(sqerl, db_type, Type),
-    ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_pgsql.conf"),
+    case Type of 
+	pgsql ->
+ 	    ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_pgsql.conf");
+	mysql ->
+	    ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_mysql.conf")
+    end,   
+ 
     application:start(crypto),
     application:start(emysql),
     application:start(public_key),
