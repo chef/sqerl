@@ -31,13 +31,14 @@ start_link(Config) ->
 -spec exec_prepared_select(atom(), [], state()) -> {{ok, [[tuple()]]} | {error, any()}, state()}.
 exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements}=State) ->
     {Columns, Stmt} = dict:fetch(Name, Statements),
-    ?debugVal(Name), ?debugVal(Args), ?debugVal(Stmt),
-    ?debugVal(Cn),
     ok = pgsql:bind(Cn, Stmt, Args),
     %% Note: we might get partial results here for big selects!
-    case pgsql:execute(Cn, Stmt) of
-        {ok, _Count, RowData} ->
+    Result = pgsql:execute(Cn, Stmt),
+    ?debugVal(Result),
+    case Result of
+        {ok, RowData} ->
             Rows = unpack_rows(Columns, RowData),
+            ?debugVal(Rows),
             {{ok, Rows}, State};
         Result ->
             {{error, Result}, State}
@@ -124,6 +125,4 @@ load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
 
 -spec unpack_rows([binary()], [[any()]]) -> [[{any(), any()}]].
 unpack_rows(Columns, RowData) ->
-    Rows = [ lists:zip(Columns, Row) || Row <- RowData ],
-    ?debugVal(Rows),
-    Rows.
+    [ lists:zip(Columns, tuple_to_list(Row)) || Row <- RowData ].
