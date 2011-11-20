@@ -25,7 +25,7 @@ rows_as_scalars(Field) ->
     fun (Results) -> rows_as_scalars(Field, Results) end.
 
 count() ->
-    fun(Count) -> {ok, Count} end.
+    fun(Result) -> count(Result) end.
 
 first() ->
     fun(Rows) -> first(Rows) end.
@@ -34,10 +34,12 @@ first_as_record(RecName, RecInfo) ->
     fun(Result) -> first_as_record(RecName, RecInfo, Result) end.
 
 identity() ->
-    fun(Result) -> Result end.
+    fun(Result) -> {ok, Result} end.
 
 %% Internal functions
 
+rows(none) ->
+    {ok, none};
 rows([]) ->
     {ok, none};
 rows(Result) ->
@@ -50,18 +52,30 @@ rows_as_records(RecName, RecordInfo, Rows) ->
                list_to_tuple([RecName | Vals])
            end || Row <- Rows ]}.
 
+rows_as_scalars(_Field, none) ->
+    {ok, none};
 rows_as_scalars(_Field, []) ->
     {ok, none};
 rows_as_scalars(Field, Results) ->
     {ok, [ proplists:get_value(atom_to_binary(Field, utf8), Row) || Row <- Results ]}.
 
+first(none) ->
+    {ok, none};
 first([]) ->
     {ok, none};
 first([H|_]) ->
     {ok, H}.
 
+first_as_record(_RecName, _RecInfo, none) ->
+    {ok, none};
 first_as_record(_RecName, _RecInfo, []) ->
     {ok, none};
 first_as_record(RecName, RecInfo, [H|_]) ->
     {ok, [First|_]} = rows_as_records(RecName, RecInfo, [H]),
     {ok, First}.
+
+count(none) ->
+    {ok, 0};
+count(Count) ->
+    {ok, Count}.
+

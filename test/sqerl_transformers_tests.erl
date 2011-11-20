@@ -44,6 +44,8 @@ first_test() ->
     Empty = [],
     ?assertEqual({ok, none}, First(Empty)),
 
+    ?assertEqual({ok, none}, First(none)),
+
     HasStuff = [foo, bar, baz],
 
     ?assertEqual({ok, foo}, First(HasStuff)).
@@ -52,6 +54,8 @@ first_as_record_test() ->
     ChefUserFirstAsRecord = sqerl_transformers:first_as_record(user, record_info(fields, user)),
     Empty = [],
     ?assertEqual({ok, none}, ChefUserFirstAsRecord(Empty)),
+
+    ?assertEqual({ok, none}, ChefUserFirstAsRecord(none)),
 
     Rows = [[{<<"id">>, 123},
              {<<"authz_id">>, <<"authz_id">>},
@@ -77,7 +81,8 @@ rows_test() ->
 
 count_test() ->
     CountTransformer = sqerl_transformers:count(),
-    ?assertEqual({ok, 666}, CountTransformer(666)).
+    ?assertEqual({ok, 666}, CountTransformer(666)),
+    ?assertEqual({ok, 0}, CountTransformer(none)).
 
 rows_as_scalars_test() ->
     ScalarTransformer = sqerl_transformers:rows_as_scalars(username),
@@ -94,5 +99,6 @@ rows_as_scalars_test() ->
 
 
     ?assertEqual({ok, none}, ScalarTransformer([])),
+    ?assertEqual({ok, none}, ScalarTransformer(none)),
     ?assertEqual({ok, [<<"clownco">>,<<"skynet">>]},
                  ScalarTransformer(Rows)).
