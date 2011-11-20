@@ -31,8 +31,8 @@ exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
             %% Unpack rows
             Rows = unpack_rows(Result),
             {{ok, Rows}, State};
-        _ ->
-            {{error, Result}, State}
+        #error_packet{msg=Reason} ->
+            {{error, Reason}, State}
     end.
 
 exec_prepared_statement(Name, Args, #state{cn=Cn}=State) ->
@@ -40,8 +40,8 @@ exec_prepared_statement(Name, Args, #state{cn=Cn}=State) ->
     case Result of
         #ok_packet{affected_rows=Count} ->
             {{ok, Count}, State};
-        _ ->
-            {{error, Result}, State}
+        #error_packet{msg=Reason} ->
+            {{error, Reason}, State}
     end.
 
 init(Config) ->
