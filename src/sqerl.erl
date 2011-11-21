@@ -43,7 +43,16 @@ select(StmtName, StmtArgs, XformName) ->
     select(StmtName, StmtArgs, XformName, []).
 
 select(StmtName, StmtArgs, XformName, XformArgs) ->
-    execute_statement(StmtName, StmtArgs, XformName, XformArgs, exec_prepared_select).
+    case execute_statement(StmtName, StmtArgs, XformName, XformArgs, exec_prepared_select) of
+        {ok, []} ->
+            {ok, none};
+        {ok, L} when is_list(L) ->
+            {ok, L};
+        {ok, T} ->
+            {ok, T};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 statement(StmtName, StmtArgs) ->
     statement(StmtName, StmtArgs, identity, []).
@@ -52,7 +61,14 @@ statement(StmtName, StmtArgs, XformName) ->
     statement(StmtName, StmtArgs, XformName, []).
 
 statement(StmtName, StmtArgs, XformName, XformArgs) ->
-    execute_statement(StmtName, StmtArgs, XformName, XformArgs, exec_prepared_statement).
+    case execute_statement(StmtName, StmtArgs, XformName, XformArgs, exec_prepared_statement) of
+        {ok, 0} ->
+            {ok, none};
+        {ok, N} when is_number(N) ->
+            {ok, N};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
     Xformer = erlang:apply(sqerl_transformers, XformName, XformArgs),
@@ -64,4 +80,3 @@ execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
                         Error
                 end end,
     with_db(F).
-

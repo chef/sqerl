@@ -74,8 +74,5 @@ first_as_record(RecName, RecInfo, [H|_]) ->
     {ok, [First|_]} = rows_as_records(RecName, RecInfo, [H]),
     {ok, First}.
 
-count(none) ->
-    {ok, 0};
 count(Count) ->
     {ok, Count}.
-
