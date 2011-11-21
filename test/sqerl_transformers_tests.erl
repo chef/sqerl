@@ -48,6 +48,17 @@ first_test() ->
 
     ?assertEqual({ok, foo}, First(HasStuff)).
 
+first_as_scalar_test() ->
+    FirstScore = sqerl_transformers:first_as_scalar(score),
+    ?assertMatch({ok, none}, FirstScore([])),
+
+    ?assertMatch({ok, 0}, FirstScore([[{<<"score">>, 0}],
+                                       [{<<"score">>, 1}]])),
+
+    ?assertMatch({ok, 42}, FirstScore([[{<<"score">>, 42}],
+                                       [{<<"score">>, 100}]]))
+.
+
 first_as_record_test() ->
     ChefUserFirstAsRecord = sqerl_transformers:first_as_record(user, record_info(fields, user)),
     Empty = [],

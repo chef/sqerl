@@ -12,6 +12,7 @@
          rows_as_scalars/1,
          count/0,
          first/0,
+         first_as_scalar/1,
          first_as_record/2,
          identity/0]).
 
@@ -29,6 +30,10 @@ count() ->
 
 first() ->
     fun(Rows) -> first(Rows) end.
+
+first_as_scalar(Field) ->
+    fun(Results) ->
+            first_as_scalar(Field, Results) end.
 
 first_as_record(RecName, RecInfo) ->
     fun(Result) -> first_as_record(RecName, RecInfo, Result) end.
@@ -58,6 +63,12 @@ rows_as_scalars(_Field, []) ->
     {ok, none};
 rows_as_scalars(Field, Results) ->
     {ok, [ proplists:get_value(atom_to_binary(Field, utf8), Row) || Row <- Results ]}.
+
+first_as_scalar(_Field, []) ->
+    {ok, none};
+first_as_scalar(Field, Results) ->
+    {ok, [H|_]} = rows_as_scalars(Field, Results),
+    {ok, H}.
 
 first(none) ->
     {ok, none};
