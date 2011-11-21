@@ -4,7 +4,7 @@
 %% @copyright Copyright 2011 Opscode, Inc.
 %% @end
 %% @doc Abstraction around interacting with pgsql databases
--module(sqerl_postgresql_client).
+-module(sqerl_pgsql_client).
 
 -behaviour(sqerl_client).
 
