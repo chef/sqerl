@@ -1,7 +1,9 @@
 DEPS = deps/emysql deps/meck deps/automeck deps/gen_bunny \
        deps/poolboy deps/epgsql
 
-DB_TYPE = pgsql
+DB_TYPE = mysql
+#DB_TYPE = pgsql
+
 include ${DB_TYPE}_conf.mk
 
 all: compile eunit
