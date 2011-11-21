@@ -35,18 +35,18 @@ setup_env() ->
     ok = application:set_env(sqerl, db_name, ?GET_ARG(db, Info)),
     ok = application:set_env(sqerl, db_pool_size, 3),
     ok = application:set_env(sqerl, db_type, Type),
-    case Type of 
-	pgsql ->
- 	    ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_pgsql.conf");
-	mysql ->
-	    ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_mysql.conf")
-    end,   
- 
+    case Type of
+        pgsql ->
+            ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_pgsql.conf");
+        mysql ->
+            ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_mysql.conf")
+    end,
+
     application:start(crypto),
     application:start(emysql),
     application:start(public_key),
     application:start(ssl),
-    application:start(epgsql).   
+    application:start(epgsql).
 
 basic_test_() ->
     setup_env(),
@@ -84,4 +84,4 @@ select_data_as_record() ->
 delete_data() ->
     Expected = lists:duplicate(3, {ok, 1}),
     ?assertMatch(Expected, [sqerl:statement(delete_user_by_lname, [LName]) ||
-			       [_, LName] <- ?NAMES]).
+                               [_, LName] <- ?NAMES]).
