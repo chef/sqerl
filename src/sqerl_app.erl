@@ -12,9 +12,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    V = sqerl_sup:start_link(),
-    ?debugVal(V),
-    V.
+    sqerl_sup:start_link().
 
 stop(_State) ->
     ok.
