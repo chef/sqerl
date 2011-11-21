@@ -8,5 +8,6 @@ create table users (
        id int not null auto_increment,
        first_name varchar(80),
        last_name varchar(80),
+       high_score int,
        primary key (id)
 ) engine=InnoDB;

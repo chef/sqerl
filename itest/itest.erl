@@ -5,13 +5,13 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("sqerl.hrl").
 
--record(user, {id, first_name, last_name}).
+-record(user, {id, first_name, last_name, high_score}).
 
 -define(ARGS, [host, port, db, db_type]).
 -define(GET_ARG(Name, Args), proplists:get_value(Name, Args)).
--define(NAMES, [["Kevin", "Smith"],
-                ["Mark", "Anderson"],
-                ["Chris", "Maier"]]).
+-define(NAMES, [["Kevin", "Smith", 666],
+                ["Mark", "Anderson", 42],
+                ["Chris", "Maier", 0]]).
 
 get_dbinfo() ->
     F = fun(port) ->
@@ -61,6 +61,8 @@ basic_test_() ->
        fun select_data/0},
       {<<"Select w/record xform operations">>,
        fun select_data_as_record/0},
+      {<<"Ensure a select that returns the number zero doesn't come back as 'none'">>,
+       fun select_first_number_zero/0},
       {<<"Delete operation">>,
        fun delete_data/0}
      ]}.
@@ -81,7 +83,12 @@ select_data_as_record() ->
     ?assertMatch(<<"Anderson">>, User#user.last_name),
     ?assert(is_integer(User#user.id)).
 
+select_first_number_zero() ->
+    Expected = [{ok, 666}, {ok, 42}, {ok, 0}],
+    ?assertMatch(Expected, [sqerl:select(find_score_by_lname, [LName], first_as_scalar, [high_score]) ||
+                               [_, LName, _] <- ?NAMES]).
+
 delete_data() ->
     Expected = lists:duplicate(3, {ok, 1}),
     ?assertMatch(Expected, [sqerl:statement(delete_user_by_lname, [LName]) ||
-                               [_, LName] <- ?NAMES]).
+                               [_, LName, _] <- ?NAMES]).
