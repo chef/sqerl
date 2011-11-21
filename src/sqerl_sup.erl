@@ -48,6 +48,4 @@ init([]) ->
 db_client_mod(mysql) ->
     sqerl_mysql_client;
 db_client_mod(pgsql) ->
-    sqerl_postgresql_client;
-db_client_mod(postgres) ->
-    sqerl_postgresql_client.
+    sqerl_pgsql_client.
