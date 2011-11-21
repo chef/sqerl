@@ -66,7 +66,8 @@ basic_test_() ->
      ]}.
 
 insert_data() ->
-    ?assertMatch([1,1,1], [sqerl:statement(new_user, Name) || Name <- ?NAMES]).
+    Expected = lists:duplicate(3, {ok, 1}),
+    ?assertMatch(Expected, [sqerl:statement(new_user, Name) || Name <- ?NAMES]).
 
 select_data() ->
     {ok, User} = sqerl:select(find_user_by_lname, ["Smith"], first),
@@ -81,5 +82,6 @@ select_data_as_record() ->
     ?assert(is_integer(User#user.id)).
 
 delete_data() ->
-    ?assertMatch([1,1,1], [sqerl:statement(delete_user_by_lname, [LName]) ||
-                          [_, LName] <- ?NAMES]).
+    Expected = lists:duplicate(3, {ok, 1}),
+    ?assertMatch(Expected, [sqerl:statement(delete_user_by_lname, [LName]) ||
+			       [_, LName] <- ?NAMES]).
