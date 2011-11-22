@@ -9,7 +9,9 @@ CREATE TABLE users (
        id int DEFAULT nextval('users_id_sequence') PRIMARY KEY,
        first_name varchar(80),
        last_name varchar(80),
-       high_score int
+       high_score int,
+       datablob bytea, 
+       created timestamp
 );
 
 GRANT ALL PRIVILEGES ON TABLE users TO itest;

@@ -9,5 +9,7 @@ create table users (
        first_name varchar(80),
        last_name varchar(80),
        high_score int,
+       created timestamp,
+       data blob,
        primary key (id)
 ) engine=InnoDB;
