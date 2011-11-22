@@ -68,9 +68,8 @@ init(Config) ->
     {pass, Pass} = lists:keyfind(pass, 1, Config),
     {db, Db} = lists:keyfind(db, 1, Config),
     {prepared_statement_source, PreparedStatementFile} = lists:keyfind(prepared_statement_source, 1, Config),
-
     Opts = [{database, Db}, {port, Port}],
-    case catch pgsql:connect(Host, User, Pass, Opts) of
+    case pgsql:connect(Host, User, Pass, Opts) of
         {error, timeout} ->
             {stop, timeout};
         {ok, Connection} ->
@@ -80,7 +79,11 @@ init(Config) ->
             erlang:process_flag(trap_exit, true),
             {ok, Statements} = file:consult(PreparedStatementFile),
             {ok, Prepared} = load_statements(Connection, Statements, dict:new()),
-            {ok, #state{cn=Connection, statements=Prepared}}
+            {ok, #state{cn=Connection, statements=Prepared}};
+        {error, {syntax, Msg}} ->
+            {stop, {syntax, Msg}};
+        X -> ?debugVal(X),                
+             {stop, X}
     end.
 
 %% Internal functions
@@ -93,8 +96,11 @@ load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
             {ok, {statement, _Name, Desc, _DataTypes}} = pgsql:describe(Connection, Statement),
             Columns = [ ColName || {_,ColName, _, _, _,_} <- Desc],
             load_statements(Connection, T, dict:store(Name, {Columns, Statement}, Dict));
+        {error, {error, error, _ErrorCode, Msg, Position}} ->
+            {error, {syntax, {Msg, Position}}};
         Error ->
             %% TODO: Discover what errors can flow out of this, and write tests.
+            ?debugVal(Error),
             {error, Error}
     end.
 
