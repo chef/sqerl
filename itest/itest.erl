@@ -63,7 +63,17 @@ basic_test_() ->
        fun select_data_as_record/0},
       {<<"Ensure a select that returns the number zero doesn't come back as 'none'">>,
        fun select_first_number_zero/0},
-      {<<"Delete operation">>,
+      {<<"Update blob type">>, 
+       fun update_datablob/0},
+      {<<"Select blob type">>, 
+       fun select_datablob/0},
+
+      {<<"Update timestamp type">>, 
+       fun update_created/0},
+      {<<"Select timestamp type">>, 
+       fun select_created/0},
+
+      {<<"Delete operation">>, 
        fun delete_data/0}
      ]}.
 
@@ -92,3 +102,21 @@ delete_data() ->
     Expected = lists:duplicate(3, {ok, 1}),
     ?assertMatch(Expected, [sqerl:statement(delete_user_by_lname, [LName]) ||
                                [_, LName, _] <- ?NAMES]).
+
+update_datablob() ->
+    ?assertMatch({ok, 1}, 
+		 sqerl:statement(update_datablob_by_lname, 
+				 [<<"foobar">>, "Smith"] )).
+
+select_datablob() ->
+    {ok, User} = sqerl:select(find_datablob_by_lname, ["Smith"], first_as_scalar, [datablob]),
+    ?assertMatch(<<"foobar">>, User).
+
+update_created() ->
+    ?assertMatch({ok, 1},
+		 sqerl:statement(update_created_by_lname,
+				 ["2011-11-01 16:47:46.726141", "Smith"])).
+
+select_created() ->
+    {ok, User} = sqerl:select(find_created_by_lname, ["Smith"], first_as_scalar, [created]),
+    ?assertMatch({datetime, {{2011, 11, 01}, {16, 47, 46}}}, User).

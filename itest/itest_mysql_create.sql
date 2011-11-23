@@ -10,6 +10,6 @@ create table users (
        last_name varchar(80),
        high_score int,
        created timestamp,
-       data blob,
+       datablob blob,
        primary key (id)
 ) engine=InnoDB;
