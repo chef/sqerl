@@ -1,10 +1,9 @@
 DEPS = deps/emysql deps/meck deps/automeck deps/gen_bunny \
        deps/poolboy deps/epgsql
 
-DB_TYPE = mysql
-#DB_TYPE = pgsql
-
-include ${DB_TYPE}_conf.mk
+## Set the environment variable $DB_TYPE to either mysql or pgsql
+## to run the correct integration tests.
+include $(DB_TYPE)_conf.mk
 
 all: compile eunit
 
@@ -45,5 +44,5 @@ itest: itest_create itest_run itest_clean
 itest_run:
 	cd itest;erlc -I ../include *.erl
 	@erl -pa deps/*/ebin -pa ebin -pa itest -noshell -eval "eunit:test(itest, [verbose])" \
-	-s erlang halt -host ${DB_HOST} -port ${DB_PORT} -db ${DB_NAME} -db_type ${DB_TYPE}
+	-s erlang halt -host ${DB_HOST} -port ${DB_PORT} -db ${DB_NAME} -db_type $(DB_TYPE)
 
