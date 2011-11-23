@@ -16,3 +16,18 @@ CREATE TABLE users (
 
 GRANT ALL PRIVILEGES ON TABLE users TO itest;
 GRANT ALL PRIVILEGES ON SEQUENCE users_id_sequence TO itest;
+
+CREATE TABLE nodes (
+       id char(32) PRIMARY KEY,
+       authz_id char(32) UNIQUE NOT NULL,
+       org_id char(32) NOT NULL,
+       name varchar(255) NOT NULL,
+       environment varchar(255) NOT NULL,
+       serialized_object text,
+       last_updated_by char(32) NOT NULL,
+       created_at timestamp NOT NULL,
+       updated_at timestamp NOT NULL
+);
+
+GRANT ALL PRIVILEGES ON TABLE nodes TO itest;
+
