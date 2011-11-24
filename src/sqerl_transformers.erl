@@ -14,7 +14,9 @@
          first/0,
          first_as_scalar/1,
          first_as_record/2,
-         identity/0]).
+         identity/0,
+         parse_timestamp_to_datetime/1,
+         by_column_name/2]).
 
 rows() ->
     fun(Rows) -> rows(Rows) end.
@@ -87,3 +89,22 @@ first_as_record(RecName, RecInfo, [H|_]) ->
 
 count(Count) ->
     {ok, Count}.
+
+parse_timestamp_to_datetime(TS) when is_binary(TS) ->
+    {match, [_, Y,M,D,H,M,S]} =
+        re:run(TS, "^(\\d+)-(\\d+)-(\\d+)\s(\\d+):(\\d+):(\\d+)", 
+               [{capture, all, binary}]),
+    {datetime, {{Y,M,D}, {H,M,S}}}.
+
+single_column({Name, Data}, Transforms) ->
+    case dict:find(Name, Transforms) of
+        {ok, Transform} ->
+            {Name, Transform(Data)};
+        error -> 
+            {Name, Data}
+    end.
+
+by_column_name(ColumnData, undefined) ->
+    ColumnData;
+by_column_name(ColumnData, Transforms) ->
+    [ single_column(E,Transforms) || E <- ColumnData ].
