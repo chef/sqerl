@@ -20,7 +20,8 @@
          exec_prepared_select/3]).
 
 -record(state, {cn,
-                statements = dict:new() :: dict() }).
+                statements = dict:new() :: dict(),
+                ctrans :: dict() | undefined }).
 
 -type connection() :: pid().
 -type state() :: any().
@@ -29,7 +30,7 @@ start_link(Config) ->
     sqerl_client:start_link(?MODULE, Config).
 
 -spec exec_prepared_select(atom(), [], state()) -> {{ok, [[tuple()]]} | {error, any()}, state()}.
-exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements}=State) ->
+exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements, ctrans=CTrans}=State) ->
     {Columns, Stmt} = dict:fetch(Name, Statements),
     ok = pgsql:bind(Cn, Stmt, Args),
     %% Note: we might get partial results here for big selects!
@@ -37,7 +38,8 @@ exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements}=State) ->
     case Result of
         {ok, RowData} ->
             Rows = unpack_rows(Columns, RowData),
-            {{ok, Rows}, State};
+            TRows = sqerl_transformers:by_column_name(Rows, CTrans),
+            {{ok, TRows}, State};
         Result ->
             {{error, Result}, State}
     end.
@@ -69,6 +71,11 @@ init(Config) ->
     {db, Db} = lists:keyfind(db, 1, Config),
     {prepared_statement_source, PreparedStatementFile} = lists:keyfind(prepared_statement_source, 1, Config),
     Opts = [{database, Db}, {port, Port}],
+    CTrans = 
+        case lists:keyfind(column_transforms, 1, Config) of
+            {column_transforms, CT} -> CT;
+            false -> undefined
+        end,
     case pgsql:connect(Host, User, Pass, Opts) of
         {error, timeout} ->
             {stop, timeout};
@@ -79,7 +86,7 @@ init(Config) ->
             erlang:process_flag(trap_exit, true),
             {ok, Statements} = file:consult(PreparedStatementFile),
             {ok, Prepared} = load_statements(Connection, Statements, dict:new()),
-            {ok, #state{cn=Connection, statements=Prepared}};
+            {ok, #state{cn=Connection, statements=Prepared, ctrans=CTrans}};
         {error, {syntax, Msg}} ->
             {stop, {syntax, Msg}};
         X -> ?debugVal(X),                
@@ -109,19 +116,8 @@ load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
 %% each row is converted into a proplist and then collected
 %% up into a list containing all the converted rows for
 %% a given query result.
-%% unpack_rows(#result_packet{field_list=Fields, rows=Rows}) ->
-%%     unpack_rows(Fields, Rows, []).
-
-%% unpack_rows(_Fields, [], []) ->
-%%     none;
-%% unpack_rows(_Fields, [], Accum) ->
-%%     lists:reverse(Accum);
-%% unpack_rows(Fields, [Values|T], Accum) ->
-%%     F = fun(Field, {Idx, Row}) ->
-%%                 {Idx + 1, [{Field#field.name, lists:nth(Idx, Values)}|Row]} end,
-%%     {_, Row} = lists:foldl(F, {1, []}, Fields),
-%%     unpack_rows(Fields, T, [lists:reverse(Row)|Accum]).
 
 -spec unpack_rows([binary()], [[any()]]) -> [[{any(), any()}]].
 unpack_rows(Columns, RowData) ->
     [ lists:zip(Columns, tuple_to_list(Row)) || Row <- RowData ].
+
