@@ -32,13 +32,19 @@ init([]) ->
     {ok, MaxPool} = application:get_env(sqerl, db_pool_size),
     {ok, Type} = application:get_env(sqerl, db_type),
     {ok, PreparedStatement} = application:get_env(sqerl, db_prepared_statements),
+    CTransforms =
+        case application:get_env(sqerl, db_column_transforms) of
+            {ok, CT} -> CT;
+            _ -> undefined
+        end,
     ClientMod = db_client_mod(Type),
     PoolConfig = [{name, {local, sqerl}},
                   {worker_module, ClientMod},
                   {size, MaxPool}, {max_overflow, MaxPool},
                   {host, Host}, {port, Port}, {user, User},
                   {pass, Pass}, {db, Db},
-                  {prepared_statement_source, PreparedStatement}
+                  {prepared_statement_source, PreparedStatement},
+                  {column_transforms, CTransforms}
                  ],
     error_logger:info_msg("sqerl starting ~p connections to ~s(~p) database running on ~s:~p~n",
                           [MaxPool, Db, Type, Host, Port]),

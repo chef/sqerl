@@ -16,7 +16,10 @@
          first_as_record/2,
          identity/0,
          parse_timestamp_to_datetime/1,
+         convert_YMDHMS_tuple_to_datetime/1,
          by_column_name/2]).
+
+-include_lib("eunit/include/eunit.hrl").
 
 rows() ->
     fun(Rows) -> rows(Rows) end.
@@ -96,15 +99,25 @@ parse_timestamp_to_datetime(TS) when is_binary(TS) ->
                [{capture, all, binary}]),
     {datetime, {{Y,M,D}, {H,M,S}}}.
 
-single_column({Name, Data}, Transforms) ->
-    case dict:find(Name, Transforms) of
-        {ok, Transform} ->
-            {Name, Transform(Data)};
-        error -> 
-            {Name, Data}
+convert_YMDHMS_tuple_to_datetime({{Y,Mo,D}, {H,Mi,S}}) ->
+    {datetime, {{Y,Mo,D}, {H,Mi,trunc(S)}}}.    
+
+%% single_column({Name, Data}, Transforms) when is_record(Transforms,dict, 9) ->
+%%     case dict:find(Name, Transforms) of
+%%         {ok, Transform} ->
+%%             {Name, Transform(Data)};
+%%         error -> 
+%%             {Name, Data}
+%%    end;
+single_column({Name, Data}, Transforms) when is_list(Transforms) ->
+    case proplists:get_value(Name, Transforms) of
+        undefined -> 
+            {Name, Data};
+        Transform ->
+            {Name, Transform(Data)}
     end.
 
-by_column_name(ColumnData, undefined) ->
-    ColumnData;
-by_column_name(ColumnData, Transforms) ->
-    [ single_column(E,Transforms) || E <- ColumnData ].
+by_column_name(Rows, undefined) ->
+    Rows;
+by_column_name(Rows, Transforms) ->    
+    [[ single_column(E,Transforms) || E <- Row ] || Row <- Rows].

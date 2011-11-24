@@ -37,7 +37,10 @@ setup_env() ->
     ok = application:set_env(sqerl, db_type, Type),
     case Type of
         pgsql ->
-            ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_pgsql.conf");
+            ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_pgsql.conf"),
+	    ok = application:set_env(sqerl, db_column_transforms,
+				     [{<<"created">>, fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}]);
+	
         mysql ->
             ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_mysql.conf")
     end,
