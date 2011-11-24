@@ -115,7 +115,8 @@ select_datablob() ->
 update_created() ->
     ?assertMatch({ok, 1},
 		 sqerl:statement(update_created_by_lname,
-				 ["2011-11-01 16:47:46.726141", "Smith"])).
+				 [{datetime, {{2011, 11, 1}, {16, 47, 46}}},
+				  "Smith"])).
 
 select_created() ->
     {ok, User} = sqerl:select(find_created_by_lname, ["Smith"], first_as_scalar, [created]),
