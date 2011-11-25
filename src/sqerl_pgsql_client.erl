@@ -32,7 +32,8 @@ start_link(Config) ->
 -spec exec_prepared_select(atom(), [], state()) -> {{ok, [[tuple()]]} | {error, any()}, state()}.
 exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements, ctrans=CTrans}=State) ->
     {Columns, Stmt} = dict:fetch(Name, Statements),
-    ok = pgsql:bind(Cn, Stmt, Args),
+    NArgs = input_transforms(Args,State),
+    ok = pgsql:bind(Cn, Stmt, NArgs),
     %% Note: we might get partial results here for big selects!
     Result = pgsql:execute(Cn, Stmt),
     case Result of
@@ -47,7 +48,8 @@ exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements, ctrans=CTr
 -spec exec_prepared_statement(atom(), [], any()) -> {{ok, integer()} | {error, any()}, state()}.
 exec_prepared_statement(Name, Args, #state{cn=Cn, statements=Statements}=State) ->
     {_Columns, Stmt} = dict:fetch(Name, Statements),
-    ok = pgsql:bind(Cn, Stmt, Args),
+    NArgs = input_transforms(Args, State),
+    ok = pgsql:bind(Cn, Stmt, NArgs),
     %% Note: we might get partial results here for big selects!
     Rv =
         try 
@@ -121,3 +123,10 @@ load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
 unpack_rows(Columns, RowData) ->
     [ lists:zip(Columns, tuple_to_list(Row)) || Row <- RowData ].
 
+transform({datetime, X}) ->
+    X;
+transform(X) ->
+    X.
+
+input_transforms(Data, _State) ->
+    [ transform(E) || E <- Data ].
