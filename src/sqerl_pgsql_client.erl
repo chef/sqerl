@@ -40,7 +40,7 @@ start_link(Config) ->
 exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements, ctrans=CTrans}=State) ->
     PrepStmt = dict:fetch(Name, Statements),
     Stmt = PrepStmt#prepared_statement.stmt,
-    NArgs = input_transforms(Args,State),
+    NArgs = input_transforms(Args, PrepStmt, State),
     ok = pgsql:bind(Cn, Stmt, NArgs),
     %% Note: we might get partial results here for big selects!
     Result = pgsql:execute(Cn, Stmt),
@@ -57,8 +57,8 @@ exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements, ctrans=CTr
 exec_prepared_statement(Name, Args, #state{cn=Cn, statements=Statements}=State) ->
     PrepStmt = dict:fetch(Name, Statements),
     Stmt = PrepStmt#prepared_statement.stmt,
-    NArgs = input_transforms(Args, State),
-    ok = pgsql:bind(Cn, PrepStmt#prepared_statement.stmt, NArgs),
+    NArgs = input_transforms(Args, PrepStmt, State),
+    ok = pgsql:bind(Cn, Stmt, NArgs),
     %% Note: we might get partial results here for big selects!
     Rv =
         try 
@@ -115,9 +115,10 @@ load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
             ColumnData = [ {CN, CT} || {column, CN, CT, _, _, _} <- Desc ],
             P = #prepared_statement{
               name = SName,
-              input_types = ColumnData,
-              output_fields = DataTypes,
+              input_types = DataTypes,
+              output_fields = ColumnData,
               stmt = Statement},
+%            ?debugVal(P),
             load_statements(Connection, T, dict:store(Name, P, Dict));
         {error, {error, error, _ErrorCode, Msg, Position}} ->
             {error, {syntax, {Msg, Position}}};
@@ -134,7 +135,7 @@ load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
 %% a given query result.
 
 -spec unpack_rows(any(), [[any()]]) -> [[{any(), any()}]].
-unpack_rows(#prepared_statement{input_types=ColumnData}, RowData) ->
+unpack_rows(#prepared_statement{output_fields=ColumnData}, RowData) ->
     Columns = [C || {C,_} <- ColumnData],
     [ lists:zip(Columns, tuple_to_list(Row)) || Row <- RowData ].
 
@@ -143,5 +144,6 @@ transform({datetime, X}) ->
 transform(X) ->
     X.
 
-input_transforms(Data, _State) ->
+input_transforms(Data, #prepared_statement{input_types=Types}, _State) ->
+    ?debugVal(Types),
     [ transform(E) || E <- Data ].
