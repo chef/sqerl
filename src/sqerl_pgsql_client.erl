@@ -19,9 +19,16 @@
          exec_prepared_statement/3,
          exec_prepared_select/3]).
 
--record(state, {cn,
-                statements = dict:new() :: dict(),
-                ctrans :: dict() | undefined }).
+-record(state, 
+        {cn,
+         statements = dict:new() :: dict(),
+         ctrans :: dict() | undefined }).
+
+-record(prepared_statement, 
+        {name :: string(),
+         input_types  :: any(),
+         output_fields :: any(),
+         stmt :: any() } ).
 
 -type connection() :: pid().
 -type state() :: any().
@@ -31,14 +38,15 @@ start_link(Config) ->
 
 -spec exec_prepared_select(atom(), [], state()) -> {{ok, [[tuple()]]} | {error, any()}, state()}.
 exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements, ctrans=CTrans}=State) ->
-    {Columns, Stmt} = dict:fetch(Name, Statements),
+    PrepStmt = dict:fetch(Name, Statements),
+    Stmt = PrepStmt#prepared_statement.stmt,
     NArgs = input_transforms(Args,State),
     ok = pgsql:bind(Cn, Stmt, NArgs),
     %% Note: we might get partial results here for big selects!
     Result = pgsql:execute(Cn, Stmt),
     case Result of
         {ok, RowData} ->
-            Rows = unpack_rows(Columns, RowData),
+            Rows = unpack_rows(PrepStmt, RowData),
             TRows = sqerl_transformers:by_column_name(Rows, CTrans),
             {{ok, TRows}, State};
         Result ->
@@ -47,9 +55,10 @@ exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements, ctrans=CTr
 
 -spec exec_prepared_statement(atom(), [], any()) -> {{ok, integer()} | {error, any()}, state()}.
 exec_prepared_statement(Name, Args, #state{cn=Cn, statements=Statements}=State) ->
-    {_Columns, Stmt} = dict:fetch(Name, Statements),
+    PrepStmt = dict:fetch(Name, Statements),
+    Stmt = PrepStmt#prepared_statement.stmt,
     NArgs = input_transforms(Args, State),
-    ok = pgsql:bind(Cn, Stmt, NArgs),
+    ok = pgsql:bind(Cn, PrepStmt#prepared_statement.stmt, NArgs),
     %% Note: we might get partial results here for big selects!
     Rv =
         try 
@@ -102,9 +111,14 @@ load_statements(_Connection, [], Dict) ->
 load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
     case pgsql:parse(Connection, atom_to_list(Name), SQL, []) of
         {ok, Statement} ->
-            {ok, {statement, _Name, Desc, _DataTypes}} = pgsql:describe(Connection, Statement),
-            Columns = [ ColName || {_,ColName, _, _, _,_} <- Desc],
-            load_statements(Connection, T, dict:store(Name, {Columns, Statement}, Dict));
+            {ok, {statement, SName, Desc, DataTypes}} = pgsql:describe(Connection, Statement),
+            ColumnData = [ {CN, CT} || {column, CN, CT, _, _, _} <- Desc ],
+            P = #prepared_statement{
+              name = SName,
+              input_types = ColumnData,
+              output_fields = DataTypes,
+              stmt = Statement},
+            load_statements(Connection, T, dict:store(Name, P, Dict));
         {error, {error, error, _ErrorCode, Msg, Position}} ->
             {error, {syntax, {Msg, Position}}};
         Error ->
@@ -119,8 +133,9 @@ load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
 %% up into a list containing all the converted rows for
 %% a given query result.
 
--spec unpack_rows([binary()], [[any()]]) -> [[{any(), any()}]].
-unpack_rows(Columns, RowData) ->
+-spec unpack_rows(any(), [[any()]]) -> [[{any(), any()}]].
+unpack_rows(#prepared_statement{input_types=ColumnData}, RowData) ->
+    Columns = [C || {C,_} <- ColumnData],
     [ lists:zip(Columns, tuple_to_list(Row)) || Row <- RowData ].
 
 transform({datetime, X}) ->
