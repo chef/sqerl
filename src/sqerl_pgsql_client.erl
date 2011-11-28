@@ -10,9 +10,6 @@
 
 -include_lib("epgsql/include/pgsql.hrl").
 
--define(COMMIT(Cn), pgsql:squery(Cn, "COMMIT")).
--define(ROLLBACK(Cn), pgsql:squery(Cn, "COMMIT")).
-
 %% API
 -export([start_link/1]).
 
@@ -65,16 +62,13 @@ exec_prepared_statement(Name, Args, #state{cn=Cn, statements=Statements}=State) 
         try
             case pgsql:execute(Cn, Stmt) of
                 {ok, Count} ->
-                    ?COMMIT(Cn),
-                    {{ok, Count}, State};
+                    commit(Cn, Count, State);
                 Result ->
-                    ?ROLLBACK(Cn),
-                    {{error, Result}, State}
+                    rollback(Cn, {error, Result}, State)
             end
         catch
             _:X ->
-                ?ROLLBACK(Cn),
-                {error, X}
+                rollback(Cn, {error, X}, State)
         end,
     Rv.
 
@@ -154,3 +148,19 @@ transform(_Type, X) ->
 
 input_transforms(Data, #prepared_statement{input_types=Types}, _State) ->
     [ transform(T, E) || {T,E} <- lists:zip(Types, Data) ].
+
+commit(Cn, Result, State) ->
+    case pgsql:squery(Cn, "COMMIT") of
+        {ok, [], []} ->
+            {{ok, Result}, State};
+        Error when is_tuple(Error) ->
+            {Error, State}
+    end.
+
+rollback(Cn, Error, State) ->
+    case pgsql:squery(Cn, "ROLLBACK") of
+        {ok, [], []} ->
+            {Error, State};
+        Error1 ->
+            {Error, State}
+    end.
