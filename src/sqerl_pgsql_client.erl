@@ -161,6 +161,6 @@ rollback(Cn, Error, State) ->
     case pgsql:squery(Cn, "ROLLBACK") of
         {ok, [], []} ->
             {Error, State};
-        Error1 ->
+        _Err ->
             {Error, State}
     end.
