@@ -118,7 +118,6 @@ load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
               input_types = DataTypes,
               output_fields = ColumnData,
               stmt = Statement},
-%            ?debugVal(P),
             load_statements(Connection, T, dict:store(Name, P, Dict));
         {error, {error, error, _ErrorCode, Msg, Position}} ->
             {error, {syntax, {Msg, Position}}};
@@ -139,11 +138,16 @@ unpack_rows(#prepared_statement{output_fields=ColumnData}, RowData) ->
     Columns = [C || {C,_} <- ColumnData],
     [ lists:zip(Columns, tuple_to_list(Row)) || Row <- RowData ].
 
-transform({datetime, X}) ->
+
+%%%
+%%% Simple hooks to support coercion inputs to match the type expected by pgsql
+%%%
+transform(timestamp, {datetime, X}) ->
     X;
-transform(X) ->
+transform(timestamp, X) ->
+    X;
+transform(_Type, X) ->
     X.
 
 input_transforms(Data, #prepared_statement{input_types=Types}, _State) ->
-    ?debugVal(Types),
-    [ transform(E) || E <- Data ].
+    [ transform(T, E) || {T,E} <- lists:zip(Types, Data) ].
