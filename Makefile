@@ -3,7 +3,7 @@ DEPS = deps/emysql deps/meck deps/automeck deps/gen_bunny \
 
 ## Set the environment variable $DB_TYPE to either mysql or pgsql
 ## to run the correct integration tests.
-include $(DB_TYPE)_conf.mk
+-include itest/$(DB_TYPE)_conf.mk
 
 all: compile eunit
 
@@ -33,13 +33,15 @@ eunit: compile
 test: eunit
 
 itest_create:
-	${DB_CMD} < itest/itest_${DB_TYPE}_create.sql
+	@echo Creating integration test database
+	@${DB_CMD} < itest/itest_${DB_TYPE}_create.sql
 
 itest_clean:
 	@rm -f itest/*.beam
-	${DB_CMD} < itest/itest_${DB_TYPE}_clean.sql
+	@echo Dropping integration test database
+	@${DB_CMD} < itest/itest_${DB_TYPE}_clean.sql
 
-itest: itest_create itest_run itest_clean
+itest: compile itest_create itest_run itest_clean
 
 itest_run:
 	cd itest;erlc -I ../include *.erl

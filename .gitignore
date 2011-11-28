@@ -3,5 +3,5 @@ ebin/*
 .eunit
 *~
 *.beam
-
+logfile
 
