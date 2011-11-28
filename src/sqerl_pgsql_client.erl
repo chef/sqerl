@@ -19,12 +19,11 @@
          exec_prepared_statement/3,
          exec_prepared_select/3]).
 
--record(state, 
-        {cn,
-         statements = dict:new() :: dict(),
-         ctrans :: dict() | undefined }).
+-record(state,  {cn,
+                 statements = dict:new() :: dict(),
+                 ctrans :: dict() | undefined }).
 
--record(prepared_statement, 
+-record(prepared_statement,
         {name :: string(),
          input_types  :: any(),
          output_fields :: any(),
@@ -61,14 +60,14 @@ exec_prepared_statement(Name, Args, #state{cn=Cn, statements=Statements}=State) 
     ok = pgsql:bind(Cn, Stmt, NArgs),
     %% Note: we might get partial results here for big selects!
     Rv =
-        try 
+        try
             case pgsql:execute(Cn, Stmt) of
-                {ok, Count} -> 
+                {ok, Count} ->
                     {{ok, Count}, State};
                 Result ->
                     {{error, Result}, State}
             end
-        catch 
+        catch
             _:X -> ?debugVal(X), ?debugVal(erlang:get_stacktrace())
         end,
     pgsql:squery(Cn, "COMMIT"),
@@ -82,7 +81,7 @@ init(Config) ->
     {db, Db} = lists:keyfind(db, 1, Config),
     {prepared_statement_source, PreparedStatementFile} = lists:keyfind(prepared_statement_source, 1, Config),
     Opts = [{database, Db}, {port, Port}],
-    CTrans = 
+    CTrans =
         case lists:keyfind(column_transforms, 1, Config) of
             {column_transforms, CT} -> CT;
             false -> undefined
@@ -100,7 +99,7 @@ init(Config) ->
             {ok, #state{cn=Connection, statements=Prepared, ctrans=CTrans}};
         {error, {syntax, Msg}} ->
             {stop, {syntax, Msg}};
-        X -> ?debugVal(X),                
+        X -> ?debugVal(X),
              {stop, X}
     end.
 
