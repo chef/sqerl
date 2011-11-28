@@ -9,7 +9,9 @@
 -behaviour(sqerl_client).
 
 -include_lib("epgsql/include/pgsql.hrl").
--include_lib("eunit/include/eunit.hrl").
+
+-define(COMMIT(Cn), pgsql:squery(Cn, "COMMIT")).
+-define(ROLLBACK(Cn), pgsql:squery(Cn, "COMMIT")).
 
 %% API
 -export([start_link/1]).
@@ -63,14 +65,17 @@ exec_prepared_statement(Name, Args, #state{cn=Cn, statements=Statements}=State) 
         try
             case pgsql:execute(Cn, Stmt) of
                 {ok, Count} ->
+                    ?COMMIT(Cn),
                     {{ok, Count}, State};
                 Result ->
+                    ?ROLLBACK(Cn),
                     {{error, Result}, State}
             end
         catch
-            _:X -> ?debugVal(X), ?debugVal(erlang:get_stacktrace())
+            _:X ->
+                ?ROLLBACK(Cn),
+                {error, X}
         end,
-    pgsql:squery(Cn, "COMMIT"),
     Rv.
 
 init(Config) ->
@@ -99,8 +104,8 @@ init(Config) ->
             {ok, #state{cn=Connection, statements=Prepared, ctrans=CTrans}};
         {error, {syntax, Msg}} ->
             {stop, {syntax, Msg}};
-        X -> ?debugVal(X),
-             {stop, X}
+        X ->
+            {stop, X}
     end.
 
 %% Internal functions
@@ -122,7 +127,6 @@ load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
             {error, {syntax, {Msg, Position}}};
         Error ->
             %% TODO: Discover what errors can flow out of this, and write tests.
-            ?debugVal(Error),
             {error, Error}
     end.
 
