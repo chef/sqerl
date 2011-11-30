@@ -94,10 +94,10 @@ count(Count) ->
     {ok, Count}.
 
 parse_timestamp_to_datetime(TS) when is_binary(TS) ->
-    {match, [_, Y,M,D,H,M,S]} =
+    {match, [_, Year,Month,Day,Hour,Min,Sec]} =
         re:run(TS, "^(\\d+)-(\\d+)-(\\d+)\s(\\d+):(\\d+):(\\d+)", 
                [{capture, all, binary}]),
-    {datetime, {{Y,M,D}, {H,M,S}}}.
+    {datetime, {{Year,Month,Day}, {Hour,Min,Sec}}}.
 
 convert_YMDHMS_tuple_to_datetime({{Y,Mo,D}, {H,Mi,S}}) ->
     {datetime, {{Y,Mo,D}, {H,Mi,trunc(S)}}}.    
