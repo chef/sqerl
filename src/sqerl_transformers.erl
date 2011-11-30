@@ -95,12 +95,12 @@ count(Count) ->
 
 parse_timestamp_to_datetime(TS) when is_binary(TS) ->
     {match, [_, Year,Month,Day,Hour,Min,Sec]} =
-        re:run(TS, "^(\\d+)-(\\d+)-(\\d+)\s(\\d+):(\\d+):(\\d+)", 
+        re:run(TS, "^(\\d+)-(\\d+)-(\\d+)\s(\\d+):(\\d+):(\\d+)",
                [{capture, all, binary}]),
-    {datetime, {{Year,Month,Day}, {Hour,Min,Sec}}}.
+    {{Year,Month,Day}, {Hour,Min,Sec}}.
 
 convert_YMDHMS_tuple_to_datetime({{Y,Mo,D}, {H,Mi,S}}) ->
-    {datetime, {{Y,Mo,D}, {H,Mi,trunc(S)}}}.    
+    {datetime, {{Y,Mo,D}, {H,Mi,trunc(S)}}}.
 
 %% single_column({Name, Data}, Transforms) when is_record(Transforms,dict, 9) ->
 %%     case dict:find(Name, Transforms) of
@@ -119,5 +119,5 @@ single_column({Name, Data}, Transforms) when is_list(Transforms) ->
 
 by_column_name(Rows, undefined) ->
     Rows;
-by_column_name(Rows, Transforms) ->    
+by_column_name(Rows, Transforms) ->
     [[ single_column(E,Transforms) || E <- Row ] || Row <- Rows].
