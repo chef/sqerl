@@ -93,11 +93,14 @@ first_as_record(RecName, RecInfo, [H|_]) ->
 count(Count) ->
     {ok, Count}.
 
+b2i(X) when is_binary(X) ->
+    list_to_integer(binary_to_list(X)).
+
 parse_timestamp_to_datetime(TS) when is_binary(TS) ->
     {match, [_, Year,Month,Day,Hour,Min,Sec]} =
         re:run(TS, "^(\\d+)-(\\d+)-(\\d+)\s(\\d+):(\\d+):(\\d+)",
                [{capture, all, binary}]),
-    {{Year,Month,Day}, {Hour,Min,Sec}}.
+    {{b2i(Year),b2i(Month),b2i(Day)}, {b2i(Hour),b2i(Min),b2i(Sec)}}.
 
 convert_YMDHMS_tuple_to_datetime({{Y,Mo,D}, {H,Mi,S}}) ->
     {datetime, {{Y,Mo,D}, {H,Mi,trunc(S)}}}.

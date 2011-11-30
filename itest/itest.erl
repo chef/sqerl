@@ -40,7 +40,6 @@ setup_env() ->
             ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_pgsql.conf"),
 	    ok = application:set_env(sqerl, db_column_transforms,
 				     [{<<"created">>, fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}]);
-	
         mysql ->
             ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_mysql.conf")
     end,
@@ -66,17 +65,17 @@ basic_test_() ->
        fun select_data_as_record/0},
       {<<"Ensure a select that returns the number zero doesn't come back as 'none'">>,
        fun select_first_number_zero/0},
-      {<<"Update blob type">>, 
+      {<<"Update blob type">>,
        fun update_datablob/0},
-      {<<"Select blob type">>, 
+      {<<"Select blob type">>,
        fun select_datablob/0},
 
-      {<<"Update timestamp type">>, 
+      {<<"Update timestamp type">>,
        fun update_created/0},
-      {<<"Select timestamp type">>, 
+      {<<"Select timestamp type">>,
        fun select_created/0},
 
-      {<<"Delete operation">>, 
+      {<<"Delete operation">>,
        fun delete_data/0}
      ]}.
 
@@ -107,8 +106,8 @@ delete_data() ->
                                [_, LName, _] <- ?NAMES]).
 
 update_datablob() ->
-    ?assertMatch({ok, 1}, 
-		 sqerl:statement(update_datablob_by_lname, 
+    ?assertMatch({ok, 1},
+		 sqerl:statement(update_datablob_by_lname,
 				 [<<"foobar">>, "Smith"] )).
 
 select_datablob() ->
@@ -119,7 +118,13 @@ update_created() ->
     ?assertMatch({ok, 1},
 		 sqerl:statement(update_created_by_lname,
 				 [{datetime, {{2011, 11, 1}, {16, 47, 46}}},
-				  "Smith"])).
+				  "Smith"])),
+    ?assertMatch({ok, 1},
+		 sqerl:statement(update_created_by_lname,
+				 [{{2011, 11, 2}, {16, 47, 46}}, "Anderson"])),
+    ?assertMatch({ok, 1},
+		 sqerl:statement(update_created_by_lname,
+				 [<<"2011-11-02 16:47:46">>, "Maier"])).
 
 select_created() ->
     {ok, User} = sqerl:select(find_created_by_lname, ["Smith"], first_as_scalar, [created]),
