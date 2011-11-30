@@ -141,8 +141,8 @@ unpack_rows(#prepared_statement{output_fields=ColumnData}, RowData) ->
 %%%
 transform(timestamp, {datetime, X}) ->
     X;
-transform(timestamp, X) ->
-    X;
+transform(timestamp, X) when is_binary(X) ->
+    sqerl_transformers:parse_timestamp_to_datetime(X);
 transform(_Type, X) ->
     X.
 
