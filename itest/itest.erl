@@ -74,7 +74,9 @@ basic_test_() ->
       {<<"Update timestamp type">>,
        fun update_created/0},
       {<<"Select timestamp type">>,
-       fun select_created/0},
+       fun select_created_by_lname/0},
+      {<<"Select timestamp type">>,
+       fun select_lname_by_created/0},
 
       {<<"Delete operation">>,
        fun delete_data/0}
@@ -139,6 +141,9 @@ update_created() ->
     {ok, User3} = sqerl:select(find_created_by_lname, ["Maier"], first_as_scalar, [created]),
     ?assertMatch({datetime, {{2011, 11, 03}, {16, 47, 46}}}, User3).
 
-select_created() ->
+select_created_by_lname() ->
     {ok, User1} = sqerl:select(find_created_by_lname, ["Presley"], first_as_scalar, [created]),
     ?assertMatch({datetime, {{2011, 10, 04}, {16, 47, 46}}}, User1).
+select_lname_by_created() ->
+    {ok, User1} = sqerl:select(find_lname_by_created, [{datetime, {{2011, 10, 04}, {16, 47, 46}}}], first_as_scalar, [last_name]),
+    ?assertMatch(<<"Presley">>, User1).

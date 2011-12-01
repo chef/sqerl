@@ -109,12 +109,12 @@ convert_YMDHMS_tuple_to_datetime({{Y,Mo,D}, {H,Mi,S}}) ->
 %%     case dict:find(Name, Transforms) of
 %%         {ok, Transform} ->
 %%             {Name, Transform(Data)};
-%%         error -> 
+%%         error ->
 %%             {Name, Data}
 %%    end;
 single_column({Name, Data}, Transforms) when is_list(Transforms) ->
     case proplists:get_value(Name, Transforms) of
-        undefined -> 
+        undefined ->
             {Name, Data};
         Transform ->
             {Name, Transform(Data)}
