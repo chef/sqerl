@@ -9,9 +9,10 @@
 
 -define(ARGS, [host, port, db, db_type]).
 -define(GET_ARG(Name, Args), proplists:get_value(Name, Args)).
--define(NAMES, [["Kevin", "Smith", 666],
-                ["Mark", "Anderson", 42],
-                ["Chris", "Maier", 0]]).
+-define(NAMES, [["Kevin", "Smith", 666, <<"2011-10-01 16:47:46">>],
+                ["Mark", "Anderson", 42, <<"2011-10-02 16:47:46">>],
+                ["Chris", "Maier", 0, <<"2011-10-03 16:47:46">>],
+                ["Elvis", "Presley", 16, <<"2011-10-04 16:47:46">>]]).
 
 get_dbinfo() ->
     F = fun(port) ->
@@ -80,7 +81,7 @@ basic_test_() ->
      ]}.
 
 insert_data() ->
-    Expected = lists:duplicate(3, {ok, 1}),
+    Expected = lists:duplicate(4, {ok, 1}),
     ?assertMatch(Expected, [sqerl:statement(new_user, Name) || Name <- ?NAMES]).
 
 select_data() ->
@@ -96,14 +97,15 @@ select_data_as_record() ->
     ?assert(is_integer(User#user.id)).
 
 select_first_number_zero() ->
-    Expected = [{ok, 666}, {ok, 42}, {ok, 0}],
-    ?assertMatch(Expected, [sqerl:select(find_score_by_lname, [LName], first_as_scalar, [high_score]) ||
-                               [_, LName, _] <- ?NAMES]).
+    Expected = [{ok, 666}, {ok, 42}, {ok, 0}, {ok, 16} ],
+    Returned =  [sqerl:select(find_score_by_lname, [LName], first_as_scalar, [high_score]) ||
+                    [_, LName, _, _] <- ?NAMES],
+    ?assertMatch(Expected, Returned).
 
 delete_data() ->
-    Expected = lists:duplicate(3, {ok, 1}),
+    Expected = lists:duplicate(4, {ok, 1}),
     ?assertMatch(Expected, [sqerl:statement(delete_user_by_lname, [LName]) ||
-                               [_, LName, _] <- ?NAMES]).
+                               [_, LName, _, _] <- ?NAMES]).
 
 update_datablob() ->
     ?assertMatch({ok, 1},
@@ -114,6 +116,10 @@ select_datablob() ->
     {ok, User} = sqerl:select(find_datablob_by_lname, ["Smith"], first_as_scalar, [datablob]),
     ?assertMatch(<<"foobar">>, User).
 
+
+%%%
+%%% Tests for timestamp behavior....
+%%%
 update_created() ->
     ?assertMatch({ok, 1},
 		 sqerl:statement(update_created_by_lname,
@@ -124,8 +130,15 @@ update_created() ->
 				 [{{2011, 11, 2}, {16, 47, 46}}, "Anderson"])),
     ?assertMatch({ok, 1},
 		 sqerl:statement(update_created_by_lname,
-				 [<<"2011-11-02 16:47:46">>, "Maier"])).
+				 [<<"2011-11-03 16:47:46">>, "Maier"])),
+
+    {ok, User1} = sqerl:select(find_created_by_lname, ["Smith"], first_as_scalar, [created]),
+    ?assertMatch({datetime, {{2011, 11, 01}, {16, 47, 46}}}, User1),
+    {ok, User2} = sqerl:select(find_created_by_lname, ["Anderson"], first_as_scalar, [created]),
+    ?assertMatch({datetime, {{2011, 11, 02}, {16, 47, 46}}}, User2),
+    {ok, User3} = sqerl:select(find_created_by_lname, ["Maier"], first_as_scalar, [created]),
+    ?assertMatch({datetime, {{2011, 11, 03}, {16, 47, 46}}}, User3).
 
 select_created() ->
-    {ok, User} = sqerl:select(find_created_by_lname, ["Smith"], first_as_scalar, [created]),
-    ?assertMatch({datetime, {{2011, 11, 01}, {16, 47, 46}}}, User).
+    {ok, User1} = sqerl:select(find_created_by_lname, ["Presley"], first_as_scalar, [created]),
+    ?assertMatch({datetime, {{2011, 10, 04}, {16, 47, 46}}}, User1).
