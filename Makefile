@@ -1,5 +1,6 @@
 DEPS = deps/emysql deps/meck deps/automeck deps/gen_bunny \
        deps/poolboy deps/epgsql
+REBAR = ./rebar
 
 ## Set the environment variable $DB_TYPE to either mysql or pgsql
 ## to run the correct integration tests.
@@ -8,27 +9,27 @@ DEPS = deps/emysql deps/meck deps/automeck deps/gen_bunny \
 all: compile eunit
 
 clean:
-	@rebar skip_deps=true clean
+	@$(REBAR) skip_deps=true clean
 
 allclean:
-	@rebar clean
+	@$(REBAR) clean
 
 distclean:
-	@rebar skip_deps=true clean
+	@$(REBAR) skip_deps=true clean
 	@rm -rf deps
 
 compile: $(DEPS)
-	@rebar compile
+	@$(REBAR) compile
 	@dialyzer -Wrace_conditions -Wunderspecs -r ebin
 
 dialyzer:
 	@dialyzer -Wrace_conditions -Wunderspecs -r ebin
 
 $(DEPS):
-	@rebar get-deps
+	@$(REBAR) get-deps
 
 eunit: compile
-	@rebar skip_deps=true eunit
+	@$(REBAR) skip_deps=true eunit
 
 test: eunit
 
