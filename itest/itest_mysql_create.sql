@@ -12,7 +12,7 @@ create table users (
        created timestamp,
        datablob blob,
        primary key (id)
-) engine=InnoDB;
+) engine=InnoDB default charset=utf8;
 
 CREATE TABLE `nodes` (
   `id` char(32) NOT NULL,

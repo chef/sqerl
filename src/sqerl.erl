@@ -18,6 +18,8 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-define(MAX_RETRIES, 5).
+
 checkout() ->
     poolboy:checkout(sqerl).
 
@@ -25,13 +27,22 @@ checkin(Connection) ->
     poolboy:checkin(sqerl, Connection).
 
 with_db(Call) ->
+    with_db(Call, ?MAX_RETRIES).
+
+with_db(Call, 0) ->
+    {error, no_connections};
+with_db(Call, Retries) ->
     case poolboy:checkout(sqerl) of
         {error, timeout} ->
             {error, timeout};
         Cn when is_pid(Cn) ->
-            Result = Call(Cn),
-            poolboy:checkin(sqerl, Cn),
-            Result
+            case Call(Cn) of
+                {error, closed} ->
+                    with_db(Call, Retries - 1);
+                Result ->
+                    poolboy:checkin(sqerl, Cn),
+                    Result
+            end
     end.
 
 select(StmtName, StmtArgs) ->
@@ -76,6 +87,9 @@ execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
                 case sqerl_client:Executor(Cn, StmtName, StmtArgs) of
                     {ok, Results} ->
                         Xformer(Results);
+                    {error, closed} ->
+                        sqerl_client:close(Cn),
+                        {error, closed};
                     Error ->
                         Error
                 end end,

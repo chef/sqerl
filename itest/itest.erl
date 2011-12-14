@@ -39,8 +39,9 @@ setup_env() ->
     case Type of
         pgsql ->
             ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_pgsql.conf"),
-	    ok = application:set_env(sqerl, db_column_transforms,
-				     [{<<"created">>, fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}]);
+            ok = application:set_env(sqerl, db_column_transforms,
+                                     [{<<"created">>,
+                                       fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}]);
         mysql ->
             ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_mysql.conf")
     end,
@@ -78,6 +79,10 @@ basic_test_() ->
       {<<"Select timestamp type">>,
        fun select_lname_by_created/0},
 
+      {<<"Tolerates bounced server">>,
+       {timeout, 10,
+        fun bounced_server/0}},
+
       {<<"Delete operation">>,
        fun delete_data/0}
      ]}.
@@ -108,6 +113,18 @@ delete_data() ->
     Expected = lists:duplicate(4, {ok, 1}),
     ?assertMatch(Expected, [sqerl:statement(delete_user_by_lname, [LName]) ||
                                [_, LName, _, _] <- ?NAMES]).
+
+bounced_server() ->
+    Info = get_dbinfo(),
+    case proplists:get_value(db_type, Info) of
+        mysql ->
+            os:cmd("mysql.server stop"),
+            os:cmd("mysql.server start"),
+            {ok, Result} = sqerl:select(find_user_by_lname, ["Smith"], first),
+            ?assertMatch(<<"Smith">>, proplists:get_value(<<"last_name">>, Result));
+        Type ->
+            ?debugFmt("Skipping bounced server test for ~p~n", [Type])
+    end.
 
 update_datablob() ->
     ?assertMatch({ok, 1},

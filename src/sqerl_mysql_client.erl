@@ -9,7 +9,6 @@
 -behaviour(sqerl_client).
 
 -include_lib("emysql/include/emysql.hrl").
--include_lib("eunit/include/eunit.hrl").
 
 %% API
 -export([start_link/1]).
@@ -25,8 +24,12 @@ start_link(Config) ->
     sqerl_client:start_link(?MODULE, Config).
 
 exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
-    Result = emysql_conn:execute(Cn, Name, Args),
-    case Result of
+    case catch emysql_conn:execute(Cn, Name, Args) of
+        %% Socket was unexpectedly closed by server
+        {'EXIT', {_, closed}} ->
+            {{error, closed}, State};
+        {'EXIT', Error} ->
+            {Error, State};
         #result_packet{}=Result ->
             %% Unpack rows
             Rows = unpack_rows(Result),
@@ -36,8 +39,11 @@ exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
     end.
 
 exec_prepared_statement(Name, Args, #state{cn=Cn}=State) ->
-    Result = emysql_conn:execute(Cn, Name, Args),
-    case Result of
+    case catch emysql_conn:execute(Cn, Name, Args) of
+        {'EXIT', {_, closed}} ->
+            {{error, closed}, State};
+        {'EXIT', Error} ->
+            {Error, State};
         #ok_packet{affected_rows=Count} ->
             {{ok, Count}, State};
         #error_packet{msg=Reason} ->
