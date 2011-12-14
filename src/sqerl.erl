@@ -29,7 +29,7 @@ checkin(Connection) ->
 with_db(Call) ->
     with_db(Call, ?MAX_RETRIES).
 
-with_db(Call, 0) ->
+with_db(_Call, 0) ->
     {error, no_connections};
 with_db(Call, Retries) ->
     case poolboy:checkout(sqerl) of
