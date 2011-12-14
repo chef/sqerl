@@ -10,10 +10,29 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-define(LOG_STATEMENT(Name, Args), case application:get_env(sqerl, log_statements) of
+                                       undefined ->
+                                           ok;
+                                       {ok, false} ->
+                                           ok;
+                                       {ok, true} ->
+                                           error_logger:info_msg("(~p) Executing statement ~p with args ~p~n", [self(), Name, Args])
+                                   end).
+
+-define(LOG_RESULT(Result), case application:get_env(sqerl, log_statements) of
+                                undefined ->
+                                    ok;
+                                {ok, false} ->
+                                    ok;
+                                {ok, true} ->
+                                    error_logger:info_msg("(~p) Result: ~p~n", [self(), Result])
+                            end).
+
 %% API
 -export([start_link/2,
          exec_prepared_select/3,
-         exec_prepared_statement/3]).
+         exec_prepared_statement/3,
+         close/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -51,6 +70,12 @@ exec_prepared_statement(Cn, Name, Args) when is_pid(Cn),
     gen_server:call(Cn, {exec_prepared_stmt, Name, Args}, infinity).
 
 
+%%% Close a connection
+-spec close(pid()) -> ok.
+close(Cn) ->
+    gen_server:call(Cn, close).
+
+
 start_link(CallbackMod, Config) ->
     gen_server:start_link(?MODULE, [CallbackMod, Config], []).
 
@@ -64,12 +89,18 @@ init([CallbackMod, Config]) ->
 
 handle_call({exec_prepared_select, Name, Args}, _From, #state{cb_mod=CBMod,
                                                               cb_state=CBState}=State) ->
+    ?LOG_STATEMENT(Name, Args),
     {Result, NewCBState} = CBMod:exec_prepared_select(Name, Args, CBState),
+    ?LOG_RESULT(Result),
     {reply, Result, State#state{cb_state=NewCBState}};
 handle_call({exec_prepared_stmt, Name, Args}, _From, #state{cb_mod=CBMod,
                                                             cb_state=CBState}=State) ->
+    ?LOG_STATEMENT(Name, Args),
     {Result, NewCBState} = CBMod:exec_prepared_statement(Name, Args, CBState),
+    ?LOG_RESULT(Result),
     {reply, Result, State#state{cb_state=NewCBState}};
+handle_call(close, _From, State) ->
+    {stop, normal, ok, State};
 
 handle_call(_Request, _From, State) ->
     {reply, ignored, State}.
