@@ -60,7 +60,7 @@ behaviour_info(_) ->
 %%% The prepared statement to use is named by an atom.
 -spec exec_prepared_select(pid(), atom(), [any()]) -> [] | [{any(), any()}] | {error, any()}.
 exec_prepared_select(Cn, Name, Args) when is_pid(Cn),
-                                                    is_atom(Name) ->
+                                          is_atom(Name) ->
     gen_server:call(Cn, {exec_prepared_select, Name, Args}, infinity).
 
 %%% Unlike a select statement, this just returns an integer or an error.

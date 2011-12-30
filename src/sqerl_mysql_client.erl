@@ -90,14 +90,19 @@ load_statements([{Name, SQL}|T]) ->
 %% up into a list containing all the converted rows for
 %% a given query result.
 unpack_rows(#result_packet{field_list=Fields, rows=Rows}) ->
-    unpack_rows(Fields, Rows, []).
+    FieldNames = [ Field#field.name || Field <- Fields ],
+    unpack_rows(FieldNames, Rows, []).
 
-unpack_rows(_Fields, [], []) ->
+unpack_rows(_FieldNames, [], []) ->
     none;
-unpack_rows(_Fields, [], Accum) ->
+unpack_rows(_FieldNames, [], Accum) ->
     lists:reverse(Accum);
-unpack_rows(Fields, [Values|T], Accum) ->
-    F = fun(Field, {Idx, Row}) ->
-                {Idx + 1, [{Field#field.name, lists:nth(Idx, Values)}|Row]} end,
-    {_, Row} = lists:foldl(F, {1, []}, Fields),
-    unpack_rows(Fields, T, [lists:reverse(Row)|Accum]).
+unpack_rows(FieldNames, [Values|T], Accum) ->
+    Row = lists:zip(FieldNames, Values),
+    unpack_rows(FieldNames, T, [Row|Accum]).
+
+%% unpack_rows(Fields, [Values|T], Accum) ->
+%%     F = fun(Field, {Idx, Row}) ->
+%%                 {Idx + 1, [{Field#field.name, lists:nth(Idx, Values)}|Row]} end,
+%%     {_, Row} = lists:foldl(F, {1, []}, Fields),
+%%     unpack_rows(Fields, T, [lists:reverse(Row)|Accum]).

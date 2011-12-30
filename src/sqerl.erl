@@ -54,13 +54,12 @@ select(StmtName, StmtArgs, XformName) ->
     select(StmtName, StmtArgs, XformName, []).
 
 select(StmtName, StmtArgs, XformName, XformArgs) ->
-    case execute_statement(StmtName, StmtArgs, XformName, XformArgs, exec_prepared_select) of
+    case execute_statement(StmtName, StmtArgs, XformName, XformArgs,
+                           exec_prepared_select) of
         {ok, []} ->
             {ok, none};
-        {ok, L} when is_list(L) ->
-            {ok, L};
-        {ok, T} ->
-            {ok, T};
+        {ok, Results} ->
+            {ok, Results};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -72,7 +71,8 @@ statement(StmtName, StmtArgs, XformName) ->
     statement(StmtName, StmtArgs, XformName, []).
 
 statement(StmtName, StmtArgs, XformName, XformArgs) ->
-    case execute_statement(StmtName, StmtArgs, XformName, XformArgs, exec_prepared_statement) of
+    case execute_statement(StmtName, StmtArgs, XformName, XformArgs,
+                           exec_prepared_statement) of
         {ok, 0} ->
             {ok, none};
         {ok, N} when is_number(N) ->
