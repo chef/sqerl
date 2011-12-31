@@ -67,7 +67,8 @@ rows_as_scalars(_Field, none) ->
 rows_as_scalars(_Field, []) ->
     {ok, none};
 rows_as_scalars(Field, Results) ->
-    {ok, [ proplists:get_value(atom_to_binary(Field, utf8), Row) || Row <- Results ]}.
+    FieldBin = atom_to_binary(Field, utf8),
+    {ok, [ proplists:get_value(FieldBin, Row) || Row <- Results ]}.
 
 first_as_scalar(_Field, []) ->
     {ok, none};
