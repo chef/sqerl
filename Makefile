@@ -1,4 +1,4 @@
-DEPS = deps/emysql deps/meck deps/automeck deps/gen_bunny \
+DEPS = deps/emysql deps/meck deps/automeck \
        deps/poolboy deps/epgsql
 REBAR = ./rebar
 
