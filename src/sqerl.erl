@@ -36,6 +36,9 @@ with_db(Call, Retries) ->
         {error, timeout} ->
             {error, timeout};
         Cn when is_pid(Cn) ->
+            %% We don't need a try/catch around Call(Cn) because poolboy monitors both the
+            %% connection and the process that has the connection checked out (this
+            %% process). So a crash here will not leak a connection.
             case Call(Cn) of
                 {error, closed} ->
                     with_db(Call, Retries - 1);
