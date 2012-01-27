@@ -33,8 +33,10 @@ with_db(_Call, 0) ->
     {error, no_connections};
 with_db(Call, Retries) ->
     case pooler:take_member("sqerl") of
-        {error, timeout} ->
-            {error, timeout};
+        error_no_members ->
+            {error, no_members};
+        error_no_pool ->
+            {error, {no_pool, "sqerl"}}
         Cn when is_pid(Cn) ->
             %% We don't need a try/catch around Call(Cn) because pooler links both the
             %% connection and the process that has the connection checked out (this
