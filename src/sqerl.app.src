@@ -6,7 +6,5 @@
   {applications, [kernel,
                   stdlib,
 		  emysql,
-		  epgsql]},
-  {mod, { sqerl_app, []}},
-  {env, []}
+		  epgsql]}
  ]}.

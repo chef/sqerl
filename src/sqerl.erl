@@ -21,10 +21,10 @@
 -define(MAX_RETRIES, 5).
 
 checkout() ->
-    poolboy:checkout(sqerl).
+    pooler:take_member("sqerl").
 
 checkin(Connection) ->
-    poolboy:checkin(sqerl, Connection).
+    pooler:return_member(Connection).
 
 with_db(Call) ->
     with_db(Call, ?MAX_RETRIES).
@@ -32,18 +32,18 @@ with_db(Call) ->
 with_db(_Call, 0) ->
     {error, no_connections};
 with_db(Call, Retries) ->
-    case poolboy:checkout(sqerl) of
+    case pooler:take_member("sqerl") of
         {error, timeout} ->
             {error, timeout};
         Cn when is_pid(Cn) ->
-            %% We don't need a try/catch around Call(Cn) because poolboy monitors both the
+            %% We don't need a try/catch around Call(Cn) because pooler links both the
             %% connection and the process that has the connection checked out (this
             %% process). So a crash here will not leak a connection.
             case Call(Cn) of
                 {error, closed} ->
                     with_db(Call, Retries - 1);
                 Result ->
-                    poolboy:checkin(sqerl, Cn),
+                    pooler:return_member(Cn),
                     Result
             end
     end.

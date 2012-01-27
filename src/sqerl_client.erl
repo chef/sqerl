@@ -76,6 +76,10 @@ close(Cn) ->
     gen_server:call(Cn, close).
 
 
+start_link(mysql, Config) ->
+    gen_server:start_link(?MODULE, [sqerl_mysql_client, Config], []);
+start_link(pgsql, Config) ->
+    gen_server:start_link(?MODULE, [sqerl_pgsql_client, Config], []);
 start_link(CallbackMod, Config) ->
     gen_server:start_link(?MODULE, [CallbackMod, Config], []).
 
