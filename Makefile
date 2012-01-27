@@ -1,5 +1,5 @@
 DEPS = deps/emysql deps/meck deps/automeck \
-       deps/poolboy deps/epgsql
+       deps/pooler deps/epgsql
 REBAR = ./rebar
 
 ## Set the environment variable $DB_TYPE to either mysql or pgsql
