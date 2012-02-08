@@ -55,6 +55,10 @@ rows([]) ->
 rows(Result) ->
     {ok, Result}.
 
+rows_as_records(_RecName, _RecordInfo, []) -> 
+    {ok, none};
+rows_as_records(_RecName, _RecordInfo, none) -> 
+    {ok, none};
 rows_as_records(RecName, RecordInfo, Rows) ->
     {ok, [ begin
                Vals = [ proplists:get_value(erlang:atom_to_binary(Field, utf8), Row)
