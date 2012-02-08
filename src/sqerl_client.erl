@@ -8,8 +8,6 @@
 
 -behaviour(gen_server).
 
--include_lib("eunit/include/eunit.hrl").
-
 -define(LOG_STATEMENT(Name, Args), case application:get_env(sqerl, log_statements) of
                                        undefined ->
                                            ok;
@@ -46,13 +44,15 @@
 -export([behaviour_info/1]).
 
 -record(state, {cb_mod,
-                cb_state}).
+                cb_state,
+                timeout}).
 
 %% @hidden
 behaviour_info(callbacks) ->
     [{init, 1},
      {exec_prepared_statement, 3},
-     {exec_prepared_select, 3}];
+     {exec_prepared_select, 3},
+     {is_connected, 1}];
 behaviour_info(_) ->
     undefined.
 
@@ -86,23 +86,26 @@ start_link(CallbackMod, Config) ->
 init([CallbackMod, Config]) ->
     case CallbackMod:init(Config) of
         {ok, CallbackState} ->
-            {ok, #state{cb_mod=CallbackMod, cb_state=CallbackState}};
+            {ok, #state{cb_mod=CallbackMod, cb_state=CallbackState,
+                        timeout=proplists:get_value(idle_check, Config, 1000)}};
         Error ->
             {stop, Error}
     end.
 
 handle_call({exec_prepared_select, Name, Args}, _From, #state{cb_mod=CBMod,
-                                                              cb_state=CBState}=State) ->
+                                                              cb_state=CBState,
+                                                              timeout=Timeout}=State) ->
     ?LOG_STATEMENT(Name, Args),
     {Result, NewCBState} = CBMod:exec_prepared_select(Name, Args, CBState),
     ?LOG_RESULT(Result),
-    {reply, Result, State#state{cb_state=NewCBState}};
+    {reply, Result, State#state{cb_state=NewCBState}, Timeout};
 handle_call({exec_prepared_stmt, Name, Args}, _From, #state{cb_mod=CBMod,
-                                                            cb_state=CBState}=State) ->
+                                                            cb_state=CBState,
+                                                            timeout=Timeout}=State) ->
     ?LOG_STATEMENT(Name, Args),
     {Result, NewCBState} = CBMod:exec_prepared_statement(Name, Args, CBState),
     ?LOG_RESULT(Result),
-    {reply, Result, State#state{cb_state=NewCBState}};
+    {reply, Result, State#state{cb_state=NewCBState}, Timeout};
 handle_call(close, _From, State) ->
     {stop, normal, ok, State};
 
@@ -112,6 +115,13 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+handle_info(timeout, #state{cb_mod=CBMod, cb_state=CBState}=State) ->
+    case CBMod:is_connected(CBState) of
+        {true, CBState1} ->
+            {noreply, State#state{cb_state=CBState1}};
+        false ->
+            {stop, {error, bad_client}, State}
+    end;
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -120,3 +130,4 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
