@@ -25,7 +25,8 @@ rows_as_records_test() ->
              {<<"public_key">>, <<"9876543210fedcab">>}]],
 
     UserTransformer = sqerl_transformers:rows_as_records(user, record_info(fields, user)),
-
+    ?assertEqual({ok, none}, UserTransformer({ok, none})),
+    ?assertEqual({ok, none}, UserTransformer({ok, []})),
     ?assertEqual({ok, [#user{id=123,
                              authz_id= <<"authz_id">>,
                              username= <<"clownco">>,
