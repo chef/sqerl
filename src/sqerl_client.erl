@@ -86,8 +86,9 @@ start_link(CallbackMod, Config) ->
 init([CallbackMod, Config]) ->
     case CallbackMod:init(Config) of
         {ok, CallbackState} ->
+            Timeout = proplists:get_value(idle_check, Config, 10000),
             {ok, #state{cb_mod=CallbackMod, cb_state=CallbackState,
-                        timeout=proplists:get_value(idle_check, Config, 1000)}};
+                        timeout=Timeout}, Timeout};
         Error ->
             {stop, Error}
     end.
@@ -109,22 +110,22 @@ handle_call({exec_prepared_stmt, Name, Args}, _From, #state{cb_mod=CBMod,
 handle_call(close, _From, State) ->
     {stop, normal, ok, State};
 
-handle_call(_Request, _From, State) ->
-    {reply, ignored, State}.
+handle_call(_Request, _From, #state{timeout=Timeout}=State) ->
+    {reply, ignored, State, Timeout}.
 
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+handle_cast(_Msg, #state{timeout=Timeout}=State) ->
+    {noreply, State, Timeout}.
 
-handle_info(timeout, #state{cb_mod=CBMod, cb_state=CBState}=State) ->
-    io:format("Checking connection...~n"),
+handle_info(timeout, #state{cb_mod=CBMod, cb_state=CBState, timeout=Timeout}=State) ->
+    io:format("Checking connection (~p)...~n", [self()]),
     case CBMod:is_connected(CBState) of
         {true, CBState1} ->
-            {noreply, State#state{cb_state=CBState1}};
+            {noreply, State#state{cb_state=CBState1}, Timeout};
         false ->
-            {stop, {error, bad_client}, State}
+            {stop, {error, bad_client}, State, Timeout}
     end;
-handle_info(_Info, State) ->
-    {noreply, State}.
+handle_info(_Info, #state{timeout=Timeout}=State) ->
+    {noreply, State, Timeout}.
 
 terminate(_Reason, _State) ->
     ok.
