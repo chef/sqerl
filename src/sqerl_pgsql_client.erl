@@ -76,8 +76,8 @@ exec_prepared_statement(Name, Args, #state{cn=Cn, statements=Statements}=State) 
     Rv.
 
 is_connected(#state{cn=Cn}=State) ->
-    case catch pgsql:execute(Cn, ?PING_QUERY) of
-        {ok, _} ->
+    case catch pgsql:squery(Cn, ?PING_QUERY) of
+        {ok, _, _} ->
             {true, State};
         _ ->
             false
