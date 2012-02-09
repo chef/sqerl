@@ -116,6 +116,7 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(timeout, #state{cb_mod=CBMod, cb_state=CBState}=State) ->
+    io:format("Checking connection...~n"),
     case CBMod:is_connected(CBState) of
         {true, CBState1} ->
             {noreply, State#state{cb_state=CBState1}};
