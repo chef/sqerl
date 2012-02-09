@@ -55,7 +55,7 @@ exec_prepared_statement(Name, Args, #state{cn=Cn}=State) ->
 
 is_connected(#state{cn=Cn}=State) ->
     case catch emysql_conn:execute(Cn, ?PING_QUERY) of
-        #ok_packet{} ->
+        #result_packet{} ->
             {true, State};
         _ ->
             false
