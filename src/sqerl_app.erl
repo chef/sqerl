@@ -14,13 +14,14 @@
 %% Short for "environment value", just provides some sugar for
 %% grabbing config values
 -define(EV(Key), application:get_env(sqerl, Key)).
+-define(EVD(Key, Default), case application:get_env(sqerl, Key) of
+                               undefined -> {ok, Default};
+                               V -> V
+                           end).
 
 start(_StartType, _StartArgs) ->
 
     {ok, DbType} = ?EV(db_type),
-
-    %% Unsure where this gets used
-    {ok, _MetricsModule} = ?EV(metrics_module),
 
     {ok, Host} = ?EV(host),
     {ok, Port} = ?EV(port),
@@ -32,6 +33,7 @@ start(_StartType, _StartArgs) ->
 
     {ok, MaxPoolSize} = ?EV(max_count),
     {ok, InitPoolSize} = ?EV(init_count),
+    {ok, IdleCheck} = ?EVD(idle_check, 10000),
 
     PoolerConfig = [[{name, "sqerl"},
                      {max_count, MaxPoolSize},
@@ -42,6 +44,7 @@ start(_StartType, _StartArgs) ->
                                                               {user, User},
                                                               {pass, Password},
                                                               {db, Database},
+                                                              {idle_check, IdleCheck},
                                                               {prepared_statement_source, PreparedStatements},
                                                               {column_transforms, ColumnTransforms}]]}}]],
     sqerl_sup:start_link(PoolerConfig).
