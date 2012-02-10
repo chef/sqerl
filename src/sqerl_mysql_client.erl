@@ -16,9 +16,12 @@
 %% sqerl_client callbacks
 -export([init/1,
          exec_prepared_statement/3,
-         exec_prepared_select/3]).
+         exec_prepared_select/3,
+         is_connected/1]).
 
 -record(state, {cn}).
+
+-define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
 start_link(Config) ->
     sqerl_client:start_link(?MODULE, Config).
@@ -48,6 +51,14 @@ exec_prepared_statement(Name, Args, #state{cn=Cn}=State) ->
             {{ok, Count}, State};
         #error_packet{msg=Reason} ->
             {{error, Reason}, State}
+    end.
+
+is_connected(#state{cn=Cn}=State) ->
+    case catch emysql_conn:execute(Cn, ?PING_QUERY) of
+        #result_packet{} ->
+            {true, State};
+        _ ->
+            false
     end.
 
 init(Config) ->
