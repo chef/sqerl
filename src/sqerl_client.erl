@@ -121,7 +121,9 @@ handle_info(timeout, #state{cb_mod=CBMod, cb_state=CBState, timeout=Timeout}=Sta
         {true, CBState1} ->
             {noreply, State#state{cb_state=CBState1}, Timeout};
         false ->
-            {stop, {error, bad_client}, State, Timeout}
+            error_logger:warning_msg("Failed to verify idle connection. Shutting down ~p~n",
+                                     [self()]),
+            {stop, shutdown, State}
     end;
 handle_info(_Info, #state{timeout=Timeout}=State) ->
     {noreply, State, Timeout}.
