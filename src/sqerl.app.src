@@ -5,6 +5,9 @@
   {registered, []},
   {applications, [kernel,
                   stdlib,
-		  emysql,
-		  epgsql]}
+                  crypto,
+                  emysql,
+                  epgsql,
+                  pooler]},
+  {mod, {sqerl_app, []}}
  ]}.
