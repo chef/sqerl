@@ -59,12 +59,30 @@ exec_prepared_statement(Name, Args, #state{cn=Cn, statements=Statements}=State) 
     PrepStmt = dict:fetch(Name, Statements),
     Stmt = PrepStmt#prepared_statement.stmt,
     NArgs = input_transforms(Args, PrepStmt, State),
+    %% binds parameters and the named prepared statement to the unnamed portal
     ok = pgsql:bind(Cn, Stmt, NArgs),
-    %% Note: we might get partial results here for big selects!
     Rv =
         try
+            %% This is equivalent to pgsql:execute(Cn, Stmt, "", 0) where the "" indicates
+            %% the unnamed portal and 0 means return all result rows. Note that if we did
+            %% specify a non-zero value, it looks like the pgsql:execute function handles
+            %% the aggregation of partial results for us (not sure what the point is, though
+            %% since I would think one would only use a non-zero value to avoid pulling the
+            %% entire result set into memory).
             case pgsql:execute(Cn, Stmt) of
                 {ok, Count} ->
+                    %% I don't think the squery based COMMIT/ROLLBACK is the best way to
+                    %% handle execution. Based on the code path of pgsql:equery, I think we
+                    %% want to pgsql:close/2 and then pgsql:sync after execute. Although
+                    %% reading the protocol flow docs
+                    %% (http://www.postgresql.org/docs/9.1/static/protocol-flow.html) I
+                    %% don't understand why we'd call close when using the unnamed portal,
+                    %% but it should not hurt. It should be that calling sync is enough to
+                    %% triggle a "close" on the current transaction such that we rollback on
+                    %% error and otherwise commit. Hmm, on second though equery is issuing
+                    %% the close because the statement is not persistent (it calls parse on
+                    %% each call). So we just want sync (whether we received an error or
+                    %% not).
                     commit(Cn, Count, State);
                 Result ->
                     rollback(Cn, {error, Result}, State)
