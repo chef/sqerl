@@ -2,6 +2,8 @@ DEPS = deps/emysql deps/meck deps/automeck \
        deps/pooler deps/epgsql
 REBAR = ./rebar
 
+DIALYZER_APPS = erts kernel stdlib crypto ssl public_key
+
 ## Set the environment variable $DB_TYPE to either mysql or pgsql
 ## to run the correct integration tests.
 -include itest/$(DB_TYPE)_conf.mk
@@ -20,11 +22,15 @@ distclean:
 
 compile: $(DEPS)
 	@$(REBAR) compile
-	@dialyzer -Wrace_conditions -Wunderspecs -r ebin
+	@$(MAKE) dialyzer
 
 dialyzer:
-	@dialyzer -Wrace_conditions -Wunderspecs -r ebin
-
+	@dialyzer -Wrace_conditions -Wunderspecs -r ebin ; \
+	if [ $$? -eq 1 -a ! -f ~/.dialyzer_plt ] ; then \
+	  echo "ERROR: Missing ~/.dialyzer_plt. Please wait while a new PLT is compiled." ; \
+	  dialyzer --build_plt --apps $(DIALYZER_APPS) ; \
+	  $(MAKE) $@ ; \
+	fi
 $(DEPS):
 	@$(REBAR) get-deps
 
