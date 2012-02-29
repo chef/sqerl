@@ -59,7 +59,9 @@ setup_env() ->
 
 basic_test_() ->
     setup_env(),
-    application:start(sqerl),
+    Status = application:start(sqerl),
+    %% sqerl should start or already be running for each test
+    ?assert(lists:member(Status, [ok, {error, {already_started, sqerl}}])),
     {foreach,
      fun() -> error_logger:tty(false) end,
      fun(_) -> error_logger:tty(true) end,
