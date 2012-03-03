@@ -28,7 +28,7 @@ start(_StartType, _StartArgs) ->
     {ok, User} = ?EV(user),
     {ok, Password} = ?EV(pass),
     {ok, Database} = ?EV(db),
-    {ok, PreparedStatements} = ?EV(prepared_statement_source),
+    {ok, StatementMFA} = ?EV(prepared_statement_mfa),
     {ok, ColumnTransforms} = ?EV(column_transforms),
 
     {ok, MaxPoolSize} = ?EV(max_count),
@@ -45,7 +45,7 @@ start(_StartType, _StartArgs) ->
                                                               {pass, Password},
                                                               {db, Database},
                                                               {idle_check, IdleCheck},
-                                                              {prepared_statement_source, PreparedStatements},
+                                                              {prepared_statement_mfa, StatementMFA},
                                                               {column_transforms, ColumnTransforms}]]}}]],
     sqerl_sup:start_link(PoolerConfig).
 

@@ -1,6 +1,7 @@
 -module(itest).
 
--exports([setup_env/0, basic_test_/0]).
+-exports([setup_env/0, basic_test_/0,
+          statements/1]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include("sqerl.hrl").
@@ -41,12 +42,12 @@ setup_env() ->
     ok = application:set_env(sqerl, db_type, Type),
     case Type of
         pgsql ->
-            ok = application:set_env(sqerl, prepared_statement_source, "itest/statements_pgsql.conf"),
+            ok = application:set_env(sqerl, prepared_statement_mfa, {?MODULE, statements, [pgsql]}),
             ok = application:set_env(sqerl, column_transforms,
                                      [{<<"created">>,
                                        fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}]);
         mysql ->
-            ok = application:set_env(sqerl, prepared_statement_source, "itest/statements_mysql.conf"),
+            ok = application:set_env(sqerl, prepared_statement_mfa, {?MODULE, statements, [mysql]}),
             ok = application:set_env(sqerl, column_transforms, [{}])
     end,
 
@@ -56,6 +57,13 @@ setup_env() ->
     application:start(ssl),
     application:start(epgsql),
     application:start(pooler).
+
+statements(mysql) ->
+    {ok, Statements} = file:consult("itest/statements_mysql.conf"),
+    Statements;
+statements(pgsql) ->
+    {ok, Statements} = file:consult("itest/statements_pgsql.conf"),
+    Statements.
 
 basic_test_() ->
     setup_env(),

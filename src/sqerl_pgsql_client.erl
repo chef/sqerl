@@ -89,7 +89,7 @@ init(Config) ->
     {user, User} = lists:keyfind(user, 1, Config),
     {pass, Pass} = lists:keyfind(pass, 1, Config),
     {db, Db} = lists:keyfind(db, 1, Config),
-    {prepared_statement_source, PreparedStatementFile} = lists:keyfind(prepared_statement_source, 1, Config),
+    Statements = fetch_statements(Config),
     Opts = [{database, Db}, {port, Port}],
     CTrans =
         case lists:keyfind(column_transforms, 1, Config) of
@@ -104,7 +104,6 @@ init(Config) ->
             %% the socket
             erlang:link(Connection),
             erlang:process_flag(trap_exit, true),
-            {ok, Statements} = file:consult(PreparedStatementFile),
             {ok, Prepared} = load_statements(Connection, Statements, dict:new()),
             {ok, #state{cn=Connection, statements=Prepared, ctrans=CTrans}};
         {error, {syntax, Msg}} ->
@@ -114,6 +113,12 @@ init(Config) ->
     end.
 
 %% Internal functions
+-spec fetch_statements([{atom(), term()}]) -> [{atom(), binary()}].
+fetch_statements(Config) ->
+    {prepared_statement_mfa,
+     {Mod, Fun, Args}} = lists:keyfind(prepared_statement_mfa, 1, Config),
+    apply(Mod, Fun, Args).
+
 -spec load_statements(connection(), [tuple()], dict()) -> {ok, dict()} |  {error, any()}.
 load_statements(_Connection, [], Dict) ->
     {ok, Dict};
