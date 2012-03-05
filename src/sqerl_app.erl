@@ -11,43 +11,8 @@
 %% Application callbacks
 -export([start/2, stop/1]).
 
-%% Short for "environment value", just provides some sugar for
-%% grabbing config values
--define(EV(Key), application:get_env(sqerl, Key)).
--define(EVD(Key, Default), case application:get_env(sqerl, Key) of
-                               undefined -> {ok, Default};
-                               V -> V
-                           end).
-
 start(_StartType, _StartArgs) ->
-
-    {ok, DbType} = ?EV(db_type),
-
-    {ok, Host} = ?EV(host),
-    {ok, Port} = ?EV(port),
-    {ok, User} = ?EV(user),
-    {ok, Password} = ?EV(pass),
-    {ok, Database} = ?EV(db),
-    {ok, StatementMFA} = ?EV(prepared_statement_mfa),
-    {ok, ColumnTransforms} = ?EV(column_transforms),
-
-    {ok, MaxPoolSize} = ?EV(max_count),
-    {ok, InitPoolSize} = ?EV(init_count),
-    {ok, IdleCheck} = ?EVD(idle_check, 10000),
-
-    PoolerConfig = [[{name, "sqerl"},
-                     {max_count, MaxPoolSize},
-                     {init_count, InitPoolSize},
-                     {start_mfa, {sqerl_client, start_link, [DbType,
-                                                             [{host, Host},
-                                                              {port, Port},
-                                                              {user, User},
-                                                              {pass, Password},
-                                                              {db, Database},
-                                                              {idle_check, IdleCheck},
-                                                              {prepared_statement_mfa, StatementMFA},
-                                                              {column_transforms, ColumnTransforms}]]}}]],
-    sqerl_sup:start_link(PoolerConfig).
+    sqerl_sup:start_link().
 
 stop(_State) ->
     ok.
