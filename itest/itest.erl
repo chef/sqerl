@@ -8,7 +8,6 @@
 
 -record(user, {id, first_name, last_name, high_score}).
 
--define(ARGS, [host, port, db, db_type]).
 -define(GET_ARG(Name, Args), proplists:get_value(Name, Args)).
 -define(NAMES, [["Kevin", "Smith", 666, <<"2011-10-01 16:47:46">>],
                 ["Mark", "Anderson", 42, <<"2011-10-02 16:47:46">>],
@@ -17,46 +16,48 @@
 
 -compile([export_all]).
 
-get_dbinfo() ->
-    F = fun(port) ->
-                {ok, [[Port]]} = init:get_argument(port),
-                {port, list_to_integer(Port)};
-           (db_type) ->
-                {ok, [[Type]]} = init:get_argument(db_type),
-                {db_type, list_to_atom(Type)};
-           (Name) ->
-                {ok, [[Value]]} = init:get_argument(Name),
-                {Name, Value} end,
-    [F(Arg) || Arg <- ?ARGS].
+get_db_type() ->
+    {ok, [[Type]]} = init:get_argument(db_type),
+    list_to_atom(Type).
+
+read_db_config() ->
+    Type = get_db_type(),
+    Path = filename:join([filename:dirname(code:which(?MODULE)), atom_to_list(Type) ++ ".config"]),
+    {ok, Config} = file:consult(Path),
+    Config.
 
 setup_env() ->
-    Info = get_dbinfo(),
-    Type = ?GET_ARG(db_type, Info),
-    ok = application:set_env(sqerl, host, ?GET_ARG(host, Info)),
-    ok = application:set_env(sqerl, port, ?GET_ARG(port, Info)),
-    ok = application:set_env(sqerl, user, "itest"),
-    ok = application:set_env(sqerl, pass, "itest"),
-    ok = application:set_env(sqerl, db, ?GET_ARG(db, Info)),
-    ok = application:set_env(sqerl, max_count, 3),
-    ok = application:set_env(sqerl, init_count, 1),
+    Type = get_db_type(),
+    Info = read_db_config(),
+    ?debugVal(Info),
     ok = application:set_env(sqerl, db_type, Type),
-    case Type of
-        pgsql ->
-            ok = application:set_env(sqerl, prepared_statement_mfa, {?MODULE, statements, [pgsql]}),
-            ok = application:set_env(sqerl, column_transforms,
-                                     [{<<"created">>,
-                                       fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}]);
-        mysql ->
-            ok = application:set_env(sqerl, prepared_statement_mfa, {?MODULE, statements, [mysql]}),
-            ok = application:set_env(sqerl, column_transforms, [{}])
-    end,
-
+    ColumnTransforms = case Type of
+                           pgsql ->
+                               [{<<"created">>,
+                                 fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}];
+                           mysql ->
+                               [{}]
+                       end,
+    SqerlClientArgs = [Type,
+                       [{host, ?GET_ARG(host, Info)},
+                        {port, ?GET_ARG(port, Info)},
+                        {user, "itest"},
+                        {pass, "itest"},
+                        {db, ?GET_ARG(db, Info)},
+                        {idle_check, 10000},
+                        {prepared_statement_mfa, {?MODULE, statements, [Type]}},
+                        {column_transforms, ColumnTransforms}]],
+    PoolConfig = [{name, "sqerl"},
+                  {max_count, 3},
+                  {init_count, 1},
+                  {start_mfa, {sqerl_client, start_link, SqerlClientArgs}}],
+    ?debugFmt("~p", [PoolConfig]),
+    ok = application:set_env(pooler, pools, [PoolConfig]),
     application:start(crypto),
     application:start(emysql),
     application:start(public_key),
     application:start(ssl),
-    application:start(epgsql),
-    application:start(pooler).
+    application:start(epgsql).
 
 statements(mysql) ->
     {ok, Statements} = file:consult("itest/statements_mysql.conf"),
@@ -130,8 +131,7 @@ delete_data() ->
                                [_, LName, _, _] <- ?NAMES]).
 
 bounced_server() ->
-    Info = get_dbinfo(),
-    case proplists:get_value(db_type, Info) of
+    case get_db_type() of
         mysql ->
             os:cmd("mysql.server stop"),
             os:cmd("mysql.server start"),
