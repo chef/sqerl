@@ -89,7 +89,7 @@ init(Config) ->
     {user, User} = lists:keyfind(user, 1, Config),
     {pass, Pass} = lists:keyfind(pass, 1, Config),
     {db, Db} = lists:keyfind(db, 1, Config),
-    Statements = fetch_statements(Config),
+    {prepared_statements, Statements} = lists:keyfind(prepared_statements, 1, Config),
     Opts = [{database, Db}, {port, Port}],
     CTrans =
         case lists:keyfind(column_transforms, 1, Config) of
@@ -113,11 +113,6 @@ init(Config) ->
     end.
 
 %% Internal functions
--spec fetch_statements([{atom(), term()}]) -> [{atom(), binary()}].
-fetch_statements(Config) ->
-    {prepared_statement_mfa,
-     {Mod, Fun, Args}} = lists:keyfind(prepared_statement_mfa, 1, Config),
-    apply(Mod, Fun, Args).
 
 -spec load_statements(connection(), [tuple()], dict()) -> {ok, dict()} |  {error, any()}.
 load_statements(_Connection, [], Dict) ->

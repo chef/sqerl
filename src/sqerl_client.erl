@@ -84,9 +84,12 @@ start_link(CallbackMod, Config) ->
     gen_server:start_link(?MODULE, [CallbackMod, Config], []).
 
 init([CallbackMod, Config]) ->
-    case CallbackMod:init(Config) of
+    Statements = fetch_statements(Config),
+    Config1 = lists:keyreplace(prepared_statements, 1, Config,
+                               {prepared_statements, Statements}),
+    case CallbackMod:init(Config1) of
         {ok, CallbackState} ->
-            Timeout = proplists:get_value(idle_check, Config, 10000),
+            Timeout = proplists:get_value(idle_check, Config1, 10000),
             {ok, #state{cb_mod=CallbackMod, cb_state=CallbackState,
                         timeout=Timeout}, Timeout};
         Error ->
@@ -134,3 +137,20 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+fetch_statements(Config) ->
+    {prepared_statements, Statements} = lists:keyfind(prepared_statements, 1, Config),
+    read_statements(Statements).
+
+-spec read_statements([{atom(), term()}]
+                      | string()
+                      | {atom(), atom(), list()}) -> [{atom(), binary()}].
+%% @doc Prepared statements can be provides as a list of `{atom(), binary()}' tuples, as a
+%% path to a file that can be consulted for such tuples, or as `{M, F, A}' such that
+%% `apply(M, F, A)' returns the statements tuples.
+read_statements({Mod, Fun, Args}) ->
+    apply(Mod, Fun, Args);
+read_statements(L = [{Label, SQL}|_T]) when is_atom(Label) andalso is_binary(SQL) ->
+    L;
+read_statements(Path) when is_list(Path) ->
+    {ok, Statements} = file:consult(Path),
+    Statements.

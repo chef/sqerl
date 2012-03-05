@@ -45,7 +45,10 @@ setup_env() ->
                         {pass, "itest"},
                         {db, ?GET_ARG(db, Info)},
                         {idle_check, 10000},
-                        {prepared_statement_mfa, {?MODULE, statements, [Type]}},
+                        {prepared_statements, {?MODULE, statements, [Type]}},
+                        %% we could also call it like this:
+                        %% {prepared_statements, statements(Type)},
+                        %% {prepared_statements, "itest/statements_pgsql.conf"},
                         {column_transforms, ColumnTransforms}]],
     PoolConfig = [{name, "sqerl"},
                   {max_count, 3},

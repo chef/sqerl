@@ -67,7 +67,7 @@ init(Config) ->
     {user, User} = lists:keyfind(user, 1, Config),
     {pass, Pass} = lists:keyfind(pass, 1, Config),
     {db, Db} = lists:keyfind(db, 1, Config),
-    Statements = fetch_statements(Config),
+    {prepared_statements, Statements} = lists:keyfind(prepared_statements, 1, Config),
     %% Need this hokey pool record to create a database connection
     PoolDescriptor = #pool{host=Host, port=Port, user=User, password=Pass,
                            database=Db, encoding=utf8},
@@ -84,12 +84,6 @@ init(Config) ->
     end.
 
 %% Internal functions
--spec fetch_statements([{atom(), term()}]) -> [{atom(), binary()}].
-fetch_statements(Config) ->
-    {prepared_statement_mfa,
-     {Mod, Fun, Args}} = lists:keyfind(prepared_statement_mfa, 1, Config),
-    apply(Mod, Fun, Args).
-
 load_statements([]) ->
     ok;
 load_statements([{Name, SQL}|T]) ->
