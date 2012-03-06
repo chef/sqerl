@@ -29,8 +29,17 @@ read_db_config() ->
 setup_env() ->
     Type = get_db_type(),
     Info = read_db_config(),
-    ?debugVal(Info),
     ok = application:set_env(sqerl, db_type, Type),
+    ok = application:set_env(sqerl, db_host, ?GET_ARG(host, Info)),
+    ok = application:set_env(sqerl, db_port, ?GET_ARG(port, Info)),
+    ok = application:set_env(sqerl, db_user, "itest"),
+    ok = application:set_env(sqerl, db_pass, "itest"),
+    ok = application:set_env(sqerl, db_name, ?GET_ARG(db, Info)),
+    ok = application:set_env(sqerl, idle_check, 10000),
+    %% we could also call it like this:
+    %% {prepared_statements, statements(Type)},
+    %% {prepared_statements, "itest/statements_pgsql.conf"},
+    ok = application:set_env(sqerl, prepared_statements, {?MODULE, statements, [Type]}),
     ColumnTransforms = case Type of
                            pgsql ->
                                [{<<"created">>,
@@ -38,23 +47,11 @@ setup_env() ->
                            mysql ->
                                [{}]
                        end,
-    SqerlClientArgs = [Type,
-                       [{host, ?GET_ARG(host, Info)},
-                        {port, ?GET_ARG(port, Info)},
-                        {user, "itest"},
-                        {pass, "itest"},
-                        {db, ?GET_ARG(db, Info)},
-                        {idle_check, 10000},
-                        {prepared_statements, {?MODULE, statements, [Type]}},
-                        %% we could also call it like this:
-                        %% {prepared_statements, statements(Type)},
-                        %% {prepared_statements, "itest/statements_pgsql.conf"},
-                        {column_transforms, ColumnTransforms}]],
+    ok = application:set_env(sqerl, column_transforms, ColumnTransforms),
     PoolConfig = [{name, "sqerl"},
                   {max_count, 3},
                   {init_count, 1},
-                  {start_mfa, {sqerl_client, start_link, SqerlClientArgs}}],
-    ?debugFmt("~p", [PoolConfig]),
+                  {start_mfa, {sqerl_client, start_link, []}}],
     ok = application:set_env(pooler, pools, [PoolConfig]),
     application:start(crypto),
     application:start(emysql),
@@ -75,7 +72,7 @@ basic_test_() ->
     %% sqerl should start or already be running for each test
     ?assert(lists:member(Status, [ok, {error, {already_started, sqerl}}])),
     {foreach,
-     fun() -> error_logger:tty(false) end,
+     fun() -> error_logger:tty(true) end,
      fun(_) -> error_logger:tty(true) end,
      [
       {<<"Insert operations">>,

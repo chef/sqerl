@@ -27,7 +27,8 @@
                             end).
 
 %% API
--export([start_link/2,
+-export([start_link/0,
+         start_link/1,
          exec_prepared_select/3,
          exec_prepared_statement/3,
          close/1]).
@@ -76,20 +77,30 @@ close(Cn) ->
     gen_server:call(Cn, close).
 
 
-start_link(mysql, Config) ->
-    gen_server:start_link(?MODULE, [sqerl_mysql_client, Config], []);
-start_link(pgsql, Config) ->
-    gen_server:start_link(?MODULE, [sqerl_pgsql_client, Config], []);
-start_link(CallbackMod, Config) ->
-    gen_server:start_link(?MODULE, [CallbackMod, Config], []).
+start_link() ->
+    gen_server:start_link(?MODULE, [], []).
+start_link(DbType) ->
+    gen_server:start_link(?MODULE, [DbType], []).
 
-init([CallbackMod, Config]) ->
-    Statements = fetch_statements(Config),
-    Config1 = lists:keyreplace(prepared_statements, 1, Config,
-                               {prepared_statements, Statements}),
-    case CallbackMod:init(Config1) of
+init([]) ->
+    init(ev(db_type));
+init(DbType) ->
+    CallbackMod = case DbType of
+                      pgsql -> sqerl_pgsql_client;
+                      mysql -> sqerl_mysql_client
+                  end,
+    IdleCheck = ev(idle_check, 1000),
+    Config = [{host, ev(db_host)},
+              {port, ev(db_port)},
+              {user, ev(db_user)},
+              {pass, ev(db_pass)},
+              {db, ev(db_name)},
+              {idle_check, IdleCheck},
+              {prepared_statements, read_statements(ev(prepared_statements))},
+              {column_transforms, ev(column_transforms)}],
+    case CallbackMod:init(Config) of
         {ok, CallbackState} ->
-            Timeout = proplists:get_value(idle_check, Config1, 10000),
+            Timeout = IdleCheck,
             {ok, #state{cb_mod=CallbackMod, cb_state=CallbackState,
                         timeout=Timeout}, Timeout};
         Error ->
@@ -137,10 +148,6 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-fetch_statements(Config) ->
-    {prepared_statements, Statements} = lists:keyfind(prepared_statements, 1, Config),
-    read_statements(Statements).
-
 -spec read_statements([{atom(), term()}]
                       | string()
                       | {atom(), atom(), list()}) -> [{atom(), binary()}].
@@ -154,3 +161,18 @@ read_statements(L = [{Label, SQL}|_T]) when is_atom(Label) andalso is_binary(SQL
 read_statements(Path) when is_list(Path) ->
     {ok, Statements} = file:consult(Path),
     Statements.
+
+%% Short for "environment value", just provides some sugar for grabbing config values
+ev(Key) ->
+    case application:get_env(sqerl, Key) of
+        {ok, V} -> V;
+        undefined ->
+            Msg = {missing_application_config, sqerl, Key},
+            error_logger:error_report(Msg),
+            error(Msg)
+    end.
+ev(Key, Default) ->
+    case application:get_env(sqerl, Key) of
+        undefined -> Default;
+        {ok, V} -> V
+    end.
