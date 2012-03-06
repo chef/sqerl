@@ -109,6 +109,7 @@ init(Config) ->
         {error, {syntax, Msg}} ->
             {stop, {syntax, Msg}};
         X ->
+            error_logger:error_report(X),
             {stop, X}
     end.
 

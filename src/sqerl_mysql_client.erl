@@ -73,6 +73,7 @@ init(Config) ->
                            database=Db, encoding=utf8},
     case catch emysql_conn:open_connection(PoolDescriptor) of
         {'EXIT', Error} ->
+            error_logger:error_report(Error),
             {stop, Error};
         #emysql_connection{socket=Sock}=Connection ->
             %% Link to socket so if this process dies we clean up
