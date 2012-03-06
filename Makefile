@@ -53,5 +53,4 @@ itest: compile itest_create itest_run itest_clean
 itest_run:
 	cd itest;erlc -I ../include *.erl
 	@erl -pa deps/*/ebin -pa ebin -pa itest -noshell -eval "eunit:test(itest, [verbose])" \
-	-s erlang halt -host ${DB_HOST} -port ${DB_PORT} -db ${DB_NAME} -db_type $(DB_TYPE)
-
+	-s erlang halt -db_type $(DB_TYPE)
