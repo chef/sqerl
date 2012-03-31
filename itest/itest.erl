@@ -29,21 +29,23 @@ get_dbinfo() ->
 setup_env() ->
     Info = get_dbinfo(),
     Type = ?GET_ARG(db_type, Info),
-    ok = application:set_env(sqerl, db_host, ?GET_ARG(host, Info)),
-    ok = application:set_env(sqerl, db_port, ?GET_ARG(port, Info)),
-    ok = application:set_env(sqerl, db_user, "itest"),
-    ok = application:set_env(sqerl, db_pass, "itest"),
-    ok = application:set_env(sqerl, db_name, ?GET_ARG(db, Info)),
-    ok = application:set_env(sqerl, db_pool_size, 3),
+    ok = application:set_env(sqerl, host, ?GET_ARG(host, Info)),
+    ok = application:set_env(sqerl, port, ?GET_ARG(port, Info)),
+    ok = application:set_env(sqerl, user, "itest"),
+    ok = application:set_env(sqerl, pass, "itest"),
+    ok = application:set_env(sqerl, db, ?GET_ARG(db, Info)),
+    ok = application:set_env(sqerl, max_count, 3),
+    ok = application:set_env(sqerl, init_count, 1),
     ok = application:set_env(sqerl, db_type, Type),
     case Type of
         pgsql ->
-            ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_pgsql.conf"),
-            ok = application:set_env(sqerl, db_column_transforms,
+            ok = application:set_env(sqerl, prepared_statement_source, "itest/statements_pgsql.conf"),
+            ok = application:set_env(sqerl, column_transforms,
                                      [{<<"created">>,
                                        fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}]);
         mysql ->
-            ok = application:set_env(sqerl, db_prepared_statements, "itest/statements_mysql.conf")
+            ok = application:set_env(sqerl, prepared_statement_source, "itest/statements_mysql.conf"),
+            ok = application:set_env(sqerl, column_transforms, undefined)
     end,
 
     application:start(crypto),
@@ -54,7 +56,7 @@ setup_env() ->
 
 basic_test_() ->
     setup_env(),
-    application:start(sqerl),
+    ?debugFmt("Starting sqerl: ~p~n", [application:start(sqerl)]),
     {foreach,
      fun() -> error_logger:tty(false) end,
      fun(_) -> error_logger:tty(true) end,
