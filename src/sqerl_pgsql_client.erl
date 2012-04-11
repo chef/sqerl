@@ -10,9 +10,6 @@
 
 -include_lib("epgsql/include/pgsql.hrl").
 
-%% API
--export([start_link/1]).
-
 %% sqerl_client callbacks
 -export([init/1,
          exec_prepared_statement/3,
@@ -33,9 +30,6 @@
 -type state() :: any().
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
-
-start_link(Config) ->
-    sqerl_client:start_link(?MODULE, Config).
 
 -spec exec_prepared_select(atom(), [], state()) -> {{ok, [[tuple()]]} | {error, any()}, state()}.
 exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements, ctrans=CTrans}=State) ->
