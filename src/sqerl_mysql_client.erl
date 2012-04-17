@@ -10,9 +10,6 @@
 
 -include_lib("emysql/include/emysql.hrl").
 
-%% API
--export([start_link/1]).
-
 %% sqerl_client callbacks
 -export([init/1,
          exec_prepared_statement/3,
@@ -22,9 +19,6 @@
 -record(state, {cn}).
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
-
-start_link(Config) ->
-    sqerl_client:start_link(?MODULE, Config).
 
 exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
     case catch emysql_conn:execute(Cn, Name, Args) of
