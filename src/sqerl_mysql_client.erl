@@ -67,19 +67,19 @@ init(Config) ->
     {user, User} = lists:keyfind(user, 1, Config),
     {pass, Pass} = lists:keyfind(pass, 1, Config),
     {db, Db} = lists:keyfind(db, 1, Config),
-    {prepared_statement_source, Prepared} = lists:keyfind(prepared_statement_source, 1, Config),
+    {prepared_statements, Statements} = lists:keyfind(prepared_statements, 1, Config),
     %% Need this hokey pool record to create a database connection
     PoolDescriptor = #pool{host=Host, port=Port, user=User, password=Pass,
                            database=Db, encoding=utf8},
     case catch emysql_conn:open_connection(PoolDescriptor) of
         {'EXIT', Error} ->
+            error_logger:error_report(Error),
             {stop, Error};
         #emysql_connection{socket=Sock}=Connection ->
             %% Link to socket so if this process dies we clean up
             %% the socket
             erlang:link(Sock),
             erlang:process_flag(trap_exit, true),
-            {ok, Statements} = file:consult(Prepared),
             ok = load_statements(Statements),
             {ok, #state{cn=Connection}}
     end.
