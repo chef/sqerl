@@ -53,11 +53,11 @@ rows(none) ->
 rows([]) ->
     {ok, none};
 rows(Result) ->
-    {ok, Result}.
+    {ok, [ [ Val || {_Key, Val} <- Row] || Row <- Result ] }.
 
-rows_as_records(_RecName, _RecordInfo, []) -> 
+rows_as_records(_RecName, _RecordInfo, []) ->
     {ok, none};
-rows_as_records(_RecName, _RecordInfo, none) -> 
+rows_as_records(_RecName, _RecordInfo, none) ->
     {ok, none};
 rows_as_records(RecName, RecordInfo, Rows) ->
     {ok, [ begin
