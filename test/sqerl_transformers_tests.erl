@@ -82,10 +82,23 @@ first_as_record_test() ->
                             public_key= <<"abcdef0123456789">>}},
                  ChefUserFirstAsRecord(Rows)).
 rows_test() ->
+    Rows = [[{<<"id">>, 123},
+             {<<"authz_id">>, <<"authz_id">>},
+             {<<"username">>, <<"clownco">>},
+             {<<"pubkey_version">>, <<"XXX">>},
+             {<<"public_key">>, <<"abcdef0123456789">>}],
+            [{<<"id">>, 1234},
+             {<<"authz_id">>, <<"authz_id2">>},
+             {<<"username">>, <<"skynet">>},
+             {<<"pubkey_version">>, <<"XXX">>},
+             {<<"public_key">>, <<"9876543210fedcab">>}]],
+
     RowsTransformer = sqerl_transformers:rows(),
 
     ?assertEqual({ok, none}, RowsTransformer([])),
-    ?assertEqual({ok, [foo, bar, baz]}, RowsTransformer([foo, bar, baz])).
+    Results = [[123, <<"authz_id">>, <<"clownco">>, <<"XXX">>, <<"abcdef0123456789">>],
+               [1234, <<"authz_id2">>, <<"skynet">>, <<"XXX">>, <<"9876543210fedcab">>]],
+    ?assertEqual({ok, Results}, RowsTransformer(Rows)).
 
 count_test() ->
     CountTransformer = sqerl_transformers:count(),
