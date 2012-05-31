@@ -45,7 +45,8 @@ setup_env() ->
                                [{<<"created">>,
                                  fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}];
                            mysql ->
-                               [{}]
+                               [{<<"active">>,
+                                 fun sqerl_transformers:convert_integer_to_boolean/1}]
                        end,
     ok = application:set_env(sqerl, column_transforms, ColumnTransforms),
     PoolConfig = [{name, "sqerl"},
@@ -111,13 +112,15 @@ select_data() ->
     {ok, User} = sqerl:select(find_user_by_lname, ["Smith"], first),
     ?assertMatch(<<"Kevin">>, proplists:get_value(<<"first_name">>, User)),
     ?assertMatch(<<"Smith">>, proplists:get_value(<<"last_name">>, User)),
+    ?assertEqual(666, proplists:get_value(<<"high_score">>, User)),
+    ?assertEqual(true, proplists:get_value(<<"active">>, User)),
     ?assert(is_integer(proplists:get_value(<<"id">>, User))).
 
 select_data_as_record() ->
-    {ok, User} = sqerl:select(find_user_by_lname, ["Anderson"], ?FIRST(user)),
-    ?assertMatch(<<"Mark">>, User#user.first_name),
-    ?assertMatch(<<"Anderson">>, User#user.last_name),
-    ?assertEqual(42, User#user.high_score),
+    {ok, User} = sqerl:select(find_user_by_lname, ["Smith"], ?FIRST(user)),
+    ?assertMatch(<<"Kevin">>, User#user.first_name),
+    ?assertMatch(<<"Smith">>, User#user.last_name),
+    ?assertEqual(666, User#user.high_score),
     ?assertEqual(true, User#user.active),
     ?assert(is_integer(User#user.id)).
 
