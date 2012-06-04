@@ -10,7 +10,8 @@ CREATE TABLE users (
        first_name varchar(80),
        last_name varchar(80),
        high_score int,
-       datablob text, 
+       active boolean,
+       datablob text,
        created timestamp
 );
 

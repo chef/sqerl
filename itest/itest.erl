@@ -6,13 +6,13 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("sqerl.hrl").
 
--record(user, {id, first_name, last_name, high_score}).
+-record(user, {id, first_name, last_name, high_score, active}).
 
 -define(GET_ARG(Name, Args), proplists:get_value(Name, Args)).
--define(NAMES, [["Kevin", "Smith", 666, <<"2011-10-01 16:47:46">>],
-                ["Mark", "Anderson", 42, <<"2011-10-02 16:47:46">>],
-                ["Chris", "Maier", 0, <<"2011-10-03 16:47:46">>],
-                ["Elvis", "Presley", 16, <<"2011-10-04 16:47:46">>]]).
+-define(NAMES, [["Kevin", "Smith", 666, <<"2011-10-01 16:47:46">>, true],
+                ["Mark", "Anderson", 42, <<"2011-10-02 16:47:46">>, true],
+                ["Chris", "Maier", 0, <<"2011-10-03 16:47:46">>, true],
+                ["Elvis", "Presley", 16, <<"2011-10-04 16:47:46">>, false]]).
 
 -compile([export_all]).
 
@@ -45,7 +45,8 @@ setup_env() ->
                                [{<<"created">>,
                                  fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}];
                            mysql ->
-                               [{}]
+                               [{<<"active">>,
+                                 fun sqerl_transformers:convert_integer_to_boolean/1}]
                        end,
     ok = application:set_env(sqerl, column_transforms, ColumnTransforms),
     PoolConfig = [{name, "sqerl"},
@@ -87,6 +88,8 @@ basic_test_() ->
        fun update_datablob/0},
       {<<"Select blob type">>,
        fun select_datablob/0},
+      {<<"Select boolean">>,
+       fun select_boolean/0},
 
       {<<"Update timestamp type">>,
        fun update_created/0},
@@ -111,24 +114,28 @@ select_data() ->
     {ok, User} = sqerl:select(find_user_by_lname, ["Smith"], first),
     ?assertMatch(<<"Kevin">>, proplists:get_value(<<"first_name">>, User)),
     ?assertMatch(<<"Smith">>, proplists:get_value(<<"last_name">>, User)),
+    ?assertEqual(666, proplists:get_value(<<"high_score">>, User)),
+    ?assertEqual(true, proplists:get_value(<<"active">>, User)),
     ?assert(is_integer(proplists:get_value(<<"id">>, User))).
 
 select_data_as_record() ->
-    {ok, User} = sqerl:select(find_user_by_lname, ["Anderson"], ?FIRST(user)),
-    ?assertMatch(<<"Mark">>, User#user.first_name),
-    ?assertMatch(<<"Anderson">>, User#user.last_name),
+    {ok, User} = sqerl:select(find_user_by_lname, ["Smith"], ?FIRST(user)),
+    ?assertMatch(<<"Kevin">>, User#user.first_name),
+    ?assertMatch(<<"Smith">>, User#user.last_name),
+    ?assertEqual(666, User#user.high_score),
+    ?assertEqual(true, User#user.active),
     ?assert(is_integer(User#user.id)).
 
 select_first_number_zero() ->
     Expected = [{ok, 666}, {ok, 42}, {ok, 0}, {ok, 16} ],
     Returned =  [sqerl:select(find_score_by_lname, [LName], first_as_scalar, [high_score]) ||
-                    [_, LName, _, _] <- ?NAMES],
+                    [_, LName, _, _, _] <- ?NAMES],
     ?assertMatch(Expected, Returned).
 
 delete_data() ->
     Expected = lists:duplicate(4, {ok, 1}),
     ?assertMatch(Expected, [sqerl:statement(delete_user_by_lname, [LName]) ||
-                               [_, LName, _, _] <- ?NAMES]).
+                               [_, LName, _, _, _] <- ?NAMES]).
 
 bounced_server() ->
     case get_db_type() of
@@ -143,12 +150,19 @@ bounced_server() ->
 
 update_datablob() ->
     ?assertMatch({ok, 1},
-		 sqerl:statement(update_datablob_by_lname,
-				 [<<"foobar">>, "Smith"] )).
+                 sqerl:statement(update_datablob_by_lname,
+                                 [<<"foobar">>, "Smith"] )).
 
 select_datablob() ->
     {ok, User} = sqerl:select(find_datablob_by_lname, ["Smith"], first_as_scalar, [datablob]),
     ?assertMatch(<<"foobar">>, User).
+
+select_boolean() ->
+    {ok, User} = sqerl:select(find_user_by_lname, ["Smith"], first),
+    ?assertEqual(true, proplists:get_value(<<"active">>, User)),
+
+    {ok, User1} = sqerl:select(find_user_by_lname, ["Presley"], first),
+    ?assertEqual(false, proplists:get_value(<<"active">>, User1)).
 
 
 %%%
@@ -156,15 +170,15 @@ select_datablob() ->
 %%%
 update_created() ->
     ?assertMatch({ok, 1},
-		 sqerl:statement(update_created_by_lname,
-				 [{datetime, {{2011, 11, 1}, {16, 47, 46}}},
-				  "Smith"])),
+                 sqerl:statement(update_created_by_lname,
+                     [{datetime, {{2011, 11, 1}, {16, 47, 46}}},
+                      "Smith"])),
     ?assertMatch({ok, 1},
-		 sqerl:statement(update_created_by_lname,
-				 [{{2011, 11, 2}, {16, 47, 46}}, "Anderson"])),
+                 sqerl:statement(update_created_by_lname,
+                     [{{2011, 11, 2}, {16, 47, 46}}, "Anderson"])),
     ?assertMatch({ok, 1},
-		 sqerl:statement(update_created_by_lname,
-				 [<<"2011-11-03 16:47:46">>, "Maier"])),
+                 sqerl:statement(update_created_by_lname,
+                     [<<"2011-11-03 16:47:46">>, "Maier"])),
 
     {ok, User1} = sqerl:select(find_created_by_lname, ["Smith"], first_as_scalar, [created]),
     ?assertMatch({datetime, {{2011, 11, 01}, {16, 47, 46}}}, User1),
