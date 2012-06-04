@@ -17,6 +17,7 @@
          identity/0,
          parse_timestamp_to_datetime/1,
          convert_YMDHMS_tuple_to_datetime/1,
+         convert_integer_to_boolean/1,
          by_column_name/2]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -53,11 +54,11 @@ rows(none) ->
 rows([]) ->
     {ok, none};
 rows(Result) ->
-    {ok, Result}.
+    {ok, [ [ Val || {_Key, Val} <- Row] || Row <- Result ] }.
 
-rows_as_records(_RecName, _RecordInfo, []) -> 
+rows_as_records(_RecName, _RecordInfo, []) ->
     {ok, none};
-rows_as_records(_RecName, _RecordInfo, none) -> 
+rows_as_records(_RecName, _RecordInfo, none) ->
     {ok, none};
 rows_as_records(RecName, RecordInfo, Rows) ->
     {ok, [ begin
@@ -109,6 +110,14 @@ parse_timestamp_to_datetime(TS) when is_binary(TS) ->
 
 convert_YMDHMS_tuple_to_datetime({{Y,Mo,D}, {H,Mi,S}}) ->
     {datetime, {{Y,Mo,D}, {H,Mi,trunc(S)}}}.
+
+-spec convert_integer_to_boolean(non_neg_integer()) -> boolean().
+%% @doc helper column transformer for mysql where booleans are represented as
+%% tinyint(1) and can take on the value of 0 or 1.
+convert_integer_to_boolean(0) ->
+    false;
+convert_integer_to_boolean(N) when is_integer(N), N > 0 ->
+    true.
 
 %% single_column({Name, Data}, Transforms) when is_record(Transforms,dict, 9) ->
 %%     case dict:find(Name, Transforms) of
