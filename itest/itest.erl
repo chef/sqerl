@@ -88,6 +88,8 @@ basic_test_() ->
        fun update_datablob/0},
       {<<"Select blob type">>,
        fun select_datablob/0},
+      {<<"Select boolean">>,
+       fun select_boolean/0},
 
       {<<"Update timestamp type">>,
        fun update_created/0},
@@ -157,9 +159,10 @@ select_datablob() ->
 
 select_boolean() ->
     {ok, User} = sqerl:select(find_user_by_lname, ["Smith"], first),
-    ?assertMatch(<<"Kevin">>, proplists:get_value(<<"first_name">>, User)),
-    ?assertMatch(<<"Smith">>, proplists:get_value(<<"last_name">>, User)),
-    ?assert(is_integer(proplists:get_value(<<"id">>, User))).
+    ?assertEqual(true, proplists:get_value(<<"active">>, User)),
+
+    {ok, User1} = sqerl:select(find_user_by_lname, ["Presley"], first),
+    ?assertEqual(false, proplists:get_value(<<"active">>, User1)).
 
 
 %%%
