@@ -122,3 +122,14 @@ rows_as_scalars_test() ->
     ?assertEqual({ok, none}, ScalarTransformer([])),
     ?assertEqual({ok, [<<"clownco">>,<<"skynet">>]},
                  ScalarTransformer(Rows)).
+
+convert_integer_to_boolean_test() ->
+    ?assertEqual(false, sqerl_transformers:convert_integer_to_boolean(0)),
+    ?assertEqual(true, sqerl_transformers:convert_integer_to_boolean(1)),
+    ?assertEqual(true, sqerl_transformers:convert_integer_to_boolean(2)),
+
+    %% no function for neg_integer()
+    ?assertException(error, function_clause, sqerl_transformers:convert_integer_to_boolean(-1)),
+    %% no function for binary()
+    ?assertException(error, function_clause, sqerl_transformers:convert_integer_to_boolean(<<"foo">>)).
+

@@ -9,6 +9,7 @@ create table users (
        first_name varchar(80),
        last_name varchar(80),
        high_score int,
+       active tinyint(1),
        created timestamp,
        datablob blob,
        primary key (id)

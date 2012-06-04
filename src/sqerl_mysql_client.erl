@@ -1,7 +1,8 @@
 %% -*- erlang-indent-level: 4;indent-tabs-mode: nil; fill-column: 92 -*-
 %% ex: ts=4 sw=4 et
 %% @author Kevin Smith <kevin@opscode.com>
-%% @copyright Copyright 2011 Opscode, Inc.
+%% @author James Casey <james@opscode.com>
+%% @copyright Copyright 2011-2012 Opscode, Inc.
 %% @end
 %% @doc Abstraction around interacting with mysql databases
 -module(sqerl_mysql_client).
@@ -16,12 +17,14 @@
          exec_prepared_select/3,
          is_connected/1]).
 
--record(state, {cn}).
+-record(state, {cn,
+                ctrans :: dict() | undefined }).
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
-exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
-    case catch emysql_conn:execute(Cn, Name, Args) of
+exec_prepared_select(Name, Args, #state{cn=Cn, ctrans=CTrans}=State) ->
+    NArgs = input_transforms(Args, State),
+    case catch emysql_conn:execute(Cn, Name, NArgs) of
         %% Socket was unexpectedly closed by server
         {'EXIT', {_, closed}} ->
             {{error, closed}, State};
@@ -30,13 +33,15 @@ exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
         #result_packet{}=Result ->
             %% Unpack rows
             Rows = unpack_rows(Result),
-            {{ok, Rows}, State};
+            TRows = sqerl_transformers:by_column_name(Rows, CTrans),
+            {{ok, TRows}, State};
         #error_packet{msg=Reason} ->
             {{error, Reason}, State}
     end.
 
 exec_prepared_statement(Name, Args, #state{cn=Cn}=State) ->
-    case catch emysql_conn:execute(Cn, Name, Args) of
+    NArgs = input_transforms(Args, State),
+    case catch emysql_conn:execute(Cn, Name, NArgs) of
         {'EXIT', {_, closed}} ->
             {{error, closed}, State};
         {'EXIT', Error} ->
@@ -62,6 +67,11 @@ init(Config) ->
     {pass, Pass} = lists:keyfind(pass, 1, Config),
     {db, Db} = lists:keyfind(db, 1, Config),
     {prepared_statements, Statements} = lists:keyfind(prepared_statements, 1, Config),
+    CTrans =
+        case lists:keyfind(column_transforms, 1, Config) of
+            {column_transforms, CT} -> CT;
+            false -> undefined
+        end,
     %% Need this hokey pool record to create a database connection
     PoolDescriptor = #pool{host=Host, port=Port, user=User, password=Pass,
                            database=Db, encoding=utf8},
@@ -75,7 +85,7 @@ init(Config) ->
             erlang:link(Sock),
             erlang:process_flag(trap_exit, true),
             ok = load_statements(Statements),
-            {ok, #state{cn=Connection}}
+            {ok, #state{cn=Connection, ctrans=CTrans}}
     end.
 
 %% Internal functions
@@ -99,7 +109,7 @@ unpack_rows(#result_packet{field_list=Fields, rows=Rows}) ->
     unpack_rows(FieldNames, Rows, []).
 
 unpack_rows(_FieldNames, [], []) ->
-    none;
+    [];
 unpack_rows(_FieldNames, [], Accum) ->
     lists:reverse(Accum);
 unpack_rows(FieldNames, [Values|T], Accum) ->
@@ -111,3 +121,13 @@ unpack_rows(FieldNames, [Values|T], Accum) ->
 %%                 {Idx + 1, [{Field#field.name, lists:nth(Idx, Values)}|Row]} end,
 %%     {_, Row} = lists:foldl(F, {1, []}, Fields),
 %%     unpack_rows(Fields, T, [lists:reverse(Row)|Accum]).
+
+transform(false) ->
+    0;
+transform(true) ->
+    1;
+transform(X) ->
+    X.
+
+input_transforms(Data, _State) ->
+    [ transform(C) || C <- Data ].
