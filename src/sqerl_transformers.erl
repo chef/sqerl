@@ -20,6 +20,10 @@
          convert_integer_to_boolean/1,
          by_column_name/2]).
 
+-ifdef(TEST).
+-compile([export_all]).
+-endif.
+
 -include_lib("eunit/include/eunit.hrl").
 
 rows() ->
@@ -130,8 +134,10 @@ single_column({Name, Data}, Transforms) when is_list(Transforms) ->
     case proplists:get_value(Name, Transforms) of
         undefined ->
             {Name, Data};
-        Transform ->
-            {Name, Transform(Data)}
+        Fun when is_function(Fun) ->
+            {Name, Fun(Data)};
+        {Module, Fun} ->
+            {Name, apply(Module, Fun, [Data])}
     end.
 
 by_column_name(Rows, undefined) ->
