@@ -133,3 +133,36 @@ convert_integer_to_boolean_test() ->
     %% no function for binary()
     ?assertException(error, function_clause, sqerl_transformers:convert_integer_to_boolean(<<"foo">>)).
 
+single_column_with_no_transformers_test() ->
+    Transforms = [{}],
+    ValFoo = {<<"foo">>, <<"x">>},
+    ?assertEqual(ValFoo, sqerl_transformers:single_column(ValFoo, Transforms)).
+
+single_column_with_no_matching_transformers_test() ->
+    Transforms = [{<<"bar">>, fun sqerl_transformers:convert_integer_to_boolean/1}],
+    ValFoo = {<<"foo">>, <<"x">>},
+    ?assertEqual(ValFoo, sqerl_transformers:single_column(ValFoo, Transforms)).
+
+%% @doc check that single_column works when the transform is a {Mod, Fun} tuple
+single_column_with_tuple_test() ->
+    Transforms = [{<<"foo">>, {sqerl_transformers, convert_integer_to_boolean}} ],
+    ?assertEqual({<<"foo">>, true}, sqerl_transformers:single_column({<<"foo">>, 1},
+                                                                    Transforms)),
+    ?assertEqual({<<"foo">>, false}, sqerl_transformers:single_column({<<"foo">>, 0},
+                                                                     Transforms)).
+
+%% @doc check that single_column works when the transform is a fun
+single_column_with_fun_test() ->
+    Transforms = [{<<"foo">>, fun sqerl_transformers:convert_integer_to_boolean/1} ],
+    ValFoo = {<<"foo">>, 1},
+    ?assertEqual({<<"foo">>, true}, sqerl_transformers:single_column(ValFoo, Transforms)),
+    ?assertEqual({<<"foo">>, false}, sqerl_transformers:single_column({<<"foo">>, 0},
+                                                                     Transforms)).
+
+%% @doc we get the underlying function_clause error back badmatch if we pass an invalid
+%% value into a transformer (in this case a binary() into something expecting a number)
+single_column_badarg_test() ->
+    Transforms = [{<<"foo">>, fun sqerl_transformers:convert_integer_to_boolean/1} ],
+    ?assertError(function_clause, sqerl_transformers:single_column({<<"foo">>, <<"wontwork">>},
+                                                                   Transforms)).
+
