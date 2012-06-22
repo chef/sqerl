@@ -22,7 +22,13 @@
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
-exec_prepared_select(Name, Args, #state{cn=Cn, ctrans=CTrans}=State) ->
+process_result_packet(#result_packet{}=Result,
+                      #state{ctrans=CTrans}=State) ->
+    Rows = unpack_rows(Result),
+    TRows = sqerl_transformers:by_column_name(Rows, CTrans),
+    {{ok, TRows}, State}.
+
+exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
     NArgs = input_transforms(Args, State),
     case catch emysql_conn:execute(Cn, Name, NArgs) of
         %% Socket was unexpectedly closed by server
@@ -31,12 +37,22 @@ exec_prepared_select(Name, Args, #state{cn=Cn, ctrans=CTrans}=State) ->
         {'EXIT', Error} ->
             {Error, State};
         #result_packet{}=Result ->
-            %% Unpack rows
-            Rows = unpack_rows(Result),
-            TRows = sqerl_transformers:by_column_name(Rows, CTrans),
-            {{ok, TRows}, State};
+            process_result_packet(Result, State);
         #error_packet{msg=Reason} ->
-            {{error, Reason}, State}
+            {{error, Reason}, State};
+        %% This next clause is because MySQL's stored procedures are ridiculous and can
+        %% actually return multiple result sets.
+        %%
+        %% NOTE: As formulated, this works for our current stored procedure needs, in which
+        %% SPs treated like 'select' statements return a single, well-defined table as a
+        %% result; that 'select' is returned as a result_packet, and then an 'ok_packet' for
+        %% the termination of the SP call itself is returned (thus, the list).
+        %%
+        %% This case clause WILL NOT WORK with SPs that return multiple result sets (and thus,
+        %% multiple result_packets), but we will never write something that does that, so I
+        %% don't foresee this as being a problem.
+        [#result_packet{}=Result, #ok_packet{}] ->
+            process_result_packet(Result, State)
     end.
 
 exec_prepared_statement(Name, Args, #state{cn=Cn}=State) ->
