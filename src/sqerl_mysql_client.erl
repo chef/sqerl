@@ -22,12 +22,6 @@
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
-process_result_packet(#result_packet{}=Result,
-                      #state{ctrans=CTrans}=State) ->
-    Rows = unpack_rows(Result),
-    TRows = sqerl_transformers:by_column_name(Rows, CTrans),
-    {{ok, TRows}, State}.
-
 exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
     NArgs = input_transforms(Args, State),
     case catch emysql_conn:execute(Cn, Name, NArgs) of
@@ -147,3 +141,11 @@ transform(X) ->
 
 input_transforms(Data, _State) ->
     [ transform(C) || C <- Data ].
+
+%% @doc Utility function for munging a MySQL result packet.  Used for SELECTs as well as for
+%% stored procedure calls that return a result set.
+process_result_packet(#result_packet{}=Result,
+                      #state{ctrans=CTrans}=State) ->
+    Rows = unpack_rows(Result),
+    TRows = sqerl_transformers:by_column_name(Rows, CTrans),
+    {{ok, TRows}, State}.
