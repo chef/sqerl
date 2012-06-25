@@ -103,7 +103,41 @@ basic_test_() ->
         fun bounced_server/0}},
 
       {<<"Delete operation">>,
-       fun delete_data/0}
+       fun delete_data/0},
+      {"Resultset-returning Stored Procedure",
+       fun() ->
+               case get_db_type() of
+                   mysql ->
+                       %% It won't actually return anything; this is just to
+                       %% make sure that we're properly handling the insanity
+                       %% of MySQL returning multiple results from a stored
+                       %% procedure call.
+                       %%
+                       %% Basically, the fact that it doesn't crash is test
+                       %% enough :)
+                       {ok, Actual} = sqerl:select(test_the_sp, []),
+                       ?assertEqual(none, Actual);
+                   Type ->
+                       ?debugFmt("Skipping stored procedure test for non-MySQL database ~p~n", [Type])
+               end
+       end},
+      {foreach,
+       fun() ->
+               %% Don't want to have the error message muddy up the test output
+               error_logger:tty(false) end,
+       fun(_) -> error_logger:tty(true) end,
+       [{"Does NOT handle SPs that return more than one result packet",
+         fun() ->
+                 case get_db_type() of
+                     mysql ->
+                         ?assertException(exit,
+                                          {{{case_clause, [_Result1,_Result2,_OKPacket]}, _}, _},
+                                          sqerl:select(test_the_multi_sp, []));
+                     Type ->
+                         ?debugFmt("Skipping stored procedure test for non-MySQL database ~p~n", [Type])
+                 end
+         end}]
+      }
      ]}.
 
 insert_data() ->

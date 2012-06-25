@@ -31,3 +31,18 @@ CREATE TABLE `nodes` (
   KEY `nodes_org_id_index` (`org_id`),
   KEY `nodes_org_id_environment_index` (`org_id`,`environment`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+DELIMITER $$
+CREATE PROCEDURE testing_procedure()
+BEGIN
+        SELECT * FROM users;
+END$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE PROCEDURE multi_procedure()
+BEGIN
+        SELECT * FROM users;
+        SELECT * FROM users;
+END$$
+DELIMITER ;
