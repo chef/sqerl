@@ -121,20 +121,23 @@ basic_test_() ->
                        ?debugFmt("Skipping stored procedure test for non-MySQL database ~p~n", [Type])
                end
        end},
-      {"Does NOT handle SPs that return more than one result packet",
+      {foreach,
        fun() ->
-               case get_db_type() of
-                   mysql ->
-                       %% Don't want to have the error message muddy up the test output
-                       error_logger:tty(false),
-                       ?assertException(exit,
-                                        {{{case_clause, [_Result1,_Result2,_OKPacket]}, _}, _},
-                                        sqerl:select(test_the_multi_sp, [])),
-                       error_logger:tty(true);
-                   Type ->
-                       ?debugFmt("Skipping stored procedure test for non-MySQL database ~p~n", [Type])
-               end
-       end}
+               %% Don't want to have the error message muddy up the test output
+               error_logger:tty(false) end,
+       fun(_) -> error_logger:tty(true) end,
+       [{"Does NOT handle SPs that return more than one result packet",
+         fun() ->
+                 case get_db_type() of
+                     mysql ->
+                         ?assertException(exit,
+                                          {{{case_clause, [_Result1,_Result2,_OKPacket]}, _}, _},
+                                          sqerl:select(test_the_multi_sp, []));
+                     Type ->
+                         ?debugFmt("Skipping stored procedure test for non-MySQL database ~p~n", [Type])
+                 end
+         end}]
+      }
      ]}.
 
 insert_data() ->
