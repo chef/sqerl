@@ -83,7 +83,7 @@ statement(StmtName, StmtArgs, XformName, XformArgs) ->
         {ok, N} when is_number(N) ->
             {ok, N};
         {error, Reason} ->
-            {error, Reason}
+            parse_error(Reason)
     end.
 
 execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
@@ -99,3 +99,50 @@ execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
                         Error
                 end end,
     with_db(F).
+
+
+%% @doc Utility for generating specific message tuples from database-specific error
+%% messages.  The 1-argument form determines which database is being used by querying
+%% Sqerl's configuration at runtime, while the 2-argument form takes the database type as a
+%% parameter directly.
+-spec parse_error(
+        string() |                       %% MySQL error
+        {error, {error, error, _, _, _}} %% PostgreSQL error
+       ) -> {'conflict',_} |
+            {'foreign_key',_} |
+            {'error',_}.
+parse_error(Reason) ->
+    {ok, DbType} = application:get_env(sqerl, db_type),
+    parse_error(DbType, Reason).
+
+-spec parse_error(mysql | pgsql, string() | {error, {error, error, _, _, _}}) ->
+                         {'conflict',_} | {'foreign_key',_} | {'error',_}.
+parse_error(mysql, Reason) ->
+    case string:str(Reason, "Duplicate entry") of
+        0 ->
+            case string:str(Reason, "Cannot delete or update a parent row") of
+                0 ->
+                    case string:str(Reason, "a foreign key constraint fails") of
+                        0 -> {error, Reason};
+                        _ -> {foreign_key, Reason}
+                    end;
+                _ ->
+                    {foreign_key, Reason}
+            end;
+        _ ->
+            {conflict, Reason}
+    end;
+parse_error(pgsql, {error,                      % error from sqerl
+                    {error,                     % error record marker from epgsql
+                     error,                     % Severity
+                     Code, Message, _Extra}}) ->
+    %% See http://www.postgresql.org/docs/current/static/errcodes-appendix.html
+    case Code of
+        <<"23505">> -> % unique constraint violation
+            {conflict, Message};
+        <<"23503">> -> % foreign_key_violation
+            {foreign_key, Message};
+        _ ->
+            {error, Message}
+    end.
+
