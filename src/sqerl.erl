@@ -106,7 +106,7 @@ execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
 %% Sqerl's configuration at runtime, while the 2-argument form takes the database type as a
 %% parameter directly.
 -spec parse_error(
-        string() |                       %% MySQL error
+        {term(), term()} |                       %% MySQL error
         {error, {error, error, _, _, _}} %% PostgreSQL error
        ) -> {'conflict',_} |
             {'foreign_key',_} |
@@ -115,23 +115,22 @@ parse_error(Reason) ->
     {ok, DbType} = application:get_env(sqerl, db_type),
     parse_error(DbType, Reason).
 
--spec parse_error(mysql | pgsql, string() | {error, {error, error, _, _, _}}) ->
-                         {'conflict',_} | {'foreign_key',_} | {'error',_}.
+-spec parse_error(mysql | pgsql,{term(), term()}
+                        | {error, {error, error, _, _, _}}) ->
+                          {'conflict',_} | {'foreign_key',_} | {'error',_}.
 parse_error(mysql, Reason) ->
-    case string:str(Reason, "Duplicate entry") of
-        0 ->
-            case string:str(Reason, "Cannot delete or update a parent row") of
-                0 ->
-                    case string:str(Reason, "a foreign key constraint fails") of
-                        0 -> {error, Reason};
-                        _ -> {foreign_key, Reason}
-                    end;
-                _ ->
-                    {foreign_key, Reason}
-            end;
+    {Code, Message} = Reason,
+    case Code of
+        1062 ->
+            {conflict, Message};
+        1451 ->
+            {foreign_key, Message};
+        1452 ->
+            {foreign_key, Message};
         _ ->
-            {conflict, Reason}
+            {error, Message}
     end;
+
 parse_error(pgsql, {error,                      % error from sqerl
                     {error,                     % error record marker from epgsql
                      error,                     % Severity
