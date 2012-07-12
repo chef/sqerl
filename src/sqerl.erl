@@ -20,6 +20,9 @@
 
 -define(MAX_RETRIES, 5).
 
+-define(MYSQL_ERROR_CODES, [{1062, conflict}, {1451, foreign_key}, {1452, foreign_key}]).
+-define(PGSQL_ERROR_CODES, [{<<"23505">>, conflict}, {<<"23503">>, foreign_key}]).
+
 checkout() ->
     pooler:take_member("sqerl").
 
@@ -118,16 +121,11 @@ parse_error(Reason) ->
 -spec parse_error(mysql | pgsql,{term(), term()}
                         | {error, {error, error, _, _, _}}) ->
                           {'conflict',_} | {'foreign_key',_} | {'error',_}.
-parse_error(mysql, Reason) ->
-    {Code, Message} = Reason,
-    case Code of
-        1062 ->
-            {conflict, Message};
-        1451 ->
-            {foreign_key, Message};
-        1452 ->
-            {foreign_key, Message};
-        _ ->
+parse_error(mysql, {Code, Message}) ->
+    case lists:keyfind(Code, 1, ?MYSQL_ERROR_CODES) of
+        {_, ErrorType} ->
+            {ErrorType, Message};
+        false ->
             {error, Message}
     end;
 
@@ -136,12 +134,10 @@ parse_error(pgsql, {error,                      % error from sqerl
                      error,                     % Severity
                      Code, Message, _Extra}}) ->
     %% See http://www.postgresql.org/docs/current/static/errcodes-appendix.html
-    case Code of
-        <<"23505">> -> % unique constraint violation
-            {conflict, Message};
-        <<"23503">> -> % foreign_key_violation
-            {foreign_key, Message};
-        _ ->
+    case lists:keyfind(Code, 1, ?PGSQL_ERROR_CODES) of
+        {_, ErrorType} ->
+            {ErrorType, Message};
+        false ->
             {error, Message}
     end.
 
