@@ -66,7 +66,7 @@ select(StmtName, StmtArgs, XformName, XformArgs) ->
         {ok, Results} ->
             {ok, Results};
         {error, Reason} ->
-            {error, Reason}
+            parse_error(Reason)
     end.
 
 statement(StmtName, StmtArgs) ->
