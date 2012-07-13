@@ -121,22 +121,20 @@ parse_error(Reason) ->
 
 -spec parse_error(mysql | pgsql, {term(), term()}
                         | {error, {error, error, _, _, _}}) -> sqerl_error().
-parse_error(mysql, {Code, Message}) ->
-    case lists:keyfind(Code, 1, ?MYSQL_ERROR_CODES) of
-        {_, ErrorType} ->
-            {ErrorType, Message};
-        false ->
-            {error, Message}
-    end;
+parse_error(mysql, Error) ->
+    do_parse_error(Error, ?MYSQL_ERROR_CODES);
 
 parse_error(pgsql, {error,               % error from sqerl
                     {error,              % error record marker from epgsql
                      error,              % Severity
                      Code, Message, _Extra}}) ->
-    case lists:keyfind(Code, 1, ?PGSQL_ERROR_CODES) of
+    do_parse_error({Code, Message}, ?PGSQL_ERROR_CODES).
+
+
+do_parse_error({Code, Message}, CodeList) ->
+    case lists:keyfind(Code, 1, CodeList) of
         {_, ErrorType} ->
             {ErrorType, Message};
         false ->
             {error, Message}
     end.
-
