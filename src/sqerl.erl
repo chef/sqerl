@@ -17,6 +17,7 @@
          statement/4]).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("sqerl.hrl").
 
 -define(MAX_RETRIES, 5).
 
@@ -111,18 +112,15 @@ execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
 %% Sqerl's configuration at runtime, while the 2-argument form takes the database type as a
 %% parameter directly.
 -spec parse_error(
-        {term(), term()} |                       %% MySQL error
+        {term(), term()} |               %% MySQL error
         {error, {error, error, _, _, _}} %% PostgreSQL error
-       ) -> {'conflict',_} |
-            {'foreign_key',_} |
-            {'error',_}.
+    ) -> sqerl_error().
 parse_error(Reason) ->
     {ok, DbType} = application:get_env(sqerl, db_type),
     parse_error(DbType, Reason).
 
--spec parse_error(mysql | pgsql,{term(), term()}
-                        | {error, {error, error, _, _, _}}) ->
-                          {'conflict',_} | {'foreign_key',_} | {'error',_}.
+-spec parse_error(mysql | pgsql, {term(), term()}
+                        | {error, {error, error, _, _, _}}) -> sqerl_error().
 parse_error(mysql, {Code, Message}) ->
     case lists:keyfind(Code, 1, ?MYSQL_ERROR_CODES) of
         {_, ErrorType} ->
@@ -131,9 +129,9 @@ parse_error(mysql, {Code, Message}) ->
             {error, Message}
     end;
 
-parse_error(pgsql, {error,                      % error from sqerl
-                    {error,                     % error record marker from epgsql
-                     error,                     % Severity
+parse_error(pgsql, {error,               % error from sqerl
+                    {error,              % error record marker from epgsql
+                     error,              % Severity
                      Code, Message, _Extra}}) ->
     case lists:keyfind(Code, 1, ?PGSQL_ERROR_CODES) of
         {_, ErrorType} ->
