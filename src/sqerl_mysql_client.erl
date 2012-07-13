@@ -32,8 +32,8 @@ exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
             {Error, State};
         #result_packet{}=Result ->
             process_result_packet(Result, State);
-        #error_packet{msg=Reason} ->
-            {{error, Reason}, State};
+        #error_packet{code=StatusCode, msg=Message} ->
+            {{error, {StatusCode, Message}}, State};
         %% This next clause is because MySQL's stored procedures are ridiculous and can
         %% actually return multiple result sets.
         %%
@@ -58,8 +58,8 @@ exec_prepared_statement(Name, Args, #state{cn=Cn}=State) ->
             {Error, State};
         #ok_packet{affected_rows=Count} ->
             {{ok, Count}, State};
-        #error_packet{msg=Reason} ->
-            {{error, Reason}, State}
+        #error_packet{code=StatusCode, msg=Message} ->
+            {{error, {StatusCode, Message}}, State}
     end.
 
 is_connected(#state{cn=Cn}=State) ->
