@@ -20,7 +20,9 @@
 
 -define(MAX_RETRIES, 5).
 
+%% See http://dev.mysql.com/doc/refman/5.0/en/error-messages-server.html
 -define(MYSQL_ERROR_CODES, [{1062, conflict}, {1451, foreign_key}, {1452, foreign_key}]).
+%% See http://www.postgresql.org/docs/current/static/errcodes-appendix.html
 -define(PGSQL_ERROR_CODES, [{<<"23505">>, conflict}, {<<"23503">>, foreign_key}]).
 
 checkout() ->
@@ -133,7 +135,6 @@ parse_error(pgsql, {error,                      % error from sqerl
                     {error,                     % error record marker from epgsql
                      error,                     % Severity
                      Code, Message, _Extra}}) ->
-    %% See http://www.postgresql.org/docs/current/static/errcodes-appendix.html
     case lists:keyfind(Code, 1, ?PGSQL_ERROR_CODES) of
         {_, ErrorType} ->
             {ErrorType, Message};
