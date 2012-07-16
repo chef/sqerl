@@ -26,6 +26,16 @@ read_db_config() ->
     {ok, Config} = file:consult(Path),
     Config.
 
+get_db_error_codes(DbType) ->
+  case DbType of
+    mysql ->
+      %% See http://dev.mysql.com/doc/refman/5.0/en/error-messages-server.html
+      [{1062, conflict}, {1451, foreign_key}, {1452, foreign_key}];
+    pgsql ->
+      %% See http://www.postgresql.org/docs/current/static/errcodes-appendix.html
+      [{<<"23505">>, conflict}, {<<"23503">>, foreign_key}]
+  end.
+
 setup_env() ->
     Type = get_db_type(),
     Info = read_db_config(),
@@ -36,6 +46,8 @@ setup_env() ->
     ok = application:set_env(sqerl, db_pass, "itest"),
     ok = application:set_env(sqerl, db_name, ?GET_ARG(db, Info)),
     ok = application:set_env(sqerl, idle_check, 10000),
+    ok = application:set_env(sqerl, mysql_error_codes, get_db_error_codes(mysql)),
+    ok = application:set_env(sqerl, pgsql_error_codes, get_db_error_codes(pgsql)),
     %% we could also call it like this:
     %% {prepared_statements, statements(Type)},
     %% {prepared_statements, "itest/statements_pgsql.conf"},
