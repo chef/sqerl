@@ -21,11 +21,6 @@
 
 -define(MAX_RETRIES, 5).
 
-%% See http://dev.mysql.com/doc/refman/5.0/en/error-messages-server.html
--define(MYSQL_ERROR_CODES, [{1062, conflict}, {1451, foreign_key}, {1452, foreign_key}]).
-%% See http://www.postgresql.org/docs/current/static/errcodes-appendix.html
--define(PGSQL_ERROR_CODES, [{<<"23505">>, conflict}, {<<"23503">>, foreign_key}]).
-
 checkout() ->
     pooler:take_member("sqerl").
 
@@ -122,13 +117,15 @@ parse_error(Reason) ->
 -spec parse_error(mysql | pgsql, {term(), term()}
                         | {error, {error, error, _, _, _}}) -> sqerl_error().
 parse_error(mysql, Error) ->
-    do_parse_error(Error, ?MYSQL_ERROR_CODES);
+    {ok, ErrorCodes} = application:get_env(sqerl, mysql_error_codes),
+    do_parse_error(Error, ErrorCodes);
 
 parse_error(pgsql, {error,               % error from sqerl
                     {error,              % error record marker from epgsql
                      error,              % Severity
                      Code, Message, _Extra}}) ->
-    do_parse_error({Code, Message}, ?PGSQL_ERROR_CODES).
+    {ok, ErrorCodes} = application:get_env(sqerl, pgsql_error_codes),
+    do_parse_error({Code, Message}, ErrorCodes).
 
 
 do_parse_error({Code, Message}, CodeList) ->
