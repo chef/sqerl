@@ -46,12 +46,10 @@ setup_env() ->
     ok = application:set_env(sqerl, db_pass, "itest"),
     ok = application:set_env(sqerl, db_name, ?GET_ARG(db, Info)),
     ok = application:set_env(sqerl, idle_check, 10000),
-    ok = application:set_env(sqerl, mysql_error_codes, get_db_error_codes(mysql)),
-    ok = application:set_env(sqerl, pgsql_error_codes, get_db_error_codes(pgsql)),
     %% we could also call it like this:
     %% {prepared_statements, statements(Type)},
     %% {prepared_statements, "itest/statements_pgsql.conf"},
-    ok = application:set_env(sqerl, prepared_statements, {?MODULE, statements, [Type]}),
+    ok = application:set_env(sqerl, db_config, "itest/db_conf_mysql.conf"),
     ColumnTransforms = case Type of
                            pgsql ->
                                [{<<"created">>,
@@ -71,14 +69,6 @@ setup_env() ->
     application:start(public_key),
     application:start(ssl),
     application:start(epgsql).
-
-statements(mysql) ->
-    {ok, Config} = file:consult("itest/db_conf_mysql.conf"),
-    {_, Statements} = lists:keyfind(statements, 1, Config),
-    Statements;
-statements(pgsql) ->
-    {ok, Statements} = file:consult("itest/statements_pgsql.conf"),
-    Statements.
 
 basic_test_() ->
     setup_env(),
