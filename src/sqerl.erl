@@ -17,7 +17,6 @@
          statement/4]).
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("sqerl.hrl").
 
 -define(MAX_RETRIES, 5).
 
@@ -66,8 +65,10 @@ select(StmtName, StmtArgs, XformName, XformArgs) ->
             {ok, none};
         {ok, Results} ->
             {ok, Results};
-        {error, Reason} ->
-            parse_error(Reason)
+        Error ->
+            Error
+        %{error, Reason} ->
+            %parse_error(Reason)
     end.
 
 statement(StmtName, StmtArgs) ->
@@ -83,8 +84,10 @@ statement(StmtName, StmtArgs, XformName, XformArgs) ->
             {ok, none};
         {ok, N} when is_number(N) ->
             {ok, N};
-        {error, Reason} ->
-            parse_error(Reason)
+        Error ->
+            Error
+        %{error, Reason} ->
+            %parse_error(Reason)
     end.
 
 execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
@@ -101,37 +104,3 @@ execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
                 end end,
     with_db(F).
 
-
-%% @doc Utility for generating specific message tuples from database-specific error
-%% messages.  The 1-argument form determines which database is being used by querying
-%% Sqerl's configuration at runtime, while the 2-argument form takes the database type as a
-%% parameter directly.
--spec parse_error(
-        {term(), term()} |               %% MySQL error
-        {error, {error, error, _, _, _}} %% PostgreSQL error
-    ) -> sqerl_error().
-parse_error(Reason) ->
-    {ok, DbType} = application:get_env(sqerl, db_type),
-    parse_error(DbType, Reason).
-
--spec parse_error(mysql | pgsql, {term(), term()}
-                        | {error, {error, error, _, _, _}}) -> sqerl_error().
-parse_error(mysql, Error) ->
-    {ok, ErrorCodes} = application:get_env(sqerl, mysql_error_codes),
-    do_parse_error(Error, ErrorCodes);
-
-parse_error(pgsql, {error,               % error from sqerl
-                    {error,              % error record marker from epgsql
-                     error,              % Severity
-                     Code, Message, _Extra}}) ->
-    {ok, ErrorCodes} = application:get_env(sqerl, pgsql_error_codes),
-    do_parse_error({Code, Message}, ErrorCodes).
-
-
-do_parse_error({Code, Message}, CodeList) ->
-    case lists:keyfind(Code, 1, CodeList) of
-        {_, ErrorType} ->
-            {ErrorType, Message};
-        false ->
-            {error, Message}
-    end.

@@ -31,6 +31,7 @@
          start_link/1,
          exec_prepared_select/3,
          exec_prepared_statement/3,
+         parse_error/2,
          close/1]).
 
 %% gen_server callbacks
@@ -47,6 +48,9 @@
 -record(state, {cb_mod,
                 cb_state,
                 timeout}).
+
+-include_lib("sqerl.hrl").
+
 
 %% @hidden
 behaviour_info(callbacks) ->
@@ -90,14 +94,16 @@ init(DbType) ->
                       mysql -> sqerl_mysql_client
                   end,
     IdleCheck = ev(idle_check, 1000),
-    Config = [{host, ev(db_host)},
-              {port, ev(db_port)},
-              {user, ev(db_user)},
-              {pass, ev(db_pass)},
-              {db, ev(db_name)},
-              {idle_check, IdleCheck},
-              {prepared_statements, read_statements(ev(prepared_statements))},
-              {column_transforms, ev(column_transforms)}],
+    DbConfig = read_db_config(ev(db_config)),
+    Config = lists:append(
+              [{host, ev(db_host)},
+               {port, ev(db_port)},
+               {user, ev(db_user)},
+               {pass, ev(db_pass)},
+               {db, ev(db_name)},
+               {idle_check, IdleCheck},
+               {column_transforms, ev(column_transforms)}],
+              DbConfig),
     case CallbackMod:init(Config) of
         {ok, CallbackState} ->
             Timeout = IdleCheck,
@@ -148,19 +154,12 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
--spec read_statements([{atom(), term()}]
-                      | string()
-                      | {atom(), atom(), list()}) -> [{atom(), binary()}].
-%% @doc Prepared statements can be provides as a list of `{atom(), binary()}' tuples, as a
-%% path to a file that can be consulted for such tuples, or as `{M, F, A}' such that
-%% `apply(M, F, A)' returns the statements tuples.
-read_statements({Mod, Fun, Args}) ->
+read_db_config({Mod, Fun, Args}) ->
     apply(Mod, Fun, Args);
-read_statements(L = [{Label, SQL}|_T]) when is_atom(Label) andalso is_binary(SQL) ->
-    L;
-read_statements(Path) when is_list(Path) ->
-    {ok, Statements} = file:consult(Path),
-    Statements.
+read_db_config(Path) when is_list(Path) ->
+    {ok, Config} = file:consult(Path),
+    error_logger:info_msg("*************************~p**************************~n", [Config]),
+    Config.
 
 %% Short for "environment value", just provides some sugar for grabbing config values
 ev(Key) ->
@@ -176,3 +175,22 @@ ev(Key, Default) ->
         undefined -> Default;
         {ok, V} -> V
     end.
+
+
+
+%% @doc Utility for generating specific message tuples from database-specific error
+%% messages.  The 1-argument form determines which database is being used by querying
+%% Sqerl's configuration at runtime, while the 2-argument form takes the database type as a
+%% parameter directly.
+
+%-spec parse_error(mysql | pgsql, {term(), term()}
+                        %| {error, {error, error, _, _, _}}) -> sqerl_error().
+parse_error(StatusCode, ErrorCodes) ->
+    case lists:keyfind(StatusCode, 1, ErrorCodes) of
+        {_, ErrorType} ->
+            ErrorType;
+        false ->
+            error
+    end.
+
+
