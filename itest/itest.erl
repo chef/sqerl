@@ -73,7 +73,8 @@ setup_env() ->
     application:start(epgsql).
 
 statements(mysql) ->
-    {ok, Statements} = file:consult("itest/statements_mysql.conf"),
+    {ok, Config} = file:consult("itest/db_conf_mysql.conf"),
+    {_, Statements} = lists:keyfind(statements, 1, Config),
     Statements;
 statements(pgsql) ->
     {ok, Statements} = file:consult("itest/statements_pgsql.conf"),
