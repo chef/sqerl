@@ -158,7 +158,6 @@ read_db_config({Mod, Fun, Args}) ->
     apply(Mod, Fun, Args);
 read_db_config(Path) when is_list(Path) ->
     {ok, Config} = file:consult(Path),
-    error_logger:info_msg("*************************~p**************************~n", [Config]),
     Config.
 
 %% Short for "environment value", just provides some sugar for grabbing config values
