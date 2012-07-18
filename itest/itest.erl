@@ -49,7 +49,7 @@ setup_env() ->
     %% we could also call it like this:
     %% {prepared_statements, statements(Type)},
     %% {prepared_statements, "itest/statements_pgsql.conf"},
-    ok = application:set_env(sqerl, db_config, "itest/db_conf_mysql.conf"),
+    ok = application:set_env(sqerl, db_config, db_config_path(Type)),
     ColumnTransforms = case Type of
                            pgsql ->
                                [{<<"created">>,
@@ -69,6 +69,12 @@ setup_env() ->
     application:start(public_key),
     application:start(ssl),
     application:start(epgsql).
+
+db_config_path(mysql) ->
+  "itest/db_conf_mysql.conf";
+db_config_path(pgsql) ->
+  "itest/db_conf_pgsql.conf".
+
 
 basic_test_() ->
     setup_env(),
