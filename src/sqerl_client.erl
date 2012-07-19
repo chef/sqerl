@@ -94,7 +94,7 @@ init(DbType) ->
                       mysql -> sqerl_mysql_client
                   end,
     IdleCheck = ev(idle_check, 1000),
-    DbConfig = read_db_config(ev(db_config)),
+    DbClientConfig = read_client_config(ev(db_config)),
     Config = lists:append(
               [{host, ev(db_host)},
                {port, ev(db_port)},
@@ -103,7 +103,7 @@ init(DbType) ->
                {db, ev(db_name)},
                {idle_check, IdleCheck},
                {column_transforms, ev(column_transforms)}],
-              DbConfig),
+              DbClientConfig),
     case CallbackMod:init(Config) of
         {ok, CallbackState} ->
             Timeout = IdleCheck,
@@ -154,9 +154,9 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-read_db_config({Mod, Fun, Args}) ->
+read_client_config({Mod, Fun, Args}) ->
     apply(Mod, Fun, Args);
-read_db_config(Path) when is_list(Path) ->
+read_client_config(Path) when is_list(Path) ->
     {ok, Config} = file:consult(Path),
     Config.
 
