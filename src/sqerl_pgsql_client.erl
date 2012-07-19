@@ -17,6 +17,7 @@
          is_connected/1]).
 
 -record(state,  {cn,
+                 error_codes,
                  statements = dict:new() :: dict(),
                  ctrans :: dict() | undefined }).
 
@@ -32,7 +33,10 @@
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
 -spec exec_prepared_select(atom(), [], state()) -> {{ok, [[tuple()]]} | {error, any()}, state()}.
-exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements, ctrans=CTrans}=State) ->
+exec_prepared_select(Name, Args, #state{cn=Cn,
+                                        statements=Statements,
+                                        ctrans=CTrans,
+                                        error_codes=ErrorCodes}=State) ->
     PrepStmt = dict:fetch(Name, Statements),
     Stmt = PrepStmt#prepared_statement.stmt,
     NArgs = input_transforms(Args, PrepStmt, State),
@@ -45,11 +49,13 @@ exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements, ctrans=CTr
             TRows = sqerl_transformers:by_column_name(Rows, CTrans),
             {{ok, TRows}, State};
         Result ->
-            {{error, Result}, State}
+            {parse_error(Result, ErrorCodes), State}
     end.
 
 -spec exec_prepared_statement(atom(), [], any()) -> {{ok, integer()} | {error, any()}, state()}.
-exec_prepared_statement(Name, Args, #state{cn=Cn, statements=Statements}=State) ->
+exec_prepared_statement(Name, Args, #state{cn=Cn,
+                                           statements=Statements,
+                                           error_codes=ErrorCodes}=State) ->
     PrepStmt = dict:fetch(Name, Statements),
     Stmt = PrepStmt#prepared_statement.stmt,
     NArgs = input_transforms(Args, PrepStmt, State),
@@ -61,11 +67,13 @@ exec_prepared_statement(Name, Args, #state{cn=Cn, statements=Statements}=State) 
                 {ok, Count} ->
                     commit(Cn, Count, State);
                 Result ->
-                    rollback(Cn, {error, Result}, State)
+                    error_logger:info_msg("Result: ~p~n", [Result]),
+                    rollback(Cn, parse_error(Result, ErrorCodes), State)
             end
         catch
             _:X ->
-                rollback(Cn, {error, X}, State)
+                error_logger:info_msg("X-Result: ~p~n", [X]),
+                rollback(Cn, parse_error(X, ErrorCodes), State)
         end,
     Rv.
 
@@ -84,6 +92,7 @@ init(Config) ->
     {pass, Pass} = lists:keyfind(pass, 1, Config),
     {db, Db} = lists:keyfind(db, 1, Config),
     {prepared_statements, Statements} = lists:keyfind(prepared_statements, 1, Config),
+    {error_codes, ErrorCodes} = lists:keyfind(error_codes, 1, Config),
     Opts = [{database, Db}, {port, Port}],
     CTrans =
         case lists:keyfind(column_transforms, 1, Config) of
@@ -99,7 +108,10 @@ init(Config) ->
             erlang:link(Connection),
             erlang:process_flag(trap_exit, true),
             {ok, Prepared} = load_statements(Connection, Statements, dict:new()),
-            {ok, #state{cn=Connection, statements=Prepared, ctrans=CTrans}};
+            {ok, #state{cn=Connection,
+                       statements=Prepared,
+                       ctrans=CTrans,
+                       error_codes=ErrorCodes}};
         {error, {syntax, Msg}} ->
             {stop, {syntax, Msg}};
         X ->
@@ -170,3 +182,9 @@ rollback(Cn, Error, State) ->
         _Err ->
             {Error, State}
     end.
+
+parse_error({error,
+             {error,
+              error,
+              Code, Message, _Extra}}, ErrorCodes) ->
+      {sqerl_client:parse_error(Code, ErrorCodes), Message}.
