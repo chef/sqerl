@@ -178,12 +178,9 @@ ev(Key, Default) ->
 
 
 %% @doc Utility for generating specific message tuples from database-specific error
-%% messages.  The 1-argument form determines which database is being used by querying
-%% Sqerl's configuration at runtime, while the 2-argument form takes the database type as a
-%% parameter directly.
+%% messages. Should be called from db specific clients.
 
-%-spec parse_error(mysql | pgsql, {term(), term()}
-                        %| {error, {error, error, _, _, _}}) -> sqerl_error().
+-spec parse_error(term(), term()) -> sqerl_error().
 parse_error(StatusCode, ErrorCodes) ->
     case lists:keyfind(StatusCode, 1, ErrorCodes) of
         {_, ErrorType} ->
