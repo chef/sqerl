@@ -67,8 +67,6 @@ select(StmtName, StmtArgs, XformName, XformArgs) ->
             {ok, Results};
         Error ->
             Error
-        %{error, Reason} ->
-            %parse_error(Reason)
     end.
 
 statement(StmtName, StmtArgs) ->
@@ -86,8 +84,6 @@ statement(StmtName, StmtArgs, XformName, XformArgs) ->
             {ok, N};
         Error ->
             Error
-        %{error, Reason} ->
-            %parse_error(Reason)
     end.
 
 execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
