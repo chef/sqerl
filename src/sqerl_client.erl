@@ -178,7 +178,8 @@ ev(Key, Default) ->
 
 
 %% @doc Utility for generating specific message tuples from database-specific error
-%% messages. Should be called from db specific clients.
+%% messages. Used to generate descriptive atoms from database-specific error codes.
+%% Utilized by the database specific client implementations.
 
 -spec parse_error(term(), term()) -> sqerl_error().
 parse_error(StatusCode, ErrorCodes) ->
