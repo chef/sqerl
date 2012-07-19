@@ -78,7 +78,11 @@ init(Config) ->
     {pass, Pass} = lists:keyfind(pass, 1, Config),
     {db, Db} = lists:keyfind(db, 1, Config),
     {prepared_statements, Statements} = lists:keyfind(prepared_statements, 1, Config),
-    {error_codes, ErrorCodes} = lists:keyfind(error_codes, 1, Config),
+    ErrorCodes =
+        case lists:keyfind(error_codes, 1, Config) of
+            {error_codes, Codes} -> Codes;
+            false -> []
+        end,
     CTrans =
         case lists:keyfind(column_transforms, 1, Config) of
             {column_transforms, CT} -> CT;
