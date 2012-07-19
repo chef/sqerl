@@ -26,16 +26,6 @@ read_db_config() ->
     {ok, Config} = file:consult(Path),
     Config.
 
-get_db_error_codes(DbType) ->
-  case DbType of
-    mysql ->
-      %% See http://dev.mysql.com/doc/refman/5.0/en/error-messages-server.html
-      [{1062, conflict}, {1451, foreign_key}, {1452, foreign_key}];
-    pgsql ->
-      %% See http://www.postgresql.org/docs/current/static/errcodes-appendix.html
-      [{<<"23505">>, conflict}, {<<"23503">>, foreign_key}]
-  end.
-
 setup_env() ->
     Type = get_db_type(),
     Info = read_db_config(),
