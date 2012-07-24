@@ -26,7 +26,10 @@ read_db_config() ->
     {ok, Config} = file:consult(Path),
     Config.
 
-setup_env() ->
+setup_env(DbOptions) ->
+    %% Don't want to have the error message muddy up the test output
+    error_logger:tty(false),
+
     Type = get_db_type(),
     Info = read_db_config(),
     ok = application:set_env(sqerl, db_type, Type),
@@ -36,10 +39,8 @@ setup_env() ->
     ok = application:set_env(sqerl, db_pass, "itest"),
     ok = application:set_env(sqerl, db_name, ?GET_ARG(db, Info)),
     ok = application:set_env(sqerl, idle_check, 10000),
-    %% we could also call it like this:
-    %% {prepared_statements, statements(Type)},
-    %% {prepared_statements, "itest/statements_pgsql.conf"},
-    ok = application:set_env(sqerl, db_config, db_config_path(Type)),
+    ok = application:set_env(sqerl, db_config,
+      {?MODULE, load_options, [Type, DbOptions]}),
     ColumnTransforms = case Type of
                            pgsql ->
                                [{<<"created">>,
@@ -58,86 +59,97 @@ setup_env() ->
     application:start(emysql),
     application:start(public_key),
     application:start(ssl),
-    application:start(epgsql).
+    application:start(epgsql),
+    application:start(sqerl).
 
-db_config_path(mysql) ->
-  "itest/db_conf_mysql.conf";
-db_config_path(pgsql) ->
-  "itest/db_conf_pgsql.conf".
+load_options(Type, Options) ->
+  {ok, Config} = file:consult("itest/db_conf_" ++ atom_to_list(Type) ++ ".conf"),
+  lists:map(fun(Option) ->
+        lists:keyfind(Option, 1, Config)
+    end, Options).
 
+cleanup_env(_) ->
+  %% Re-enable error logging
+  error_logger:tty(true).
 
 basic_test_() ->
-    setup_env(),
-    Status = application:start(sqerl),
-    %% sqerl should start or already be running for each test
-    ?assert(lists:member(Status, [ok, {error, {already_started, sqerl}}])),
-    {foreach,
-     fun() -> error_logger:tty(true) end,
-     fun(_) -> error_logger:tty(true) end,
-     [
-      {<<"Insert operations">>,
-       fun insert_data/0},
-      {<<"Select operations">>,
-       fun select_data/0},
-      {<<"Select w/record xform operations">>,
-       fun select_data_as_record/0},
-      {<<"Ensure a select that returns the number zero doesn't come back as 'none'">>,
-       fun select_first_number_zero/0},
-      {<<"Update blob type">>,
-       fun update_datablob/0},
-      {<<"Select blob type">>,
-       fun select_datablob/0},
-      {<<"Select boolean">>,
-       fun select_boolean/0},
+    {setup,
+      fun() ->
+          setup_env([error_codes, prepared_statements])
+      end,
+      fun cleanup_env/1,
+      [
+       {<<"Insert operations">>,
+        fun insert_data/0},
+       {<<"Select operations">>,
+        fun select_data/0},
+       {<<"Select w/record xform operations">>,
+        fun select_data_as_record/0},
+       {<<"Ensure a select that returns the number zero doesn't come back as 'none'">>,
+        fun select_first_number_zero/0},
+       {<<"Update blob type">>,
+        fun update_datablob/0},
+       {<<"Select blob type">>,
+        fun select_datablob/0},
+       {<<"Select boolean">>,
+        fun select_boolean/0},
 
-      {<<"Update timestamp type">>,
-       fun update_created/0},
-      {<<"Select timestamp type">>,
-       fun select_created_by_lname/0},
-      {<<"Select timestamp type">>,
-       fun select_lname_by_created/0},
+       {<<"Update timestamp type">>,
+        fun update_created/0},
+       {<<"Select timestamp type">>,
+        fun select_created_by_lname/0},
+       {<<"Select timestamp type">>,
+        fun select_lname_by_created/0},
 
-      {<<"Tolerates bounced server">>,
-       {timeout, 10,
-        fun bounced_server/0}},
+       {<<"Tolerates bounced server">>,
+        {timeout, 10,
+         fun bounced_server/0}},
 
-      {<<"Delete operation">>,
-       fun delete_data/0},
-      {"Resultset-returning Stored Procedure",
-       fun() ->
-               case get_db_type() of
-                   mysql ->
-                       %% It won't actually return anything; this is just to
-                       %% make sure that we're properly handling the insanity
-                       %% of MySQL returning multiple results from a stored
-                       %% procedure call.
-                       %%
-                       %% Basically, the fact that it doesn't crash is test
-                       %% enough :)
-                       {ok, Actual} = sqerl:select(test_the_sp, []),
-                       ?assertEqual(none, Actual);
-                   Type ->
-                       ?debugFmt("Skipping stored procedure test for non-MySQL database ~p~n", [Type])
-               end
-       end},
-      {foreach,
-       fun() ->
-               %% Don't want to have the error message muddy up the test output
-               error_logger:tty(false) end,
-       fun(_) -> error_logger:tty(true) end,
-       [{"Does NOT handle SPs that return more than one result packet",
-         fun() ->
-                 case get_db_type() of
-                     mysql ->
-                         ?assertException(exit,
-                                          {{{case_clause, [_Result1,_Result2,_OKPacket]}, _}, _},
-                                          sqerl:select(test_the_multi_sp, []));
-                     Type ->
-                         ?debugFmt("Skipping stored procedure test for non-MySQL database ~p~n", [Type])
-                 end
-         end}]
-      }
-     ]}.
+       {<<"Delete operation">>,
+        fun delete_data/0},
+       {"Resultset-returning Stored Procedure",
+        fun() ->
+                case get_db_type() of
+                    mysql ->
+                        %% It won't actually return anything; this is just to
+                        %% make sure that we're properly handling the insanity
+                        %% of MySQL returning multiple results from a stored
+                        %% procedure call.
+                        %%
+                        %% Basically, the fact that it doesn't crash is test
+                        %% enough :)
+                        {ok, Actual} = sqerl:select(test_the_sp, []),
+                        ?assertEqual(none, Actual);
+                    Type ->
+                        ?debugFmt("Skipping stored procedure test for non-MySQL database ~p~n", [Type])
+                end
+        end},
+        {"Does NOT handle SPs that return more than one result packet",
+          fun() ->
+                  case get_db_type() of
+                      mysql ->
+                          ?assertException(exit,
+                                           {{{case_clause, [_Result1,_Result2,_OKPacket]}, _}, _},
+                                           sqerl:select(test_the_multi_sp, []));
+                      Type ->
+                          ?debugFmt("Skipping stored procedure test for non-MySQL database ~p~n", [Type])
+                  end
+          end
+        }
+      ]}.
+
+config_test_() ->
+  {setup,
+    fun() ->
+        setup_env([prepared_statements])
+    end,
+    fun cleanup_env/1,
+    [
+      {"Insert operations sans error codes",
+        fun insert_data/0},
+      {"Select operations sans error codes",
+        fun select_data/0}
+    ]}.
 
 insert_data() ->
     Expected = lists:duplicate(4, {ok, 1}),
