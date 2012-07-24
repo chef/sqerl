@@ -31,6 +31,7 @@
          start_link/1,
          exec_prepared_select/3,
          exec_prepared_statement/3,
+         parse_error/2,
          close/1]).
 
 %% gen_server callbacks
@@ -42,20 +43,17 @@
          code_change/3]).
 
 %% behavior callback
--export([behaviour_info/1]).
 
 -record(state, {cb_mod,
                 cb_state,
                 timeout}).
 
-%% @hidden
-behaviour_info(callbacks) ->
-    [{init, 1},
-     {exec_prepared_statement, 3},
-     {exec_prepared_select, 3},
-     {is_connected, 1}];
-behaviour_info(_) ->
-    undefined.
+-include_lib("sqerl.hrl").
+
+-callback init([term()]) -> {ok, term()} | {stop, term()}.
+-callback exec_prepared_statement(atom(), [term()], term()) -> {{ok, integer()} | {atom(), any()}, term()}.
+-callback exec_prepared_select(atom(), [term()], term()) -> {{ok, [[tuple()]]} | {atom(), any()}, term()}.
+-callback is_connected(term()) -> {true, term()} | false.
 
 %%% A select statement returns a list of tuples, or an error.
 %%% The prepared statement to use is named by an atom.
@@ -65,7 +63,7 @@ exec_prepared_select(Cn, Name, Args) when is_pid(Cn),
     gen_server:call(Cn, {exec_prepared_select, Name, Args}, infinity).
 
 %%% Unlike a select statement, this just returns an integer or an error.
--spec exec_prepared_statement(pid(), atom(), []) -> integer() | {error, any()}.
+-spec exec_prepared_statement(pid(), atom(), [any()]) -> integer() | {error, any()}.
 exec_prepared_statement(Cn, Name, Args) when is_pid(Cn),
                                              is_atom(Name) ->
     gen_server:call(Cn, {exec_prepared_stmt, Name, Args}, infinity).
@@ -90,14 +88,16 @@ init(DbType) ->
                       mysql -> sqerl_mysql_client
                   end,
     IdleCheck = ev(idle_check, 1000),
-    Config = [{host, ev(db_host)},
-              {port, ev(db_port)},
-              {user, ev(db_user)},
-              {pass, ev(db_pass)},
-              {db, ev(db_name)},
-              {idle_check, IdleCheck},
-              {prepared_statements, read_statements(ev(prepared_statements))},
-              {column_transforms, ev(column_transforms)}],
+    DbClientConfig = read_client_config(ev(db_config)),
+    Config = lists:append(
+              [{host, ev(db_host)},
+               {port, ev(db_port)},
+               {user, ev(db_user)},
+               {pass, ev(db_pass)},
+               {db, ev(db_name)},
+               {idle_check, IdleCheck},
+               {column_transforms, ev(column_transforms)}],
+              DbClientConfig),
     case CallbackMod:init(Config) of
         {ok, CallbackState} ->
             Timeout = IdleCheck,
@@ -148,19 +148,11 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
--spec read_statements([{atom(), term()}]
-                      | string()
-                      | {atom(), atom(), list()}) -> [{atom(), binary()}].
-%% @doc Prepared statements can be provides as a list of `{atom(), binary()}' tuples, as a
-%% path to a file that can be consulted for such tuples, or as `{M, F, A}' such that
-%% `apply(M, F, A)' returns the statements tuples.
-read_statements({Mod, Fun, Args}) ->
+read_client_config({Mod, Fun, Args}) ->
     apply(Mod, Fun, Args);
-read_statements(L = [{Label, SQL}|_T]) when is_atom(Label) andalso is_binary(SQL) ->
-    L;
-read_statements(Path) when is_list(Path) ->
-    {ok, Statements} = file:consult(Path),
-    Statements.
+read_client_config(Path) when is_list(Path) ->
+    {ok, Config} = file:consult(Path),
+    Config.
 
 %% Short for "environment value", just provides some sugar for grabbing config values
 ev(Key) ->
@@ -176,3 +168,20 @@ ev(Key, Default) ->
         undefined -> Default;
         {ok, V} -> V
     end.
+
+
+
+%% @doc Utility for generating specific message tuples from database-specific error
+%% messages. Used to generate descriptive atoms from database-specific error codes.
+%% Utilized by the database specific client implementations.
+
+-spec parse_error(term(), term()) -> sqerl_error().
+parse_error(StatusCode, ErrorCodes) ->
+    case lists:keyfind(StatusCode, 1, ErrorCodes) of
+        {_, ErrorType} ->
+            ErrorType;
+        false ->
+            error
+    end.
+
+
