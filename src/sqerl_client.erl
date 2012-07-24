@@ -43,7 +43,6 @@
          code_change/3]).
 
 %% behavior callback
--export([behaviour_info/1]).
 
 -record(state, {cb_mod,
                 cb_state,
@@ -51,15 +50,10 @@
 
 -include_lib("sqerl.hrl").
 
-
-%% @hidden
-behaviour_info(callbacks) ->
-    [{init, 1},
-     {exec_prepared_statement, 3},
-     {exec_prepared_select, 3},
-     {is_connected, 1}];
-behaviour_info(_) ->
-    undefined.
+-callback init([term()]) -> {ok, term()} | {stop, term()}.
+-callback exec_prepared_statement(atom(), [term()], term()) -> {{ok, integer()} | {atom(), any()}, term()}.
+-callback exec_prepared_select(atom(), [term()], term()) -> {{ok, [[tuple()]]} | {atom(), any()}, term()}.
+-callback is_connected(term()) -> {true, term()} | false.
 
 %%% A select statement returns a list of tuples, or an error.
 %%% The prepared statement to use is named by an atom.
@@ -69,7 +63,7 @@ exec_prepared_select(Cn, Name, Args) when is_pid(Cn),
     gen_server:call(Cn, {exec_prepared_select, Name, Args}, infinity).
 
 %%% Unlike a select statement, this just returns an integer or an error.
--spec exec_prepared_statement(pid(), atom(), []) -> integer() | {error, any()}.
+-spec exec_prepared_statement(pid(), atom(), [any()]) -> integer() | {error, any()}.
 exec_prepared_statement(Cn, Name, Args) when is_pid(Cn),
                                              is_atom(Name) ->
     gen_server:call(Cn, {exec_prepared_stmt, Name, Args}, infinity).

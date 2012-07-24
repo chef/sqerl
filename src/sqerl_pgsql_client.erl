@@ -32,7 +32,7 @@
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
--spec exec_prepared_select(atom(), [], state()) -> {{ok, [[tuple()]]} | {error, any()}, state()}.
+-spec exec_prepared_select(atom(), [], state()) -> {{ok, [[tuple()]]} | {atom(), any()}, state()}.
 exec_prepared_select(Name, Args, #state{cn=Cn,
                                         statements=Statements,
                                         ctrans=CTrans,
@@ -52,7 +52,7 @@ exec_prepared_select(Name, Args, #state{cn=Cn,
             {parse_error(Result, ErrorCodes), State}
     end.
 
--spec exec_prepared_statement(atom(), [], any()) -> {{ok, integer()} | {error, any()}, state()}.
+-spec exec_prepared_statement(atom(), [], any()) -> {{ok, integer()} | {atom(), any()}, state()}.
 exec_prepared_statement(Name, Args, #state{cn=Cn,
                                            statements=Statements,
                                            error_codes=ErrorCodes}=State) ->
