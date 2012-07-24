@@ -18,11 +18,12 @@
          is_connected/1]).
 
 -record(state, {cn,
+                error_codes,
                 ctrans :: dict() | undefined }).
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
-exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
+exec_prepared_select(Name, Args, #state{cn=Cn, error_codes=ErrorCodes}=State) ->
     NArgs = input_transforms(Args, State),
     case catch emysql_conn:execute(Cn, Name, NArgs) of
         %% Socket was unexpectedly closed by server
@@ -33,7 +34,7 @@ exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
         #result_packet{}=Result ->
             process_result_packet(Result, State);
         #error_packet{code=StatusCode, msg=Message} ->
-            {{error, {StatusCode, Message}}, State};
+            {{sqerl_client:parse_error(StatusCode, ErrorCodes), Message}, State};
         %% This next clause is because MySQL's stored procedures are ridiculous and can
         %% actually return multiple result sets.
         %%
@@ -49,7 +50,7 @@ exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
             process_result_packet(Result, State)
     end.
 
-exec_prepared_statement(Name, Args, #state{cn=Cn}=State) ->
+exec_prepared_statement(Name, Args, #state{cn=Cn, error_codes=ErrorCodes}=State) ->
     NArgs = input_transforms(Args, State),
     case catch emysql_conn:execute(Cn, Name, NArgs) of
         {'EXIT', {_, closed}} ->
@@ -59,7 +60,7 @@ exec_prepared_statement(Name, Args, #state{cn=Cn}=State) ->
         #ok_packet{affected_rows=Count} ->
             {{ok, Count}, State};
         #error_packet{code=StatusCode, msg=Message} ->
-            {{error, {StatusCode, Message}}, State}
+            {{sqerl_client:parse_error(StatusCode, ErrorCodes), Message}, State}
     end.
 
 is_connected(#state{cn=Cn}=State) ->
@@ -77,6 +78,11 @@ init(Config) ->
     {pass, Pass} = lists:keyfind(pass, 1, Config),
     {db, Db} = lists:keyfind(db, 1, Config),
     {prepared_statements, Statements} = lists:keyfind(prepared_statements, 1, Config),
+    ErrorCodes =
+        case lists:keyfind(error_codes, 1, Config) of
+            {error_codes, Codes} -> Codes;
+            false -> []
+        end,
     CTrans =
         case lists:keyfind(column_transforms, 1, Config) of
             {column_transforms, CT} -> CT;
@@ -95,7 +101,7 @@ init(Config) ->
             erlang:link(Sock),
             erlang:process_flag(trap_exit, true),
             ok = load_statements(Statements),
-            {ok, #state{cn=Connection, ctrans=CTrans}}
+            {ok, #state{cn=Connection, ctrans=CTrans, error_codes=ErrorCodes}}
     end.
 
 %% Internal functions

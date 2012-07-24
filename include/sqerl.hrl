@@ -2,6 +2,5 @@
 
 -define(FIRST(Record), {first_as_record, [Record, record_info(fields, Record)]}).
 
--type sqerl_error() :: {error, term()} |
-                        {conflict, term()} |
-                        {foreign_key, term()}.
+%% This is intentionally vague since sqerl error codes are now user configurable
+-type sqerl_error() :: {atom(), term()}.
