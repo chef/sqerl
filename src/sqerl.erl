@@ -121,14 +121,10 @@ parse_error(Reason) ->
 
 -spec parse_error(mysql | pgsql, atom() | {term(), term()}
                         | {error, {error, error, _, _, _}}) -> sqerl_error().
-parse_error(_DbType, Error) when is_atom(Error) ->
-    % Need to handle non-DB generated errors (e.g., when not reaching DB at all)
-    case Error of
-        no_connections ->
-            {error, <<"No connection available or pool out of connections">>};
-        _ ->
-            {error, Error}
-    end;
+parse_error(_DbType, no_connections) ->
+    {error, no_connections};
+parse_error(_DbType, {no_pool, Type}) ->
+    {error, {no_pool, Type}};
 
 parse_error(mysql, Error) ->
     do_parse_error(Error, ?MYSQL_ERROR_CODES);
