@@ -40,7 +40,7 @@ with_db(_Call, 0) ->
 with_db(Call, Retries) ->
     case pooler:take_member("sqerl") of
         error_no_members ->
-            {error, no_members};
+            {error, no_connections};
         error_no_pool ->
             {error, {no_pool, "sqerl"}};
         Cn when is_pid(Cn) ->
@@ -119,8 +119,13 @@ parse_error(Reason) ->
     {ok, DbType} = application:get_env(sqerl, db_type),
     parse_error(DbType, Reason).
 
--spec parse_error(mysql | pgsql, {term(), term()}
+-spec parse_error(mysql | pgsql, atom() | {term(), term()}
                         | {error, {error, error, _, _, _}}) -> sqerl_error().
+parse_error(_DbType, no_connections) ->
+    {error, no_connections};
+parse_error(_DbType, {no_pool, Type}) ->
+    {error, {no_pool, Type}};
+
 parse_error(mysql, Error) ->
     do_parse_error(Error, ?MYSQL_ERROR_CODES);
 
@@ -129,7 +134,6 @@ parse_error(pgsql, {error,               % error from sqerl
                      error,              % Severity
                      Code, Message, _Extra}}) ->
     do_parse_error({Code, Message}, ?PGSQL_ERROR_CODES).
-
 
 do_parse_error({Code, Message}, CodeList) ->
     case lists:keyfind(Code, 1, CodeList) of
