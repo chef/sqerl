@@ -13,6 +13,7 @@
                 ["Mark", "Anderson", 42, <<"2011-10-02 16:47:46">>, true],
                 ["Chris", "Maier", 0, <<"2011-10-03 16:47:46">>, true],
                 ["Elvis", "Presley", 16, <<"2011-10-04 16:47:46">>, false]]).
+-define(MAX_POOL_COUNT, 3).
 
 -compile([export_all]).
 
@@ -50,7 +51,7 @@ setup_env() ->
                        end,
     ok = application:set_env(sqerl, column_transforms, ColumnTransforms),
     PoolConfig = [{name, "sqerl"},
-                  {max_count, 3},
+                  {max_count, ?MAX_POOL_COUNT},
                   {init_count, 1},
                   {start_mfa, {sqerl_client, start_link, []}}],
     ok = application:set_env(pooler, pools, [PoolConfig]),
@@ -76,6 +77,8 @@ basic_test_() ->
      fun() -> error_logger:tty(true) end,
      fun(_) -> error_logger:tty(true) end,
      [
+      {<<"Connection pool overflow">>,
+       fun pool_overflow/0},
       {<<"Insert operations">>,
        fun insert_data/0},
       {<<"Select operations">>,
@@ -103,8 +106,56 @@ basic_test_() ->
         fun bounced_server/0}},
 
       {<<"Delete operation">>,
-       fun delete_data/0}
+       fun delete_data/0},
+      {"Resultset-returning Stored Procedure",
+       fun() ->
+               case get_db_type() of
+                   mysql ->
+                       %% It won't actually return anything; this is just to
+                       %% make sure that we're properly handling the insanity
+                       %% of MySQL returning multiple results from a stored
+                       %% procedure call.
+                       %%
+                       %% Basically, the fact that it doesn't crash is test
+                       %% enough :)
+                       {ok, Actual} = sqerl:select(test_the_sp, []),
+                       ?assertEqual(none, Actual);
+                   Type ->
+                       ?debugFmt("Skipping stored procedure test for non-MySQL database ~p~n", [Type])
+               end
+       end},
+      {foreach,
+       fun() ->
+               %% Don't want to have the error message muddy up the test output
+               error_logger:tty(false) end,
+       fun(_) -> error_logger:tty(true) end,
+       [{"Does NOT handle SPs that return more than one result packet",
+         fun() ->
+                 case get_db_type() of
+                     mysql ->
+                         ?assertException(exit,
+                                          {{{case_clause, [_Result1,_Result2,_OKPacket]}, _}, _},
+                                          sqerl:select(test_the_multi_sp, []));
+                     Type ->
+                         ?debugFmt("Skipping stored procedure test for non-MySQL database ~p~n", [Type])
+                 end
+         end}]
+      }
      ]}.
+
+kill_pool(1) ->
+    pooler:take_member();
+kill_pool(X) ->
+    pooler:take_member(),
+    kill_pool(X - 1).
+
+pool_overflow() ->
+    kill_pool(?MAX_POOL_COUNT),
+    % Doesn't matter what we do from here; we're just testing operations with
+    % a depleted pool
+    Expected = {error, no_connections},
+    Results = sqerl:select(find_user_by_lname, ["Smith"], ?FIRST(user)),
+    ?assertEqual(Expected, Results).
 
 insert_data() ->
     Expected = lists:duplicate(4, {ok, 1}),
