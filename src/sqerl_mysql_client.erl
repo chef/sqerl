@@ -28,18 +28,25 @@
 
 %% sqerl_client callbacks
 -export([init/1,
+         execute/3,
          exec_prepared_statement/3,
          exec_prepared_select/3,
-         is_connected/1]).
+         is_connected/1,
+         sql_parameter_style/0]).
 
 -record(state, {cn,
                 ctrans :: dict() | undefined }).
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
-exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
+%% See sqerl_sql:parameter_strings
+sql_parameter_style() -> qmark.
+
+%% The MySQL driver supports a general execute
+%% for ad-hoc queries or prepared statements.
+execute(NameOrQuery, Args, #state{cn=Cn}=State) ->
     NArgs = input_transforms(Args, State),
-    case catch emysql_conn:execute(Cn, Name, NArgs) of
+    case catch emysql_conn:execute(Cn, NameOrQuery, NArgs) of
         %% Socket was unexpectedly closed by server
         {'EXIT', {_, closed}} ->
             {{error, closed}, State};
@@ -47,6 +54,8 @@ exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
             {Error, State};
         #result_packet{}=Result ->
             process_result_packet(Result, State);
+        #ok_packet{affected_rows=Count} ->
+            {{ok, Count}, State};
         #error_packet{code=StatusCode, msg=Message} ->
             {{error, {StatusCode, Message}}, State};
         %% This next clause is because MySQL's stored procedures are ridiculous and can
@@ -64,18 +73,8 @@ exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
             process_result_packet(Result, State)
     end.
 
-exec_prepared_statement(Name, Args, #state{cn=Cn}=State) ->
-    NArgs = input_transforms(Args, State),
-    case catch emysql_conn:execute(Cn, Name, NArgs) of
-        {'EXIT', {_, closed}} ->
-            {{error, closed}, State};
-        {'EXIT', Error} ->
-            {Error, State};
-        #ok_packet{affected_rows=Count} ->
-            {{ok, Count}, State};
-        #error_packet{code=StatusCode, msg=Message} ->
-            {{error, {StatusCode, Message}}, State}
-    end.
+exec_prepared_select(Name, Args, State)    -> execute(Name, Args, State).
+exec_prepared_statement(Name, Args, State) -> execute(Name, Args, State).
 
 is_connected(#state{cn=Cn}=State) ->
     case catch emysql_conn:execute(Cn, ?PING_QUERY, []) of
@@ -109,17 +108,17 @@ init(Config) ->
             %% the socket
             erlang:link(Sock),
             erlang:process_flag(trap_exit, true),
-            ok = load_statements(Statements),
+            ok = load_statements(Connection, Statements),
             {ok, #state{cn=Connection, ctrans=CTrans}}
     end.
 
 %% Internal functions
-load_statements([]) ->
+load_statements(_Connection, []) ->
     ok;
-load_statements([{Name, SQL}|T]) ->
-    case emysql:prepare(Name, SQL) of
+load_statements(Connection, [{Name, SQL}|T]) ->
+    case emysql_conn:prepare(Connection, Name, SQL) of
         ok ->
-            load_statements(T);
+            load_statements(Connection, T);
         Error ->
             Error
     end.
