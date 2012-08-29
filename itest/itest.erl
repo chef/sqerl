@@ -117,6 +117,8 @@ basic_test_() ->
        fun select_created_by_lname/0},
       {<<"Select timestamp type">>,
        fun select_lname_by_created/0},
+	  
+	  {<<"In clause with NULLs">>, fun in_clause_with_nulls/0},
 
       {<<"Tolerates bounced server">>,
        {timeout, 10,
@@ -261,3 +263,18 @@ select_created_by_lname() ->
 select_lname_by_created() ->
     {ok, User1} = sqerl:select(find_lname_by_created, [{datetime, {{2011, 10, 04}, {16, 47, 46}}}], first_as_scalar, [last_name]),
     ?assertMatch(<<"Presley">>, User1).
+
+in_clause_with_nulls() ->
+	% need to fill in the parameters to 10 since the SQL expects 10 arguments
+    % user records were created earlier by insert_data
+	Parameters = fill([1,2,3], 10, null),
+	{ok, Results} = sqerl:select(in_clause, Parameters),
+	?assertMatch([[{<<"id">>,1}],[{<<"id">>,2}],[{<<"id">>,3}]], Results).
+
+% append DefaultValue elements to L so that the 
+% number of elements is N
+fill(L, N, DefaultValue) ->
+	L ++ createlist(N - length(L), DefaultValue).
+
+createlist(N, Value) when N > 0 -> [Value|createlist(N-1, Value)];
+createlist(_N, _Value) -> [].
