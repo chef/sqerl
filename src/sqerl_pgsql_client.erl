@@ -23,13 +23,16 @@
 
 -behaviour(sqerl_client).
 
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("epgsql/include/pgsql.hrl").
 
 %% sqerl_client callbacks
 -export([init/1,
+         execute/3,
          exec_prepared_statement/3,
          exec_prepared_select/3,
-         is_connected/1]).
+         is_connected/1,
+         sql_parameter_style/0]).
 
 -record(state,  {cn,
                  statements = dict:new() :: dict(),
@@ -45,6 +48,31 @@
 -type state() :: any().
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
+
+%% Simple query execution
+execute(Query, [], #state{cn=Cn}=State) when is_list(Query) ->
+    Result = pgsql:squery(Cn, Query),
+    case Result of
+        {ok, Columns, Rows} ->
+            {{ok, format_result(Columns, Rows)}, State};
+        {ok, Count} ->
+            {{ok, Count}, State};
+        {ok, Count, Columns, Rows} ->
+            {{ok, Count, format_result(Columns, Rows)}, State};
+        {error, Error} ->
+            {{error, Error}, State};
+        X ->
+            {{error, X}, State}
+    end;
+
+%% Statement execution
+execute(StatementName, Parameters, State) when is_atom(StatementName) ->
+    %% Use existing function for prepared statements
+    exec_prepared_select(StatementName, Parameters, State).
+
+%% See sqerl_sql:sql_parameter_strings
+sql_parameter_style() -> dollarn.
+
 
 -spec exec_prepared_select(atom(), [], state()) -> {{ok, [[tuple()]]} | {error, any()}, state()}.
 exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements, ctrans=CTrans}=State) ->
@@ -128,6 +156,17 @@ init(Config) ->
 load_statements(_Connection, [], Dict) ->
     {ok, Dict};
 load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
+    case prepare_statement(Connection, Name, SQL) of
+        {ok, {Name, P}} ->
+            load_statements(Connection, T, dict:store(Name, P, Dict));
+        {error, {error, error, _ErrorCode, Msg, Position}} ->
+            {error, {syntax, {Msg, Position}}};
+        Error ->
+            %% TODO: Discover what errors can flow out of this, and write tests.
+            {error, Error}
+    end.
+
+prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
     case pgsql:parse(Connection, atom_to_list(Name), SQL, []) of
         {ok, Statement} ->
             {ok, {statement, SName, Desc, DataTypes}} = pgsql:describe(Connection, Statement),
@@ -137,7 +176,7 @@ load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
               input_types = DataTypes,
               output_fields = ColumnData,
               stmt = Statement},
-            load_statements(Connection, T, dict:store(Name, P, Dict));
+            {ok, {Name, P}};
         {error, {error, error, _ErrorCode, Msg, Position}} ->
             {error, {syntax, {Msg, Position}}};
         Error ->
@@ -145,17 +184,62 @@ load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
             {error, Error}
     end.
 
+
+%%%
+%%% Data format conversion
+%%%
+format_result(Columns, Rows) ->
+    %% Results from simple queries return Columns, Rows
+    %% Columns are records
+    %% Rows are tuples
+    %%?debugFmt("format_result(~p, ~p)~n", [Columns, Rows]),
+    Names = extract_column_names({result_column_data, Columns}),
+    unpack_rows({names, Names}, Rows).
+
+format_result_test() ->
+    Columns = [{column,<<"id">>,int4,4,-1,0},
+               {column,<<"first_name">>,varchar,-1,84,0}],
+    Rows = [{<<"1">>,<<"Kevin">>},
+            {<<"2">>,<<"Mark">>}],
+    Output = format_result(Columns, Rows),
+    ExpectedOutput = [[{<<"id">>,<<"1">>},
+                       {<<"first_name">>,<<"Kevin">>}],
+                      [{<<"id">>,<<"2">>},
+                       {<<"first_name">>,<<"Mark">>}]],
+    ?assertEqual(ExpectedOutput, Output).
+
 %% Converts contents of result_packet into our "standard"
 %% representation of a list of proplists. In other words,
 %% each row is converted into a proplist and then collected
 %% up into a list containing all the converted rows for
-%% a given query result.
-
+%% a given query result., 
+%% Result packet can be from a prepared statement execution
+%% (column data is embedded in prepared statement record),
+%% or from a simple query
 -spec unpack_rows(any(), [[any()]]) -> [[{any(), any()}]].
-unpack_rows(#prepared_statement{output_fields=ColumnData}, RowData) ->
-    Columns = [C || {C,_} <- ColumnData],
-    [ lists:zip(Columns, tuple_to_list(Row)) || Row <- RowData ].
+unpack_rows(#prepared_statement{output_fields=ColumnData}, Rows) ->
+    %% Takes in a prepared statement record that
+    %% holds column data that holds column names
+    Columns = extract_column_names({prepared_column_data, ColumnData}),
+    unpack_rows({names, Columns}, Rows);
+unpack_rows({names, ColumnNames}, Rows) ->
+    %% Takes in a list of colum names
+    [lists:zip(ColumnNames, tuple_to_list(Row)) || Row <- Rows].
 
+extract_column_names({result_column_data, Columns}) ->
+    %% For column data coming from a query result
+    [Name || {column, Name, _Type, _Size, _Modifier, _Format} <- Columns];
+extract_column_names({prepared_column_data, ColumnData}) ->
+    %% For column data coming from a prepared statement
+    [Name || {Name, _Type} <- ColumnData].
+
+extract_column_names_test() ->
+    Type = result_column_data,
+    Columns = [{column,<<"id">>,int4,4,-1,0},
+               {column,<<"first_name">>,varchar,-1,84,0}],
+    ExpectedOutput = [<<"id">>, <<"first_name">>],
+    Output = extract_column_names({Type, Columns}),
+    ?assertEqual(ExpectedOutput, Output).
 
 %%%
 %%% Simple hooks to support coercion inputs to match the type expected by pgsql
