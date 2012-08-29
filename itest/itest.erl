@@ -119,6 +119,8 @@ basic_test_() ->
        fun select_lname_by_created/0},
 
       {<<"In clause with NULLs">>, fun in_clause_with_nulls/0},
+      {<<"Select In (IDs)">>, fun select_in_ids/0},
+      {<<"Select In (Names)">>, fun select_in_names/0},
 
       {<<"Tolerates bounced server">>,
        {timeout, 10,
@@ -278,3 +280,22 @@ fill(L, N, DefaultValue) ->
 
 createlist(N, Value) when N > 0 -> [Value|createlist(N-1, Value)];
 createlist(_N, _Value) -> [].
+
+select_in_ids() ->
+    %% previous test setup has users with id 1 and 2; no users with id 309, 409
+    ExpectedRows = [
+                    [{<<"last_name">>,<<"Smith">>}],
+                    [{<<"last_name">>,<<"Anderson">>}]
+                   ],
+    {ok, Rows} = sqerl:select_in(["last_name"], "users", "id", [1,2,309,409]),
+    %%{ok, Rows} = sqerl:select_in(["last_name"], "users", "id", ["1","2","309","409"]),
+    ?assertMatch({ok,ExpertecRows}, Rows).
+
+select_in_names() ->
+    %% previous test setup has users with last names Smith and Anderson but not Toto and Tata
+    ExpectedRows = [
+                    [{<<"id">>,<<1>>},{<<"first_name">>,<<"Kevin">>}],
+                    [{<<"id">>,<<2>>},{<<"first_name">>,<<"Mark">>}]
+                   ],
+    {ok, Rows} = sqerl:select_in(["id", "first_name"], "users", "last_name", ["Smith", "Anderson", "Toto", "Tata"]),
+    ?assertMatch({ok,ExpertecRows}, Rows).
