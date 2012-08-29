@@ -46,7 +46,11 @@
          start_link/1,
          exec_prepared_select/3,
          exec_prepared_statement/3,
-         close/1]).
+         execute/2,
+         execute/3,
+         close/1,
+         drivermod/0,
+         drivermod/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -66,9 +70,11 @@
 %% @hidden
 behaviour_info(callbacks) ->
     [{init, 1},
+     {execute, 3},
      {exec_prepared_statement, 3},
      {exec_prepared_select, 3},
-     {is_connected, 1}];
+     {is_connected, 1},
+     {sql_parameter_style, 0}];
 behaviour_info(_) ->
     undefined.
 
@@ -85,6 +91,13 @@ exec_prepared_statement(Cn, Name, Args) when is_pid(Cn),
                                              is_atom(Name) ->
     gen_server:call(Cn, {exec_prepared_stmt, Name, Args}, infinity).
 
+%%% This call simply executes the given SQL
+execute(Cn, Query) when is_pid(Cn) ->
+    gen_server:call(Cn, {execute, Query}, infinity).
+
+%%% This call executes the prepared statement
+execute(Cn, StatementName, Args) when is_pid(Cn), is_atom(StatementName) ->
+    gen_server:call(Cn, {execute, StatementName, Args}, infinity).
 
 %%% Close a connection
 -spec close(pid()) -> ok.
@@ -98,12 +111,9 @@ start_link(DbType) ->
     gen_server:start_link(?MODULE, [DbType], []).
 
 init([]) ->
-    init(ev(db_type));
+    init(dbtype());
 init(DbType) ->
-    CallbackMod = case DbType of
-                      pgsql -> sqerl_pgsql_client;
-                      mysql -> sqerl_mysql_client
-                  end,
+    CallbackMod = drivermod(DbType),
     IdleCheck = ev(idle_check, 1000),
     Config = [{host, ev(db_host)},
               {port, ev(db_port)},
@@ -122,20 +132,18 @@ init(DbType) ->
             {stop, Error}
     end.
 
-handle_call({exec_prepared_select, Name, Args}, _From, #state{cb_mod=CBMod,
-                                                              cb_state=CBState,
-                                                              timeout=Timeout}=State) ->
-    ?LOG_STATEMENT(Name, Args),
-    {Result, NewCBState} = CBMod:exec_prepared_select(Name, Args, CBState),
-    ?LOG_RESULT(Result),
-    {reply, Result, State#state{cb_state=NewCBState}, Timeout};
-handle_call({exec_prepared_stmt, Name, Args}, _From, #state{cb_mod=CBMod,
-                                                            cb_state=CBState,
-                                                            timeout=Timeout}=State) ->
-    ?LOG_STATEMENT(Name, Args),
-    {Result, NewCBState} = CBMod:exec_prepared_statement(Name, Args, CBState),
-    ?LOG_RESULT(Result),
-    {reply, Result, State#state{cb_state=NewCBState}, Timeout};
+handle_call({exec_prepared_select, Name, Args}, From, State) ->
+    exec_driver({exec_prepared_select, Name, Args}, From, State);
+
+handle_call({exec_prepared_stmt, Name, Args}, From, State) ->
+    exec_driver({exec_prepared_statement, Name, Args}, From, State);
+
+handle_call({execute, Query}, From, State) ->
+    exec_driver({execute, Query, []}, From, State);
+
+handle_call({execute, Name, Args}, From, State) ->
+    exec_driver({execute, Name, Args}, From, State);
+
 handle_call(close, _From, State) ->
     {stop, normal, ok, State};
 
@@ -154,6 +162,7 @@ handle_info(timeout, #state{cb_mod=CBMod, cb_state=CBState, timeout=Timeout}=Sta
                                      [self()]),
             {stop, shutdown, State}
     end;
+
 handle_info(_Info, #state{timeout=Timeout}=State) ->
     {noreply, State, Timeout}.
 
@@ -162,6 +171,16 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%% Call DB driver module
+exec_driver({Call, QueryOrName, Args}, _From, #state{cb_mod=CBMod,
+                                                            cb_state=CBState,
+                                                            timeout=Timeout}=State) ->
+    ?LOG_STATEMENT(QueryOrName, Args),
+    {Result, NewCBState} = apply(CBMod, Call, [QueryOrName, Args, CBState]),
+    ?LOG_RESULT(Result),
+    {reply, Result, State#state{cb_state=NewCBState}, Timeout}.
+
 
 -spec read_statements([{atom(), term()}]
                       | string()
@@ -176,6 +195,25 @@ read_statements(L = [{Label, SQL}|_T]) when is_atom(Label) andalso is_binary(SQL
 read_statements(Path) when is_list(Path) ->
     {ok, Statements} = file:consult(Path),
     Statements.
+
+
+%%%
+%%% Utilites
+%%%
+
+%% Returns DB driver module
+drivermod() -> drivermod(dbtype()).
+drivermod(DBType) ->
+    case DBType of
+        pgsql -> sqerl_pgsql_client;
+        mysql -> sqerl_mysql_client;
+        Other -> Msg = {unsupported_db_type, sqerl, Other},
+                 error_logger:error_report(Msg),
+                 error(Msg)
+    end.
+
+%% Returns DB type atom (e.g. pgsql, mysql)
+dbtype() -> ev(db_type).
 
 %% Short for "environment value", just provides some sugar for grabbing config values
 ev(Key) ->
