@@ -30,7 +30,8 @@
          select/4,
          statement/2,
          statement/3,
-         statement/4]).
+         statement/4,
+         select_in/4]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("sqerl.hrl").
@@ -121,6 +122,21 @@ execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
                         Error
                 end end,
     with_db(F).
+
+
+%% SELECT ReportField1, ReportField2, ... FROM Table WHERE MatchField IN (?, ?, ?...)
+%% Returns {ok, Results}
+select_in(ReportFields, Table, MatchField, MatchValues) ->
+    %% Generate SQL (validates input)
+    SQL = sqerl_sql:select_in(ReportFields, Table, MatchField, MatchValues),
+    %% Aquire DB connection
+    DBConn = checkout(),
+    %% Query
+    Results = sqerl_client:execute(DBConn, SQL),
+    %% Return connection
+    checkin(DBConn),
+    %% Return results
+    {ok, Results}.
 
 
 %% @doc Utility for generating specific message tuples from database-specific error
