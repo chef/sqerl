@@ -30,7 +30,22 @@
 -include_lib("eunit/include/eunit.hrl").
 
 %% @doc Generates SELECT SQL depending on Where form.
-%% Validates that parameters are safe.
+%% SQL generated uses parameter place holders so query can be
+%% prepared.
+%%
+%% Note: Validates that parameters are safe.
+%%
+%% Where = {all}
+%% Does not generate a WHERE clause. Returns all records in table.
+%%
+%% 1> select([<<"*">>], <<"users">>, {all}).
+%% <<"SELECT * FROM users">>
+%%
+%% Where = {Field, equals, ParamStyle}
+%% Generates SELECT ... WHERE Field = ?
+%%
+%% 1> select([<<"name">>], <<"users">>, {<<"id">>, equals, qmark}).
+%% <<"SELECT name FROM users WHERE id = ?">>
 %%
 %% Where = {Field, in, NumValues, ParamStyle}
 %% Generates SELECT ... IN SQL with parameter strings (not values),
@@ -43,24 +58,37 @@
 %% or dollarn ($1, $2, etc. for e.g. pgsql)
 %%
 -spec select([binary()], binary(),
+             {all} |
              {binary(), in, integer(), qmark | dollarn}) -> binary().
-select(Columns, Table, {Field, in, NumValues, ParamStyle})
-  when is_integer(NumValues), NumValues > 0 ->
-    ensure_safe([Columns, Table, Field]),
+select(Columns, Table, {all}) ->
+    ensure_safe([Columns, Table]),
     ColumnsPart = join(Columns, <<",">>),
-    InPart = [<<"(">>,
-              join(placeholders(NumValues, ParamStyle), <<",">>),
-              <<")">>],
     Parts = [<<"SELECT">>, 
              ColumnsPart, 
              <<"FROM">>, 
-             Table, 
-             <<"WHERE">>, 
-             Field, 
-             <<"IN">>, 
-             InPart],
+             Table],
+    Query = join(Parts, <<" ">>),
+    list_to_binary(lists:flatten(Query));
+select(Columns, Table, Where) ->
+    ensure_safe([Columns, Table]),
+    Parts = [<<"SELECT">>, 
+             join(Columns, <<",">>),
+             <<"FROM">>, 
+             Table,
+             <<"WHERE">>,
+             where_parts(Where)],
     Query = join(Parts, <<" ">>),
     list_to_binary(lists:flatten(Query)).
+
+%% @doc Generate "WHERE" parts of query.
+where_parts({Field, equals, ParamStyle}) ->
+    ensure_safe([Field]),
+    [Field, <<" = ">>, placeholder(1, ParamStyle)];
+where_parts({Field, in, NumValues, ParamStyle})
+  when is_integer(NumValues), NumValues > 0 ->
+    ensure_safe([Field]),
+    PlaceHolders = join(placeholders(NumValues, ParamStyle), <<",">>),
+    [Field, <<" IN (">>, PlaceHolders,<<")">>].
 
 
 %%
@@ -107,10 +135,10 @@ placeholders(NumValues, Style) when NumValues > 0 ->
 %% @doc Returns a parameter string for the given style
 %% at position N in the statement.
 -spec placeholder(integer(), qmark | dollarn) -> binary().
-placeholder(_N, qmark) ->
+placeholder(_Pos, qmark) ->
     <<"?">>;
-placeholder(N, dollarn) ->
-    list_to_binary("$" ++ integer_to_list(N)).
+placeholder(Pos, dollarn) ->
+    list_to_binary("$" ++ integer_to_list(Pos)).
 
 
 %%

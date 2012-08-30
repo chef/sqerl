@@ -24,26 +24,36 @@
 
 %% select tests
 %%
+select_all_test() ->
+    Expected = <<"SELECT * FROM users">>,
+    Generated = sqerl_adhoc:select([<<"*">>], <<"users">>, {all}),
+    ?assertEqual(Expected, Generated).
+
+select_equals_test() ->
+    Expected = <<"SELECT * FROM users WHERE id = ?">>,
+    Generated = sqerl_adhoc:select([<<"*">>], <<"users">>, {<<"id">>, equals, qmark}),
+    ?assertEqual(Expected, Generated).
+
 select_in_qmark_test() -> 
-    ExpectedSQL = <<"SELECT Field1,Field2 FROM Table1 WHERE Field IN (?,?,?,?)">>,
-    GeneratedSQL = sqerl_adhoc:select([<<"Field1">>, <<"Field2">>], 
+    Expected = <<"SELECT Field1,Field2 FROM Table1 WHERE Field IN (?,?,?,?)">>,
+    Generated = sqerl_adhoc:select([<<"Field1">>, <<"Field2">>], 
                                     <<"Table1">>, 
                                     {<<"Field">>, in, 4, qmark}),
-    ?assertEqual(ExpectedSQL, GeneratedSQL).
+    ?assertEqual(Expected, Generated).
 
 select_in_dollarn_test() -> 
-    ExpectedSQL = <<"SELECT Field1,Field2 FROM Table1 WHERE Field IN ($1,$2,$3,$4)">>,
-    GeneratedSQL = sqerl_adhoc:select([<<"Field1">>, <<"Field2">>],
+    Expected = <<"SELECT Field1,Field2 FROM Table1 WHERE Field IN ($1,$2,$3,$4)">>,
+    Generated = sqerl_adhoc:select([<<"Field1">>, <<"Field2">>],
                                     <<"Table1">>,
                                     {<<"Field">>, in, 4, dollarn}),
-    ?assertEqual(ExpectedSQL, GeneratedSQL).
+    ?assertEqual(Expected, Generated).
 
-select_in_start_test() ->
-    ExpectedSQL = <<"SELECT * FROM Table1 WHERE Field IN (?,?,?,?)">>,
-    GeneratedSQL = sqerl_adhoc:select([<<"*">>], 
+select_in_star_test() ->
+    Expected = <<"SELECT * FROM Table1 WHERE Field IN (?,?,?,?)">>,
+    Generated = sqerl_adhoc:select([<<"*">>], 
                                     <<"Table1">>, 
                                     {<<"Field">>, in, 4, qmark}),
-    ?assertEqual(ExpectedSQL, GeneratedSQL).
+    ?assertEqual(Expected, Generated).
 
 %% ensure_safe tests
 %%

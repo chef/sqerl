@@ -151,20 +151,37 @@ execute(QueryOrStatement, Parameters) ->
 
 %% @doc Execute an adhoc query: adhoc_select(Columns, Table, Where)
 %% Returns Columns from Table for records matching Where specifications.
+%% Note that input is validated for safe values.
 %%
-%% Currently only supports a SELECT ... IN form. "Where" specifications
-%% take the form {Field, in, Values}.
+%% Where: {all}
+%% Returns all records.
+%%
+%% Where: {Field, equals, Value}
+%% SELECT ... Field = Value
+%%
+%% Where: {Field, in, Values}
+%% SELECT ... Field IN (Values)
 %%
 %% Returns:
 %% - {ok, Rows}
 %% - {error, ErrorInfo}
 %%
-%% See execute/2 for more details.
+%% See execute/2 for more details on return data.
 %%
--spec adhoc_select([binary()], binary(), {binary(), in, [any()]}) ->
-          {ok, any()}.
+-spec adhoc_select([binary()],
+                   binary(),
+                   {all} |
+                   {binary(), equals, any()} |
+                   {binary(), in, [any()]}) ->
+    {ok, any()}.
+adhoc_select(Columns, Table, {all}) ->
+    SQL = sqerl_adhoc:select(Columns, Table, {all}),
+    execute(SQL);
+adhoc_select(Columns, Table, {Field, equals, Value}) ->
+    ParameterStyle = sqerl_client:sql_parameter_style(),
+    SQL = sqerl_adhoc:select(Columns, Table, {Field, equals, ParameterStyle}),
+    execute(SQL, [Value]);
 adhoc_select(Columns, Table, {Field, in, Values}) ->
-    %% Note: generating the SQL also validates input
     ParameterStyle = sqerl_client:sql_parameter_style(),
     SQL = sqerl_adhoc:select(Columns, Table, {Field, in, length(Values), ParameterStyle}),
     execute(SQL, Values).
