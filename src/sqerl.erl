@@ -166,7 +166,7 @@ execute(QueryOrStatement, Parameters) ->
 adhoc_select(Columns, Table, {Field, in, Values}) ->
     %% Note: generating the SQL also validates input
     ParameterStyle = sqerl_client:sql_parameter_style(),
-    SQL = sqerl_sql:select(Columns, Table, {Field, in, length(Values), ParameterStyle}),
+    SQL = sqerl_adhoc:select(Columns, Table, {Field, in, length(Values), ParameterStyle}),
     execute(SQL, Values).
 
 

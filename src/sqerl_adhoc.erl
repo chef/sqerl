@@ -19,7 +19,7 @@
 %% under the License.
 %%
 
--module(sqerl_sql).
+-module(sqerl_adhoc).
 
 -export([select/3]).
 
