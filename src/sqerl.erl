@@ -31,6 +31,8 @@
          statement/2,
          statement/3,
          statement/4,
+         execute/1,
+         execute/2,
          select_in/4]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -124,20 +126,87 @@ execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
     with_db(F).
 
 
-%% SELECT ReportField1, ReportField2, ... FROM Table WHERE MatchField IN (?, ?, ?...)
-%% Returns {ok, Results}
-select_in(ReportFields, Table, MatchField, MatchValues) ->
-    %% Generate SQL (validates input)
-    SQL = sqerl_sql:select_in(ReportFields, Table, MatchField, MatchValues),
-    %% Aquire DB connection
-    DBConn = checkout(),
-    %% Query
-    Results = sqerl_client:execute(DBConn, SQL),
-    %% Return connection
-    checkin(DBConn),
-    %% Return results
-    {ok, Results}.
+%%
+%% Public interface
+%%
 
+%% @doc Execute query or statement
+-spec execute(binary() | string() | atom()) -> {ok, any()} | {error, any()}.
+execute(QueryOrStatement) ->
+    execute(QueryOrStatement, []).
+
+%% @doc Execute query or statement with parameters.
+%% Returns
+%% - {ok, Result}
+%% - {error, ErrorInfo}
+%% Result depends on the query being executed, and can be
+%% - Rows
+%% - Count
+-spec execute(binary() | string() | atom(), [any()]) -> {ok, any()} | {error, any()}.
+execute(QueryOrStatement, Parameters) ->
+    F = fun(Cn) -> sqerl_client:execute(Cn, QueryOrStatement, Parameters) end,
+    with_connection(F).
+
+%% @doc Find records in Table where MatchField equals one of the list of values.
+%% Limits results to specified fields.
+%% e.g. SELECT Field1, Field2, ... FROM Table WHERE MatchField IN (?, ?, ...)
+%% Returns:
+%% - {ok, Rows} where each row is a proplist, e.g.:
+%%   [
+%%    [{<<"last_name">>,<<"Smith">>}],
+%%    [{<<"last_name">>,<<"Anderson">>}]
+%%   ]
+%% - {error, ErrorInfo} when an error occured
+-spec select_in([string() | binary()],
+                string() | binary(),
+                [string() | binary()],
+                [any()]) ->
+          {ok, any()}.
+select_in(SelectFields, Table, MatchField, MatchValues) ->
+    %% Note: generating the SQL also validates input
+    ParameterStyle = sqerl_client:sql_parameter_style(),
+    SQL = sqerl_sql:select_in(SelectFields, Table, MatchField, length(MatchValues), ParameterStyle),
+    execute(SQL, MatchValues).
+
+
+%%
+%% Private functions
+%%
+
+%% @doc Call function with a DB connection.
+%% Function must take one DB connection argument.
+%% It should return {ok, Results} or {error, ErrorInfo}.
+%% Call will be retried where possible (e.g. DB connection was closed).
+%% Returns {ok, Results} or {error, ErrorInfo}.
+%% ErrorInfo is no_connection if all attempts have failed, or whatever
+%% is provided by the DB client.
+%%
+%% TODO: yes, this is almost the same as with_db. Both will be merged
+%% down the road after clarifying some things...
+with_connection(F) ->
+    with_connection(F, ?MAX_RETRIES).
+with_connection(_F, 0) ->
+    {error, no_connection};
+with_connection(F, Retries) ->
+    case checkout() of
+        Cn when is_pid(Cn) ->
+            %% We don't need a try/catch around Call(Cn) because pooler links both the
+            %% connection and the process that has the connection checked out (this
+            %% process). So a crash here will not leak a connection.
+            case F(Cn) of
+                %% The only case we retry: a closed error
+                {error, closed} ->
+                    sqerl_client:close(Cn),
+                    %% TODO: the connection is bad and not checked back in.
+                    %% How does the pooler handle that?
+                    with_connection(F, Retries - 1);
+                Result ->
+                    checkin(Cn),
+                    Result
+            end;
+        Other ->
+            {error, Other}
+    end.
 
 %% @doc Utility for generating specific message tuples from database-specific error
 %% messages.  The 1-argument form determines which database is being used by querying
