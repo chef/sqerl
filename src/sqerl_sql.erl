@@ -56,7 +56,7 @@ generate_select_in(ReportFields, Table, MatchField, InString) ->
     safe_values(ReportFields),
     safe_value(Table),
     safe_value(MatchField),
-    FieldsString = string:join(ReportFields, ","),
+    FieldsString = comma_join(ReportFields),
     lists:flatten(io_lib:format(
       "SELECT ~s FROM ~s WHERE ~s IN (~s)",
       [FieldsString, Table, MatchField, InString])).
@@ -228,4 +228,25 @@ parameter_string_bad_style_test() ->
     %% Anything else should cause an error
     ?assertException(error, function_clause, parameter_string(1, unsupported)),
     ?assertException(error, function_clause, parameter_string(4, toto)).
+
+%%
+%% Utilities
+%%
+
+comma_join([]) -> [];
+comma_join([H|T]) when is_list(H) -> string:join([H|T], ",");
+comma_join([H|T]) when is_binary(H) -> join([H|T], <<",">>).
+
+%% @doc join elements of list with Sep
+%% e.g. join([1,2,3], 0) -> [1,0,2,0,3]
+join([], _Sep) ->
+    [];
+join([H|T], Sep) ->
+    [H] ++ lists:append([[Sep] ++ [X] || X <- T]).
+
+join_test() ->
+    ?assertEqual([], join([], 0)),
+    ?assertEqual([1], join([1], 0)),
+    ?assertEqual([1, 0, 2, 0, 3], join([1,2,3], 0)),
+    ?assertEqual([<<"1">>, <<",">>, <<"2">>, <<",">>, <<"3">>], join([<<"1">>, <<"2">>, <<"3">>], <<",">>)).
 
