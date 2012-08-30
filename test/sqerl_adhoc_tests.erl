@@ -24,34 +24,40 @@
 
 %% select tests
 %%
-select_in_param_qmark_test() -> 
-    ExpectedSQL = <<"SELECT Field1,Field2 FROM Table1 WHERE MatchField IN (?,?,?,?)">>,
+select_in_qmark_test() -> 
+    ExpectedSQL = <<"SELECT Field1,Field2 FROM Table1 WHERE Field IN (?,?,?,?)">>,
     GeneratedSQL = sqerl_adhoc:select([<<"Field1">>, <<"Field2">>], 
                                     <<"Table1">>, 
-                                    {<<"MatchField">>, in, 4, qmark}),
+                                    {<<"Field">>, in, 4, qmark}),
     ?assertEqual(ExpectedSQL, GeneratedSQL).
 
-select_in_param_dollarn_test() -> 
-    ExpectedSQL = <<"SELECT Field1,Field2 FROM Table1 WHERE MatchField IN ($1,$2,$3,$4)">>,
+select_in_dollarn_test() -> 
+    ExpectedSQL = <<"SELECT Field1,Field2 FROM Table1 WHERE Field IN ($1,$2,$3,$4)">>,
     GeneratedSQL = sqerl_adhoc:select([<<"Field1">>, <<"Field2">>],
                                     <<"Table1">>,
-                                    {<<"MatchField">>, in, 4, dollarn}),
+                                    {<<"Field">>, in, 4, dollarn}),
     ?assertEqual(ExpectedSQL, GeneratedSQL).
 
+select_in_start_test() ->
+    ExpectedSQL = <<"SELECT * FROM Table1 WHERE Field IN (?,?,?,?)">>,
+    GeneratedSQL = sqerl_adhoc:select([<<"*">>], 
+                                    <<"Table1">>, 
+                                    {<<"Field">>, in, 4, qmark}),
+    ?assertEqual(ExpectedSQL, GeneratedSQL).
 
 %% ensure_safe tests
 %%
 ensure_safe_string_test() ->
-    ensure_safe("ABCdef123_").
+    ensure_safe("ABCdef123_*").
 
 ensure_safe_binary_test() ->
-    ensure_safe(<<"ABCdef123_">>).
+    ensure_safe(<<"ABCdef123_*">>).
 
 ensure_safe(Value) ->
     ?assertEqual(true, sqerl_adhoc:ensure_safe(Value)).
 
 ensure_safe_bad_values_test() ->
-    BadValues = "`-=[]\;',./~!@#$%^&*()+{}|:\"<>?",
+    BadValues = "`-=[]\;',./~!@#$%^&()+{}|:\"<>?",
     %% we want to test individual values here, so iterate
     [ensure_safe_error(list_to_binary([BadValue])) || BadValue <- BadValues].
 

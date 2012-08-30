@@ -121,6 +121,7 @@ basic_test_() ->
       {<<"In clause with NULLs">>, fun in_clause_with_nulls/0},
       {<<"Select In (IDs)">>, fun select_in_ids/0},
       {<<"Select In (Names)">>, fun select_in_names/0},
+      {<<"Select In (*)">>, fun select_in_star/0},
 
       {<<"Tolerates bounced server">>,
        {timeout, 10,
@@ -308,3 +309,14 @@ select_in_names() ->
                                     <<"users">>,
                                     {<<"last_name">>, in, Values}),
     ?assertEqual(ExpectedRows, Rows).
+
+select_in_star() ->
+    %% previous test setup has user with last names Smith but not Toto
+    ExpectedNumRows = 1,
+    ExpectedNumCols = 7,
+    Values = [<<"Smith">>, <<"Toto">>],
+    {ok, Rows} = sqerl:adhoc_select([<<"*">>],
+                                    <<"users">>,
+                                    {<<"last_name">>, in, Values}),
+    ?assertEqual(ExpectedNumRows, length(Rows)),
+    ?assertEqual(ExpectedNumCols, length(lists:nth(1, Rows))).
