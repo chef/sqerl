@@ -49,22 +49,38 @@
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
-%% Simple query execution
-execute(Query, [], #state{cn=Cn}=State) when is_list(Query) ->
-    Result = pgsql:squery(Cn, Query),
+%% @doc Execute query or prepared statement.
+%% If a binary is provided, it is interpreted as an SQL query.
+%% If an atom is provided, it is interpreted as a prepared statement name.
+%% Returns:
+%% {Result, State}
+%%
+%% Result:
+%% - {ok, Rows}
+%% - {ok, Count}
+%% - {ok, {Count, Rows}}
+%% - {error, ErrorInfo}
+%%
+%% Rows: List of Row
+%% Row:  List of field/value e.g. [{<<"id">>, 1}, {<<"name">>, <<"Toto">>}]
+%%
+-spec execute(binary() | atom(), [any()], any()) -> {ok, [[{atom(), any()}]] | integer()} |
+                                                     {error, any()}.
+execute(SQL, Parameters, #state{cn=Cn}=State) when is_list(SQL) ->
+    TParameters = input_transforms(Parameters),
+    Result = pgsql:equery(Cn, SQL, TParameters),
     case Result of
         {ok, Columns, Rows} ->
             {{ok, format_result(Columns, Rows)}, State};
         {ok, Count} ->
             {{ok, Count}, State};
         {ok, Count, Columns, Rows} ->
-            {{ok, Count, format_result(Columns, Rows)}, State};
+            {{ok, {Count, format_result(Columns, Rows)}}, State};
         {error, Error} ->
             {{error, Error}, State};
-        X ->
-            {{error, X}, State}
+        Other ->
+            {{error, {unexpected_result, Other}}, State}
     end;
-
 %% Statement execution
 execute(StatementName, Parameters, State) when is_atom(StatementName) ->
     %% Use existing function for prepared statements
@@ -188,24 +204,27 @@ prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
 %%%
 %%% Data format conversion
 %%%
+
+%% @doc Format result to expected standard.
+-spec format_result([term()], [term()]) -> any().
 format_result(Columns, Rows) ->
     %% Results from simple queries return Columns, Rows
     %% Columns are records
     %% Rows are tuples
     %%?debugFmt("format_result(~p, ~p)~n", [Columns, Rows]),
     Names = extract_column_names({result_column_data, Columns}),
-    unpack_rows({names, Names}, Rows).
+    unpack_rows(Names, Rows).
 
 format_result_test() ->
-    Columns = [{column,<<"id">>,int4,4,-1,0},
-               {column,<<"first_name">>,varchar,-1,84,0}],
-    Rows = [{<<"1">>,<<"Kevin">>},
-            {<<"2">>,<<"Mark">>}],
+    Columns = [{column, <<"id">>, int4, 4, -1, 0},
+               {column, <<"first_name">>, varchar, -1, 84, 0}],
+    Rows = [{<<1>>, <<"Kevin">>},
+            {<<2>>, <<"Mark">>}],
     Output = format_result(Columns, Rows),
-    ExpectedOutput = [[{<<"id">>,<<"1">>},
-                       {<<"first_name">>,<<"Kevin">>}],
-                      [{<<"id">>,<<"2">>},
-                       {<<"first_name">>,<<"Mark">>}]],
+    ExpectedOutput = [[{<<"id">>, <<1>>},
+                       {<<"first_name">>, <<"Kevin">>}],
+                      [{<<"id">>, <<2>>},
+                       {<<"first_name">>, <<"Mark">>}]],
     ?assertEqual(ExpectedOutput, Output).
 
 %% Converts contents of result_packet into our "standard"
@@ -221,11 +240,19 @@ unpack_rows(#prepared_statement{output_fields=ColumnData}, Rows) ->
     %% Takes in a prepared statement record that
     %% holds column data that holds column names
     Columns = extract_column_names({prepared_column_data, ColumnData}),
-    unpack_rows({names, Columns}, Rows);
-unpack_rows({names, ColumnNames}, Rows) ->
+    unpack_rows(Columns, Rows);
+unpack_rows(ColumnNames, Rows) ->
     %% Takes in a list of colum names
     [lists:zip(ColumnNames, tuple_to_list(Row)) || Row <- Rows].
 
+%% @doc Extract column names from column data.
+%% Column data comes in two forms: as part of a result set,
+%% or as part of a prepared statement.
+%% With column data from a result set, call as
+%% extract_column_names({result_column_data, Columns}).
+%% With column data from a prepared statement, call as
+%% extract_column_names({prepared_column_data, ColumnData}).
+-spec extract_column_names({atom(), [tuple()]}) -> [any()].
 extract_column_names({result_column_data, Columns}) ->
     %% For column data coming from a query result
     [Name || {column, Name, _Type, _Size, _Modifier, _Format} <- Columns];
@@ -255,6 +282,14 @@ transform(_Type, X) ->
 
 input_transforms(Data, #prepared_statement{input_types=Types}, _State) ->
     [ transform(T, E) || {T,E} <- lists:zip(Types, Data) ].
+
+%% @doc Transform input without query parameter type data
+%% (i.e. not a prepared statement).
+input_transforms(Parameters) ->
+    [transform(Parameter) || Parameter <- Parameters].
+
+transform({datetime, X}) -> X;
+transform(X) -> X.
 
 commit(Cn, Result, State) ->
     case pgsql:squery(Cn, "COMMIT") of
