@@ -39,7 +39,7 @@
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
-%% See sqerl_sql:parameter_strings
+%% See sqerl_sql:placeholder
 sql_parameter_style() -> qmark.
 
 %% The MySQL driver supports a general execute
