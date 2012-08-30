@@ -1,7 +1,7 @@
 deps/*
 ebin/*
-.eunit
+.eunit/*
 *~
 *.beam
 logfile
-
+.sqerl.plt

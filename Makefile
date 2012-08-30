@@ -2,7 +2,7 @@ DEPS = deps/emysql deps/meck deps/automeck \
        deps/pooler deps/epgsql
 REBAR = ./rebar
 
-DIALYZER_APPS = erts kernel stdlib crypto ssl public_key
+DIALYZER_APPS = erts kernel stdlib crypto ssl public_key eunit
 
 ## Set the environment variable $DB_TYPE to either mysql or pgsql
 ## to run the correct integration tests.
@@ -19,13 +19,18 @@ allclean:
 distclean:
 	@$(REBAR) skip_deps=true clean
 	@rm -rf deps
+	@rm -f ./.sqerl.plt
 
 compile: $(DEPS)
 	@$(REBAR) compile
 	@$(MAKE) dialyzer
 
-dialyzer:
-	@dialyzer -Wrace_conditions -Wunderspecs -r ebin ; \
+.sqerl.plt: $(DEPS)
+	@/bin/echo Building local dialyzer PLT for sqerl deps
+	@dialyzer --quiet -nn --build_plt --output_plt .sqerl.plt deps/emysql/ebin deps/epgsql/ebin deps/pooler/ebin
+
+dialyzer: .sqerl.plt
+	@dialyzer --plts ~/.dialyzer_plt ./.sqerl.plt -nn -Wrace_conditions -Wunderspecs -r ebin ; \
 	if [ $$? -eq 1 -a ! -f ~/.dialyzer_plt ] ; then \
 	  echo "ERROR: Missing ~/.dialyzer_plt. Please wait while a new PLT is compiled." ; \
 	  dialyzer --build_plt --apps $(DIALYZER_APPS) ; \
