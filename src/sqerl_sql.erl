@@ -233,9 +233,21 @@ parameter_string_bad_style_test() ->
 %% Utilities
 %%
 
+%% @doc Join list with commas.
+%% For strings, uses string:join.
+%% For binaries, use our own. Note that in this case a deep list
+%% will be created, but consumers of this data should expect that
+%% and know how to handle it.
 comma_join([]) -> [];
 comma_join([H|T]) when is_list(H) -> string:join([H|T], ",");
 comma_join([H|T]) when is_binary(H) -> join([H|T], <<",">>).
+
+comma_join_test() ->
+    ?assertEqual([], comma_join([])),
+    ?assertEqual("A", comma_join(["A"])),
+    ?assertEqual("A,B,C", comma_join(["A", "B", "C"])),
+    ?assertEqual([<<"A">>], comma_join([<<"A">>])),
+    ?assertEqual([<<"A">>, <<",">>, <<"B">>, <<",">>, <<"C">>], comma_join([<<"A">>, <<"B">>, <<"C">>])).
 
 %% @doc join elements of list with Sep
 %% e.g. join([1,2,3], 0) -> [1,0,2,0,3]
