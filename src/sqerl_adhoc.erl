@@ -36,7 +36,8 @@
 %% Generates SELECT ... IN SQL with parameter strings (not values),
 %% which can be prepared and executed.
 %%
-%% e.g. SELECT Field1 FROM Table WHERE MatchField IN (?, ?, ?, ...)
+%% 1> select([<<"name">>], <<"users">>, {<<"id">>, in, [1,2,3], qmark}).
+%% <<"SELECT name FROM users WHERE id IN (?, ?, ?)">>
 %%
 %% ParamStyle is qmark (?, ?, ... for e.g. mysql) 
 %% or dollarn ($1, $2, etc. for e.g. pgsql)
@@ -67,7 +68,7 @@ select(Columns, Table, {Field, in, NumValues, ParamStyle})
 %% Uses RE so can take string and binary as input
 %%
 
--define(SAFE_VALUE_RE, <<"^[A-Za-z0-9_]*$">>).
+-define(SAFE_VALUE_RE, <<"^[A-Za-z0-9_\*]*$">>).
 
 %% @doc Checks that value(s) is(are) safe to use while generating SQL.
 %% Walks io lists.
