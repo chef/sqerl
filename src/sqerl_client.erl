@@ -50,7 +50,8 @@
          execute/3,
          close/1,
          drivermod/0,
-         drivermod/1]).
+         drivermod/1,
+         sql_parameter_style/0]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -91,13 +92,22 @@ exec_prepared_statement(Cn, Name, Args) when is_pid(Cn),
                                              is_atom(Name) ->
     gen_server:call(Cn, {exec_prepared_stmt, Name, Args}, infinity).
 
-%%% This call simply executes the given SQL
-execute(Cn, Query) when is_pid(Cn) ->
-    gen_server:call(Cn, {execute, Query}, infinity).
+%% @doc Execute SQL or prepared statement.
+%% See execute/3 for return values.
+-spec execute(pid(), binary() | atom()) -> 
+          {ok, [any()]} | {error, any()}.
+execute(Cn, QueryOrStatement) ->
+    execute(Cn, QueryOrStatement, []).
 
-%%% This call executes the prepared statement
-execute(Cn, StatementName, Args) when is_pid(Cn), is_atom(StatementName) ->
-    gen_server:call(Cn, {execute, StatementName, Args}, infinity).
+%% @doc Execute SQL or prepared statement.
+%% Depending on the query, returns:
+%% - {ok, Rows}
+%% - {ok, Count}
+%% - {error, ErrorInfo}
+-spec execute(pid(), binary() | atom(), [any()]) -> 
+          {ok, [any()]} | {error, any()}.
+execute(Cn, QueryOrStatement, Parameters) when is_pid(Cn) ->
+    gen_server:call(Cn, {execute, QueryOrStatement, Parameters}, infinity).
 
 %%% Close a connection
 -spec close(pid()) -> ok.
@@ -138,11 +148,8 @@ handle_call({exec_prepared_select, Name, Args}, From, State) ->
 handle_call({exec_prepared_stmt, Name, Args}, From, State) ->
     exec_driver({exec_prepared_statement, Name, Args}, From, State);
 
-handle_call({execute, Query}, From, State) ->
-    exec_driver({execute, Query, []}, From, State);
-
-handle_call({execute, Name, Args}, From, State) ->
-    exec_driver({execute, Name, Args}, From, State);
+handle_call({execute, QueryOrStatementName, Args}, From, State) ->
+    exec_driver({execute, QueryOrStatementName, Args}, From, State);
 
 handle_call(close, _From, State) ->
     {stop, normal, ok, State};
@@ -174,8 +181,8 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Call DB driver module
 exec_driver({Call, QueryOrName, Args}, _From, #state{cb_mod=CBMod,
-                                                            cb_state=CBState,
-                                                            timeout=Timeout}=State) ->
+                                                     cb_state=CBState,
+                                                     timeout=Timeout}=State) ->
     ?LOG_STATEMENT(QueryOrName, Args),
     {Result, NewCBState} = apply(CBMod, Call, [QueryOrName, Args, CBState]),
     ?LOG_RESULT(Result),
@@ -201,8 +208,20 @@ read_statements(Path) when is_list(Path) ->
 %%% Utilites
 %%%
 
-%% Returns DB driver module
-drivermod() -> drivermod(dbtype()).
+%% @doc Returns SQL parameter style atom, e.g. qmark, dollarn.
+-spec sql_parameter_style() -> atom().
+sql_parameter_style() ->
+    Mod = drivermod(),
+    Mod:sql_parameter_style().
+
+%% @doc Returns DB driver module atom according to environment.
+-spec drivermod() -> atom().
+drivermod() -> 
+    drivermod(dbtype()).
+
+%% @doc Returns DB driver module atom for given DB type atom 
+%% (e.g. pgsql, mysql).
+-spec drivermod(atom()) -> atom().
 drivermod(DBType) ->
     case DBType of
         pgsql -> sqerl_pgsql_client;
@@ -212,7 +231,8 @@ drivermod(DBType) ->
                  error(Msg)
     end.
 
-%% Returns DB type atom (e.g. pgsql, mysql)
+%% @doc Returns DB type atom (e.g. pgsql, mysql) from environment.
+-spec dbtype() -> atom().
 dbtype() -> ev(db_type).
 
 %% Short for "environment value", just provides some sugar for grabbing config values
