@@ -32,7 +32,7 @@
          exec_prepared_statement/3,
          exec_prepared_select/3,
          is_connected/1,
-         sql_parameter_style/0]).
+         create_bound_parameter/1]).
 
 -record(state,  {cn,
                  statements = dict:new() :: dict(),
@@ -69,10 +69,6 @@ execute(Query, [], #state{cn=Cn}=State) when is_list(Query) ->
 execute(StatementName, Parameters, State) when is_atom(StatementName) ->
     %% Use existing function for prepared statements
     exec_prepared_select(StatementName, Parameters, State).
-
-%% See sqerl_sql:sql_parameter_strings
-sql_parameter_style() -> dollarn.
-
 
 -spec exec_prepared_select(atom(), [], state()) -> {{ok, [[tuple()]]} | {error, any()}, state()}.
 exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements, ctrans=CTrans}=State) ->
@@ -111,6 +107,10 @@ exec_prepared_statement(Name, Args, #state{cn=Cn, statements=Statements}=State) 
                 rollback(Cn, {error, X}, State)
         end,
     Rv.
+
+-spec create_bound_parameter(pos_integer()) -> string().
+create_bound_parameter(Pos) ->
+    "$" ++ integer_to_list(Pos).
 
 is_connected(#state{cn=Cn}=State) ->
     case catch pgsql:squery(Cn, ?PING_QUERY) of

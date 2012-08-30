@@ -32,15 +32,13 @@
          exec_prepared_statement/3,
          exec_prepared_select/3,
          is_connected/1,
-         sql_parameter_style/0]).
+         create_bound_parameter/1]).
 
 -record(state, {cn,
                 ctrans :: dict() | undefined }).
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
-%% See sqerl_sql:parameter_strings
-sql_parameter_style() -> qmark.
 
 %% The MySQL driver supports a general execute
 %% for ad-hoc queries or prepared statements.
@@ -84,6 +82,10 @@ is_connected(#state{cn=Cn}=State) ->
             false
     end.
 
+-spec create_bound_parameter(pos_integer()) -> string().
+create_bound_parameter(_X) ->
+    "?".
+
 init(Config) ->
     {host, Host} = lists:keyfind(host, 1, Config),
     {port, Port} = lists:keyfind(port, 1, Config),
@@ -116,12 +118,8 @@ init(Config) ->
 load_statements(_Connection, []) ->
     ok;
 load_statements(Connection, [{Name, SQL}|T]) ->
-    case emysql_conn:prepare(Connection, Name, SQL) of
-        ok ->
-            load_statements(Connection, T);
-        Error ->
-            Error
-    end.
+    ok = emysql_conn:prepare(Connection, Name, SQL),
+    load_statements(Connection, T).
 
 %% Converts contents of result_packet into our "standard"
 %% representation of a list of proplists. In other words,

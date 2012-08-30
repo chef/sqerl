@@ -48,9 +48,10 @@
          exec_prepared_statement/3,
          execute/2,
          execute/3,
-         close/1,
-         drivermod/0,
-         drivermod/1]).
+         close/1]).
+
+%% Internal API used by sqerl
+-export([create_bound_parameter/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -73,8 +74,8 @@ behaviour_info(callbacks) ->
      {execute, 3},
      {exec_prepared_statement, 3},
      {exec_prepared_select, 3},
-     {is_connected, 1},
-     {sql_parameter_style, 0}];
+     {create_bound_parameter, 1},
+     {is_connected, 1}];
 behaviour_info(_) ->
     undefined.
 
@@ -104,14 +105,17 @@ execute(Cn, StatementName, Args) when is_pid(Cn), is_atom(StatementName) ->
 close(Cn) ->
     gen_server:call(Cn, close).
 
+%%% Creates a bound parameter for the configured database
+-spec create_bound_parameter(atom(), pos_integer()) -> string().
+create_bound_parameter(DbType, Pos) ->
+    CallbackMod = drivermod(DbType),
+    CallbackMod:create_bound_parameter(Pos).
 
 start_link() ->
-    gen_server:start_link(?MODULE, [], []).
+    gen_server:start_link(?MODULE, [ev(db_type)], []).
 start_link(DbType) ->
     gen_server:start_link(?MODULE, [DbType], []).
 
-init([]) ->
-    init(dbtype());
 init(DbType) ->
     CallbackMod = drivermod(DbType),
     IdleCheck = ev(idle_check, 1000),
@@ -202,7 +206,6 @@ read_statements(Path) when is_list(Path) ->
 %%%
 
 %% Returns DB driver module
-drivermod() -> drivermod(dbtype()).
 drivermod(DBType) ->
     case DBType of
         pgsql -> sqerl_pgsql_client;
@@ -211,9 +214,6 @@ drivermod(DBType) ->
                  error_logger:error_report(Msg),
                  error(Msg)
     end.
-
-%% Returns DB type atom (e.g. pgsql, mysql)
-dbtype() -> ev(db_type).
 
 %% Short for "environment value", just provides some sugar for grabbing config values
 ev(Key) ->

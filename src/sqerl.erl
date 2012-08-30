@@ -31,7 +31,7 @@
          statement/2,
          statement/3,
          statement/4,
-         select_in/4]).
+         adhoc_select/4]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("sqerl.hrl").
@@ -126,9 +126,9 @@ execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
 
 %% SELECT ReportField1, ReportField2, ... FROM Table WHERE MatchField IN (?, ?, ?...)
 %% Returns {ok, Results}
-select_in(ReportFields, Table, MatchField, MatchValues) ->
+adhoc_select(ReportFields, Table, MatchField, MatchValues) ->
     %% Generate SQL (validates input)
-    SQL = sqerl_sql:select_in(ReportFields, Table, MatchField, MatchValues),
+    SQL = sqerl_adhoc:select(ReportFields, Table, MatchField, MatchValues),
     %% Aquire DB connection
     DBConn = checkout(),
     %% Query

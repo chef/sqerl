@@ -27,21 +27,26 @@
 -compile([export_all]).
 -endif.
 
--define(SAFE_VALUE_RE, "^[A-Za-z0-9_]*$").
+-include("sqerl.hrl").
 
-select(Columns, Table, Where, Params) when length(Columns) > 0,
-                                           length(Where) > 0 ->
+-define(SAFE_VALUE_RE, "^[A-Za-z0-9_]*$").
+-define(IS_TEXT(X), is_binary(X) orelse is_list(X)).
+
+select(Columns, Table, Where, Params) when ?IS_TEXT(Table),
+                                           length(Columns) > 0 ->
     %% Play gatekeeper to make sure only "clean" inputs
     %% are used
     [ensure_safe(C) || C <- Columns],
     ensure_safe(Table),
     ensure_safe(Where),
+    validate_params(Params),
     build_select(Columns, Table, Where, Params).
 
 %% Internal functions
-ensure_safe([{in, Field}]) ->
+ensure_safe({in, Field}) ->
     ensure_safe(Field);
-ensure_safe(Text) ->
+ensure_safe(Text) when is_list(Text);
+                       is_binary(Text) ->
     Type = if is_list(Text) ->
                    list;
               true ->
@@ -61,7 +66,7 @@ validate_params(Params) when Params > 0 ->
 validate_params(_Params) ->
     error(badarg).
 
-build_select(Columns, Table, [{in, Field}], Params) ->
+build_select(Columns, Table, {in, Field}, Params) ->
     SelectFromClause = build_select_from_clause(Columns, Table, []),
     WhereClause = list_to_binary([<<" WHERE ">>, Field, <<" IN (">>]),
     ParamList = generate_param_list(Params),
@@ -75,15 +80,10 @@ build_select_from_clause([Column|T], Table, Accum) ->
 generate_param_list(ParamCount) when is_integer(ParamCount) ->
     validate_params(ParamCount),
     {ok, DbType} = application:get_env(sqerl, db_type),
-    string:join([make_param(DbType, X) || X <- lists:seq(1, ParamCount)], ",");
+    string:join([sqerl_client:create_bound_parameter(DbType, X) || X <- lists:seq(1, ParamCount)], ",");
 generate_param_list(ParamValues) when is_list(ParamValues) ->
     validate_params(ParamValues),
     string:join([make_param_value(PV) || PV <- ParamValues], ",").
-
-make_param(pgsql, X) ->
-    "$" ++ integer_to_list(X);
-make_param(mysql, _X) ->
-    "?".
 
 make_param_value(V) when is_integer(V) ->
     integer_to_list(V);
@@ -98,23 +98,23 @@ make_param_value(V) when is_list(V);
 -ifdef(TEST).
 select_int_test() ->
 	ExpectedSQL = <<"SELECT Field1,Field2 FROM Table1 WHERE MatchField IN (1,5,3,4)">>,
-	{ok, GeneratedStringSQL} = select(["Field1", "Field2"], "Table1", [{in, "MatchField"}], [1,5,3,4]),
-	{ok, GeneratedBinarySQL} = select([<<"Field1">>, "Field2"], <<"Table1">>, [{in, "MatchField"}], [1,5,3,4]),
+	{ok, GeneratedStringSQL} = select(["Field1", "Field2"], "Table1", {in, "MatchField"}, [1,5,3,4]),
+	{ok, GeneratedBinarySQL} = select([<<"Field1">>, "Field2"], <<"Table1">>, {in, "MatchField"}, [1,5,3,4]),
 	?assertEqual(ExpectedSQL, GeneratedStringSQL),
     ?assertEqual(ExpectedSQL, GeneratedBinarySQL).
 
 select_float_test() ->
 	ExpectedSQL = <<"SELECT Field1,Field2 FROM Table1 WHERE MatchField IN (0.1,1.0,0.123)">>,
-	{ok, GeneratedStringSQL} = select(["Field1", "Field2"], "Table1", [{in, "MatchField"}], [0.1,1.0,0.123]),
-	{ok, GeneratedBinarySQL} = select([<<"Field1">>, "Field2"], <<"Table1">>, [{in, "MatchField"}], [0.1,1.0,0.123]),
+	{ok, GeneratedStringSQL} = select(["Field1", "Field2"], "Table1", {in, "MatchField"}, [0.1,1.0,0.123]),
+	{ok, GeneratedBinarySQL} = select([<<"Field1">>, "Field2"], <<"Table1">>, {in, "MatchField"}, [0.1,1.0,0.123]),
 	?assertEqual(ExpectedSQL, GeneratedStringSQL),
     ?assertEqual(ExpectedSQL, GeneratedBinarySQL).
 
 
 select_string_test() ->
 	ExpectedSQL = <<"SELECT Field1,Field2 FROM Table1 WHERE MatchField IN ('1','5','3','4')">>,
-	{ok, GeneratedStringSQL} = select(["Field1", "Field2"], "Table1", [{in, "MatchField"}], ["1","5","3","4"]),
-	{ok, GeneratedBinarySQL} = select([<<"Field1">>, "Field2"], <<"Table1">>, [{in, "MatchField"}], ["1",<<"5">>,"3",<<"4">>]),
+	{ok, GeneratedStringSQL} = select(["Field1", "Field2"], "Table1", {in, "MatchField"}, ["1","5","3","4"]),
+	{ok, GeneratedBinarySQL} = select([<<"Field1">>, "Field2"], <<"Table1">>, {in, "MatchField"}, ["1",<<"5">>,"3",<<"4">>]),
 	?assertEqual(ExpectedSQL, GeneratedStringSQL),
     ?assertEqual(ExpectedSQL, GeneratedBinarySQL).
 
@@ -122,14 +122,14 @@ select_in_param_mysql_test() ->
 	%% Set db type to mysql to check mysql-style (qmark).
 	set_db_type(mysql),
 	ExpectedSQL = <<"SELECT Field1,Field2 FROM Table1 WHERE MatchField IN (?,?,?,?)">>,
-	{ok, GeneratedSQL} = select(["Field1", "Field2"], "Table1", [{in, "MatchField"}], 4),
+	{ok, GeneratedSQL} = select(["Field1", "Field2"], "Table1", {in, "MatchField"}, 4),
 	?assertEqual(ExpectedSQL, GeneratedSQL).
 
 select_in_param_pgsql_test() ->
 	%% Set db type to pgsql to check pgsql-style (dollarn).
 	set_db_type(pgsql),
 	ExpectedSQL = <<"SELECT Field1,Field2 FROM Table1 WHERE MatchField IN ($1,$2,$3,$4)">>,
-	{ok, GeneratedSQL} = select(["Field1", "Field2"], "Table1", [{in, "MatchField"}], 4),
+	{ok, GeneratedSQL} = select(["Field1", "Field2"], "Table1", {in, "MatchField"}, 4),
 	?assertEqual(ExpectedSQL, GeneratedSQL).
 
 string_param_list_test() ->
@@ -172,17 +172,17 @@ pgsql_positional_param_list_test() ->
 
 bad_arg_test() ->
     %% Bad column name
-    ?assertError(badarg, sqerl_adhoc:select(["test!", "test1", "test2"], "test_table", [{in, "test2"}], 3)),
-    ?assertError(badarg, sqerl_adhoc:select([<<"test!">>, "test1", "test2"], "test_table", [{in, "test2"}], 3)),
+    ?assertError(badarg, sqerl_adhoc:select(["test!", "test1", "test2"], "test_table", {in, "test2"}, 3)),
+    ?assertError(badarg, sqerl_adhoc:select([<<"test!">>, "test1", "test2"], "test_table", {in, "test2"}, 3)),
     %% Bad table name
-    ?assertError(badarg, sqerl_adhoc:select(["test3", "test1", "test2"], "test-table", [{in, "test2"}], 3)),
-    ?assertError(badarg, sqerl_adhoc:select(["test3", "test1", "test2"], <<"test-table">>, [{in, "test2"}], 3)),
+    ?assertError(badarg, sqerl_adhoc:select(["test3", "test1", "test2"], "test-table", {in, "test2"}, 3)),
+    ?assertError(badarg, sqerl_adhoc:select(["test3", "test1", "test2"], <<"test-table">>, {in, "test2"}, 3)),
     %% Bad where
-    ?assertError(badarg, sqerl_adhoc:select(["test3", "test1", "test2"], "test-table", [{in, "test2%"}], 3)),
-    ?assertError(badarg, sqerl_adhoc:select(["test3", "test1", "test2"], "test-table", [{in, <<"test2%">>}], 3)),
+    ?assertError(badarg, sqerl_adhoc:select(["test3", "test1", "test2"], "test-table", {in, "test2%"}, 3)),
+    ?assertError(badarg, sqerl_adhoc:select(["test3", "test1", "test2"], "test-table", {in, <<"test2%">>}, 3)),
     %% Funky params
-    ?assertError(badarg, sqerl_adhoc:select(["test3", "test1", "test2"], "test-table", [{in, "test2"}], three)),
-    ?assertError(badarg, sqerl_adhoc:select(["test3", "test1", "test2"], "test-table", [{in, "test2"}], erlang:make_ref())).
+    ?assertError(badarg, sqerl_adhoc:select(["test3", "test1", "test2"], "test-table", {in, "test2"}, three)),
+    ?assertError(badarg, sqerl_adhoc:select(["test3", "test1", "test2"], "test-table", {in, "test2"}, erlang:make_ref())).
 
 set_db_type(DBType) ->
 	application:set_env(sqerl, db_type, DBType).
