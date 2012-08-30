@@ -116,12 +116,8 @@ init(Config) ->
 load_statements(_Connection, []) ->
     ok;
 load_statements(Connection, [{Name, SQL}|T]) ->
-    case emysql_conn:prepare(Connection, Name, SQL) of
-        ok ->
-            load_statements(Connection, T);
-        Error ->
-            Error
-    end.
+    ok = emysql_conn:prepare(Connection, Name, SQL),
+    load_statements(Connection, T).
 
 %% Converts contents of result_packet into our "standard"
 %% representation of a list of proplists. In other words,
