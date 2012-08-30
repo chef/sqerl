@@ -51,7 +51,7 @@
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
-%%@doc Prepare a new statement.
+%% @doc Prepare a new statement.
 -spec prepare(atom(), binary() | string(), state()) -> {ok, state()} | {error, any()}.
 prepare(Name, SQL, #state{cn=Cn, statements=Statements}=State) ->
     {ok, UpdatedStatements} = load_statement(Cn, Name, SQL, Statements),
@@ -67,8 +67,8 @@ unprepare(Name, #state{cn=Cn, statements=Statements}=State) ->
 %% @doc Execute query or prepared statement.
 %% If a binary is provided, it is interpreted as an SQL query.
 %% If an atom is provided, it is interpreted as a prepared statement name.
-%% Returns:
-%% {Result, State}
+%%
+%% Returns:{Result, State}
 %%
 %% Result:
 %% - {ok, Rows}
@@ -76,8 +76,7 @@ unprepare(Name, #state{cn=Cn, statements=Statements}=State) ->
 %% - {ok, {Count, Rows}}
 %% - {error, ErrorInfo}
 %%
-%% Rows: List of Row
-%% Row:  List of field/value e.g. [{<<"id">>, 1}, {<<"name">>, <<"Toto">>}]
+%% Row:  proplist e.g. [{<<"id">>, 1}, {<<"name">>, <<"Toto">>}]
 %%
 -spec execute(binary() | atom(), [any()], any()) ->
     {ok, [[{atom(), any()}]] | integer()} | {error, any()}.
@@ -101,7 +100,7 @@ execute(StatementName, Parameters, State) when is_atom(StatementName) ->
     %% Use existing function for prepared statements
     exec_prepared_select(StatementName, Parameters, State).
 
-%% See sqerl_sql:sql_parameter_strings
+%% See sqerl_sql:placedholder
 sql_parameter_style() -> dollarn.
 
 
