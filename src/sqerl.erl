@@ -33,7 +33,7 @@
          statement/4,
          execute/1,
          execute/2,
-         select_in/4]).
+         adhoc_select/3]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("sqerl.hrl").
@@ -147,9 +147,15 @@ execute(QueryOrStatement, Parameters) ->
     F = fun(Cn) -> sqerl_client:execute(Cn, QueryOrStatement, Parameters) end,
     with_connection(F).
 
-%% @doc Find records in Table where MatchField equals one of the list of values.
-%% Limits results to specified fields.
-%% e.g. SELECT Field1, Field2, ... FROM Table WHERE MatchField IN (?, ?, ...)
+%% @doc Execute an adhoc query:
+%%
+%% adhoc_select(Columns, Table, Where)
+%% 
+%% Returns Columns from Table for records matching Where specifications.
+%%
+%% Currently only supports a SELECT ... IN form. "Where" specifications
+%% take the form {Field, in, Values}.
+%%
 %% Returns:
 %% - {ok, Rows} where each row is a proplist, e.g.:
 %%   [
@@ -157,16 +163,13 @@ execute(QueryOrStatement, Parameters) ->
 %%    [{<<"last_name">>,<<"Anderson">>}]
 %%   ]
 %% - {error, ErrorInfo} when an error occured
--spec select_in([string() | binary()],
-                string() | binary(),
-                [string() | binary()],
-                [any()]) ->
+-spec adhoc_select([binary()], binary(), {binary(), in, [any()]}) ->
           {ok, any()}.
-select_in(SelectFields, Table, MatchField, MatchValues) ->
+adhoc_select(SelectFields, Table, {Field, in, Values}) ->
     %% Note: generating the SQL also validates input
     ParameterStyle = sqerl_client:sql_parameter_style(),
-    SQL = sqerl_sql:select_in(SelectFields, Table, MatchField, length(MatchValues), ParameterStyle),
-    execute(SQL, MatchValues).
+    SQL = sqerl_sql:select(SelectFields, Table, {Field, in, length(Values), ParameterStyle}),
+    execute(SQL, Values).
 
 
 %%
