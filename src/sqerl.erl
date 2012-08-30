@@ -126,9 +126,11 @@ execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
 
 %% SELECT ReportField1, ReportField2, ... FROM Table WHERE MatchField IN (?, ?, ?...)
 %% Returns {ok, Results}
-adhoc_select(ReportFields, Table, MatchField, MatchValues) ->
+-spec adhoc_select([string | binary()], string() | binary(), {in, string() | binary()},
+                   pos_integer() | [number() | string() | binary()]) -> term().
+adhoc_select(ReportFields, Table, Where, Params) ->
     %% Generate SQL (validates input)
-    SQL = sqerl_adhoc:select(ReportFields, Table, MatchField, MatchValues),
+    SQL = sqerl_adhoc:select(ReportFields, Table, Where, Params),
     %% Aquire DB connection
     DBConn = checkout(),
     %% Query
