@@ -32,7 +32,9 @@
          exec_prepared_statement/3,
          exec_prepared_select/3,
          is_connected/1,
-         sql_parameter_style/0]).
+         sql_parameter_style/0,
+         prepare/3,
+         unprepare/2]).
 
 -record(state,  {cn,
                  statements = dict:new() :: dict(),
@@ -49,6 +51,19 @@
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
+%%@doc Prepare a new statement.
+-spec prepare(atom(), binary() | string(), state()) -> {ok, state()} | {error, any()}.
+prepare(Name, SQL, #state{cn=Cn, statements=Statements}=State) ->
+    {ok, UpdatedStatements} = load_statement(Cn, Name, SQL, Statements),
+    UpdatedState = State#state{statements=UpdatedStatements},
+    {ok, UpdatedState}.
+
+unprepare(Name, #state{cn=Cn, statements=Statements}=State) ->
+    {ok, UpdatedStatements} = unload_statement(Cn, Name, Statements),
+    UpdatedState = State#state{statements=UpdatedStatements},
+    {ok, UpdatedState}.
+
+
 %% @doc Execute query or prepared statement.
 %% If a binary is provided, it is interpreted as an SQL query.
 %% If an atom is provided, it is interpreted as a prepared statement name.
@@ -64,9 +79,9 @@
 %% Rows: List of Row
 %% Row:  List of field/value e.g. [{<<"id">>, 1}, {<<"name">>, <<"Toto">>}]
 %%
--spec execute(binary() | atom(), [any()], any()) -> {ok, [[{atom(), any()}]] | integer()} |
-                                                     {error, any()}.
-execute(SQL, Parameters, #state{cn=Cn}=State) when is_list(SQL) ->
+-spec execute(binary() | atom(), [any()], any()) ->
+    {ok, [[{atom(), any()}]] | integer()} | {error, any()}.
+execute(SQL, Parameters, #state{cn=Cn}=State) when is_binary(SQL) ->
     TParameters = input_transforms(Parameters),
     Result = pgsql:equery(Cn, SQL, TParameters),
     case Result of
@@ -172,9 +187,15 @@ init(Config) ->
 load_statements(_Connection, [], Dict) ->
     {ok, Dict};
 load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
+    case load_statement(Connection, Name, SQL, Dict) of
+        {ok, UpdatedDict} -> load_statements(Connection, T, UpdatedDict);
+        Other -> {error, Other}
+    end.
+
+load_statement(Connection, Name, SQL, Dict) ->
     case prepare_statement(Connection, Name, SQL) of
         {ok, {Name, P}} ->
-            load_statements(Connection, T, dict:store(Name, P, Dict));
+            {ok, dict:store(Name, P, Dict)};
         {error, {error, error, _ErrorCode, Msg, Position}} ->
             {error, {syntax, {Msg, Position}}};
         Error ->
@@ -199,6 +220,16 @@ prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
             %% TODO: Discover what errors can flow out of this, and write tests.
             {error, Error}
     end.
+
+unload_statement(Connection, Name, Dict) ->
+        unprepare_statement(Connection, Name),
+        UpdatedDict = dict:erase(Name, Dict),
+        {ok, UpdatedDict}.
+
+unprepare_statement(Connection, Name) when is_atom(Name) ->
+    SQL = io_lib:format("DEALLOCATED ~s", [Name]),
+    %% Might have to do squery here (execute uses equery)
+    execute(Connection, SQL, []).
 
 
 %%%

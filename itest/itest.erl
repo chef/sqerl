@@ -291,10 +291,10 @@ select_in_ids() ->
                     [{<<"last_name">>, <<"Smith">>}],
                     [{<<"last_name">>, <<"Anderson">>}]
                    ],
-    {ok, Rows} = sqerl:select_in([<<"last_name">>],
-                                 <<"users">>, 
-                                 <<"id">>, 
-                                 [1, 2, 309, 409]),
+    Values = [1, 2, 309, 409],
+    {ok, Rows} = sqerl:adhoc_select([<<"last_name">>],
+                                    <<"users">>,
+                                    {<<"id">>, in, Values}),
     ?assertEqual(ExpectedRows, Rows).
 
 select_in_names() ->
@@ -303,8 +303,8 @@ select_in_names() ->
                     [{<<"id">>, 1},{<<"first_name">>, <<"Kevin">>}],
                     [{<<"id">>, 2},{<<"first_name">>, <<"Mark">>}]
                    ],
-    %% Here we also test the call by passing strings instead of binary
-    {ok, Rows} = sqerl:select_in(["id", "first_name"],
-                                 "users", "last_name",
-                                 ["Smith", "Anderson", "Toto", "Tata"]),
+    Values = [<<"Smith">>, <<"Anderson">>, <<"Toto">>, <<"Tata">>],
+    {ok, Rows} = sqerl:adhoc_select([<<"id">>, <<"first_name">>],
+                                    <<"users">>,
+                                    {<<"last_name">>, in, Values}),
     ?assertEqual(ExpectedRows, Rows).
