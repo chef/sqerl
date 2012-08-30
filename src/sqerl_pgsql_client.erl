@@ -51,19 +51,6 @@
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
-%% @doc Prepare a new statement.
--spec prepare(atom(), binary() | string(), state()) -> {ok, state()} | {error, any()}.
-prepare(Name, SQL, #state{cn=Cn, statements=Statements}=State) ->
-    {ok, UpdatedStatements} = load_statement(Cn, Name, SQL, Statements),
-    UpdatedState = State#state{statements=UpdatedStatements},
-    {ok, UpdatedState}.
-
-unprepare(Name, #state{cn=Cn, statements=Statements}=State) ->
-    {ok, UpdatedStatements} = unload_statement(Cn, Name, Statements),
-    UpdatedState = State#state{statements=UpdatedStatements},
-    {ok, UpdatedState}.
-
-
 %% @doc Execute query or prepared statement.
 %% If a binary is provided, it is interpreted as an SQL query.
 %% If an atom is provided, it is interpreted as a prepared statement name.
@@ -100,6 +87,21 @@ execute(StatementName, Parameters, State) when is_atom(StatementName) ->
     %% Use existing function for prepared statements
     exec_prepared_select(StatementName, Parameters, State).
 
+%% @doc Prepare a new statement.
+-spec prepare(atom(), binary() | string(), state()) -> {ok, state()}.
+prepare(Name, SQL, #state{cn=Cn, statements=Statements}=State) ->
+    {ok, UpdatedStatements} = load_statement(Cn, Name, SQL, Statements),
+    UpdatedState = State#state{statements=UpdatedStatements},
+    {ok, UpdatedState}.
+
+%% @doc Unprepare a previously prepared statement
+-spec unprepare(atom(), state()) -> {ok, state()}.
+unprepare(Name, #state{cn=Cn, statements=Statements}=State) ->
+    {ok, UpdatedStatements} = unload_statement(Cn, Name, Statements),
+    UpdatedState = State#state{statements=UpdatedStatements},
+    {ok, UpdatedState}.
+
+%% @doc Return SQL parameter placeholder style.
 %% See sqerl_sql:placedholder
 sql_parameter_style() -> dollarn.
 
@@ -191,6 +193,9 @@ load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
         Other -> {error, Other}
     end.
 
+%% @doc Load a statement: prepare and store in statement state dict.
+%% Returns {ok, UpdatedDict} or {error, ErrorInfo}
+-spec load_statement(connection(), atom(), binary(), dict()) -> {ok, dict()}.
 load_statement(Connection, Name, SQL, Dict) ->
     case prepare_statement(Connection, Name, SQL) of
         {ok, {Name, P}} ->
@@ -202,6 +207,10 @@ load_statement(Connection, Name, SQL, Dict) ->
             {error, Error}
     end.
 
+%% @doc Prepare a statement on the connection. Does not manage
+%% state.
+-spec prepare_statement(connection(), atom(), binary()) ->
+    {ok, {atom(), term()}} | {error, term()}.
 prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
     case pgsql:parse(Connection, atom_to_list(Name), SQL, []) of
         {ok, Statement} ->
@@ -220,28 +229,33 @@ prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
             {error, Error}
     end.
 
+%% @doc Unload statement: unprepare in DB, then update statement
+%% state dict.
+%% Returns {ok, UpdatedDict}.
 unload_statement(Connection, Name, Dict) ->
         unprepare_statement(Connection, Name),
         UpdatedDict = dict:erase(Name, Dict),
         {ok, UpdatedDict}.
 
+%% @doc Call DB to unprepare a previously prepared statement.
+-spec unprepare_statement(connection(), atom()) -> ok.
 unprepare_statement(Connection, Name) when is_atom(Name) ->
     SQL = io_lib:format("DEALLOCATED ~s", [Name]),
     %% Might have to do squery here (execute uses equery)
-    execute(Connection, SQL, []).
+    {ok, _} = execute(Connection, SQL, []),
+    ok.
 
 
 %%%
 %%% Data format conversion
 %%%
 
-%% @doc Format result to expected standard.
+%% @doc Format results of a query to expected standard (list of proplists).
 -spec format_result([term()], [term()]) -> any().
 format_result(Columns, Rows) ->
     %% Results from simple queries return Columns, Rows
     %% Columns are records
     %% Rows are tuples
-    %%?debugFmt("format_result(~p, ~p)~n", [Columns, Rows]),
     Names = extract_column_names({result_column_data, Columns}),
     unpack_rows(Names, Rows).
 
@@ -313,9 +327,12 @@ input_transforms(Data, #prepared_statement{input_types=Types}, _State) ->
 
 %% @doc Transform input without query parameter type data
 %% (i.e. not a prepared statement).
+-spec input_transforms(list()) -> list().
 input_transforms(Parameters) ->
     [transform(Parameter) || Parameter <- Parameters].
 
+%% @doc Transform input data where applicable.
+-spec transform(any()) -> any().
 transform({datetime, X}) -> X;
 transform(X) -> X.
 
