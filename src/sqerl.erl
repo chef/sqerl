@@ -68,6 +68,7 @@ with_db(Call, Retries) ->
             %% process). So a crash here will not leak a connection.
             case Call(Cn) of
                 {error, closed} ->
+                    %% TODO: sqerl_client:close(Cn)?
                     with_db(Call, Retries - 1);
                 Result ->
                     pooler:return_member(Cn),
@@ -126,55 +127,48 @@ execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
     with_db(F).
 
 
-%%
-%% Public interface
-%%
-
-%% @doc Execute query or statement
+%% @doc Execute query or statement with no parameters
+%% See execute/2 for return info.
 -spec execute(binary() | string() | atom()) -> {ok, any()} | {error, any()}.
 execute(QueryOrStatement) ->
     execute(QueryOrStatement, []).
 
 %% @doc Execute query or statement with parameters.
-%% Returns
+%% Returns:
 %% - {ok, Result}
 %% - {error, ErrorInfo}
+%%
 %% Result depends on the query being executed, and can be
 %% - Rows
 %% - Count
+%%
+%% Row is a proplist, e.g. [{<<"id">>, 1}, {<<"name">>, <<"John">>}]
+%%
 -spec execute(binary() | string() | atom(), [any()]) -> {ok, any()} | {error, any()}.
 execute(QueryOrStatement, Parameters) ->
     F = fun(Cn) -> sqerl_client:execute(Cn, QueryOrStatement, Parameters) end,
     with_connection(F).
 
-%% @doc Execute an adhoc query:
-%%
-%% adhoc_select(Columns, Table, Where)
-%% 
+%% @doc Execute an adhoc query: adhoc_select(Columns, Table, Where)
 %% Returns Columns from Table for records matching Where specifications.
 %%
 %% Currently only supports a SELECT ... IN form. "Where" specifications
 %% take the form {Field, in, Values}.
 %%
 %% Returns:
-%% - {ok, Rows} where each row is a proplist, e.g.:
-%%   [
-%%    [{<<"last_name">>,<<"Smith">>}],
-%%    [{<<"last_name">>,<<"Anderson">>}]
-%%   ]
-%% - {error, ErrorInfo} when an error occured
+%% - {ok, Rows}
+%% - {error, ErrorInfo}
+%%
+%% See execute/2 for more details.
+%%
 -spec adhoc_select([binary()], binary(), {binary(), in, [any()]}) ->
           {ok, any()}.
-adhoc_select(SelectFields, Table, {Field, in, Values}) ->
+adhoc_select(Columns, Table, {Field, in, Values}) ->
     %% Note: generating the SQL also validates input
     ParameterStyle = sqerl_client:sql_parameter_style(),
-    SQL = sqerl_sql:select(SelectFields, Table, {Field, in, length(Values), ParameterStyle}),
+    SQL = sqerl_sql:select(Columns, Table, {Field, in, length(Values), ParameterStyle}),
     execute(SQL, Values).
 
-
-%%
-%% Private functions
-%%
 
 %% @doc Call function with a DB connection.
 %% Function must take one DB connection argument.
@@ -197,9 +191,9 @@ with_connection(F, Retries) ->
             %% connection and the process that has the connection checked out (this
             %% process). So a crash here will not leak a connection.
             case F(Cn) of
-                %% The only case we retry: a closed error
+                %% The only case we retry: a 'closed' error
                 {error, closed} ->
-                    sqerl_client:close(Cn),
+                    sqerl_client:close(Cn), %% should it be closed?
                     %% TODO: the connection is bad and not checked back in.
                     %% How does the pooler handle that?
                     with_connection(F, Retries - 1);
