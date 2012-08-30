@@ -266,6 +266,8 @@ select_lname_by_created() ->
     {ok, User1} = sqerl:select(find_lname_by_created, [{datetime, {{2011, 10, 04}, {16, 47, 46}}}], first_as_scalar, [last_name]),
     ?assertMatch(<<"Presley">>, User1).
 
+%% @doc Tests padding parameters with null for a "select ... in (?, ?, ...)"
+%% prepared statement that expects 10 parameters but we have fewer.
 in_clause_with_nulls() ->
     % need to fill in the parameters to 10 since the SQL expects 10 arguments
     % user records were created earlier by insert_data
@@ -273,29 +275,36 @@ in_clause_with_nulls() ->
     {ok, Results} = sqerl:select(in_clause, Parameters),
     ?assertMatch([[{<<"id">>,1}],[{<<"id">>,2}],[{<<"id">>,3}]], Results).
 
-% append DefaultValue elements to L so that the 
-% number of elements is N
+%% @doc Append DefaultValue elements to L so that the 
+%% number of elements is N
 fill(L, N, DefaultValue) ->
-    L ++ createlist(N - length(L), DefaultValue).
+    PadLength = N - length(L),
+    case PadLength > 0 of
+        true -> L ++ lists:duplicate(PadLength, DefaultValue);
+        _ -> L
+    end.
 
-createlist(N, Value) when N > 0 -> [Value|createlist(N-1, Value)];
-createlist(_N, _Value) -> [].
 
 select_in_ids() ->
     %% previous test setup has users with id 1 and 2; no users with id 309, 409
     ExpectedRows = [
-                    [{<<"last_name">>,<<"Smith">>}],
-                    [{<<"last_name">>,<<"Anderson">>}]
+                    [{<<"last_name">>, <<"Smith">>}],
+                    [{<<"last_name">>, <<"Anderson">>}]
                    ],
-    {ok, Rows} = sqerl:select_in(["last_name"], "users", "id", [1,2,309,409]),
-    %%{ok, Rows} = sqerl:select_in(["last_name"], "users", "id", ["1","2","309","409"]),
-    ?assertMatch({ok,ExpertecRows}, Rows).
+    {ok, Rows} = sqerl:select_in([<<"last_name">>],
+                                 <<"users">>, 
+                                 <<"id">>, 
+                                 [1, 2, 309, 409]),
+    ?assertEqual(ExpectedRows, Rows).
 
 select_in_names() ->
     %% previous test setup has users with last names Smith and Anderson but not Toto and Tata
     ExpectedRows = [
-                    [{<<"id">>,<<1>>},{<<"first_name">>,<<"Kevin">>}],
-                    [{<<"id">>,<<2>>},{<<"first_name">>,<<"Mark">>}]
+                    [{<<"id">>, 1},{<<"first_name">>, <<"Kevin">>}],
+                    [{<<"id">>, 2},{<<"first_name">>, <<"Mark">>}]
                    ],
-    {ok, Rows} = sqerl:select_in(["id", "first_name"], "users", "last_name", ["Smith", "Anderson", "Toto", "Tata"]),
-    ?assertMatch({ok,ExpertecRows}, Rows).
+    %% Here we also test the call by passing strings instead of binary
+    {ok, Rows} = sqerl:select_in(["id", "first_name"],
+                                 "users", "last_name",
+                                 ["Smith", "Anderson", "Toto", "Tata"]),
+    ?assertEqual(ExpectedRows, Rows).
