@@ -118,10 +118,18 @@ basic_test_() ->
       {<<"Select timestamp type">>,
        fun select_lname_by_created/0},
 
-      {<<"In clause with NULLs">>, fun in_clause_with_nulls/0},
-      {<<"Select In (IDs)">>, fun select_in_ids/0},
-      {<<"Select In (Names)">>, fun select_in_names/0},
-      {<<"Select In (*)">>, fun select_in_star/0},
+      {<<"In clause with NULLs">>,
+       fun in_clause_with_nulls/0},
+      {<<"Select All">>,
+       fun select_all/0},
+      {<<"Select where id = XYZ">>,
+       fun select_equals/0},
+      {<<"Select In (IDs)">>,
+       fun select_in_ids/0},
+      {<<"Select In (Names)">>,
+       fun select_in_names/0},
+      {<<"Select In (*)">>,
+       fun select_in_star/0},
 
       {<<"Tolerates bounced server">>,
        {timeout, 10,
@@ -285,6 +293,16 @@ fill(L, N, DefaultValue) ->
         _ -> L
     end.
 
+
+select_all() ->
+    ExpectedNumRows = length(?NAMES),
+    {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>, {all}),
+    ?assertEqual(ExpectedNumRows, length(Rows)).
+
+select_equals() ->
+    ExpectedRows = [[{<<"last_name">>, <<"Smith">>}]],
+    {ok, Rows} = sqerl:adhoc_select([<<"last_name">>], <<"users">>, {<<"id">>, equals, 1}),
+    ?assertEqual(ExpectedRows, Rows).
 
 select_in_ids() ->
     %% previous test setup has users with id 1 and 2; no users with id 309, 409
