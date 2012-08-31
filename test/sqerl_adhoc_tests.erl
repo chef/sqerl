@@ -26,7 +26,7 @@
 %%
 select_all_test() ->
     Expected = <<"SELECT * FROM users">>,
-    Generated = sqerl_adhoc:select([<<"*">>], <<"users">>, {all}),
+    Generated = sqerl_adhoc:select([<<"*">>], <<"users">>, all),
     ?assertEqual(Expected, Generated).
 
 select_equals_test() ->

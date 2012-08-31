@@ -296,7 +296,7 @@ fill(L, N, DefaultValue) ->
 
 select_all() ->
     ExpectedNumRows = length(?NAMES),
-    {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>, {all}),
+    {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>, all),
     ?assertEqual(ExpectedNumRows, length(Rows)).
 
 select_equals() ->

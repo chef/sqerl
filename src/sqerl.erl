@@ -153,7 +153,7 @@ execute(QueryOrStatement, Parameters) ->
 %% Returns Columns from Table for records matching Where specifications.
 %% Note that input is validated for safe values.
 %%
-%% Where: {all}
+%% Where: all
 %% Returns all records.
 %%
 %% Where: {Field, equals, Value}
@@ -174,8 +174,8 @@ execute(QueryOrStatement, Parameters) ->
                    {binary(), equals, any()} |
                    {binary(), in, [any()]}) ->
     {ok, any()}.
-adhoc_select(Columns, Table, {all}) ->
-    SQL = sqerl_adhoc:select(Columns, Table, {all}),
+adhoc_select(Columns, Table, all) ->
+    SQL = sqerl_adhoc:select(Columns, Table, all),
     execute(SQL);
 adhoc_select(Columns, Table, {Field, equals, Value}) ->
     ParameterStyle = sqerl_client:sql_parameter_style(),

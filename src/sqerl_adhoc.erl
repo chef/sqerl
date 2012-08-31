@@ -35,10 +35,10 @@
 %%
 %% Note: Validates that parameters are safe.
 %%
-%% Where = {all}
+%% Where = all
 %% Does not generate a WHERE clause. Returns all records in table.
 %%
-%% 1> select([<<"*">>], <<"users">>, {all}).
+%% 1> select([<<"*">>], <<"users">>, all).
 %% <<"SELECT * FROM users">>
 %%
 %% Where = {Field, equals, ParamStyle}
@@ -58,13 +58,13 @@
 %% or dollarn ($1, $2, etc. for e.g. pgsql)
 %%
 -spec select([binary()], binary(),
-             {all} |
+             all |
+             {binary(), equals, qmark | dollarn} |
              {binary(), in, integer(), qmark | dollarn}) -> binary().
-select(Columns, Table, {all}) ->
+select(Columns, Table, all) ->
     ensure_safe([Columns, Table]),
-    ColumnsPart = join(Columns, <<",">>),
     Parts = [<<"SELECT">>, 
-             ColumnsPart, 
+             column_parts(Columns),
              <<"FROM">>, 
              Table],
     Query = join(Parts, <<" ">>),
@@ -72,13 +72,16 @@ select(Columns, Table, {all}) ->
 select(Columns, Table, Where) ->
     ensure_safe([Columns, Table]),
     Parts = [<<"SELECT">>, 
-             join(Columns, <<",">>),
+             column_parts(Columns),
              <<"FROM">>, 
              Table,
              <<"WHERE">>,
              where_parts(Where)],
     Query = join(Parts, <<" ">>),
     list_to_binary(lists:flatten(Query)).
+
+%% @doc Generate columns parts of query
+column_parts(Columns) -> join(Columns, <<",">>).
 
 %% @doc Generate "WHERE" parts of query.
 where_parts({Field, equals, ParamStyle}) ->
