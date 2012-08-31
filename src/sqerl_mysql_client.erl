@@ -116,7 +116,7 @@ init(Config) ->
 load_statements(_Connection, []) ->
     ok;
 load_statements(Connection, [{Name, SQL}|T]) ->
-    ok = emysql_conn:prepare(Connection, Name, SQL),
+    ok = emysql:prepare(Name, SQL),
     load_statements(Connection, T).
 
 %% Converts contents of result_packet into our "standard"
