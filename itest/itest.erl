@@ -120,16 +120,34 @@ basic_test_() ->
 
       {<<"In clause with NULLs">>,
        fun in_clause_with_nulls/0},
-      {<<"Select All">>,
-       fun select_all/0},
-      {<<"Select where id = XYZ">>,
-       fun select_equals/0},
-      {<<"Select In (IDs)">>,
-       fun select_in_ids/0},
-      {<<"Select In (Names)">>,
-       fun select_in_names/0},
-      {<<"Select In (*)">>,
-       fun select_in_star/0},
+      {<<"Adhoc select All">>,
+       fun adhoc_select_all/0},
+      {<<"Adhoc select equals int">>,
+       fun adhoc_select_equals_int/0},
+      {<<"Adhoc select equals string">>,
+       fun adhoc_select_equals_str/0},
+      {<<"Adhoc select equals timestamp">>,
+       fun adhoc_select_equals_timestamp/0},
+      {<<"Adhoc select equals boolean">>,
+       fun adhoc_select_equals_boolean/0},
+      {<<"Adhoc select not equals int">>,
+       fun adhoc_select_nequals_int/0},
+      {<<"Adhoc select not equals str">>,
+       fun adhoc_select_nequals_str/0},
+      {<<"Adhoc select NOT">>,
+       fun adhoc_select_not/0},
+      {<<"Adhoc select In (IDs)">>,
+       fun adhoc_select_in_ids/0},
+      {<<"Adhoc select In (Names)">>,
+       fun adhoc_select_in_names/0},
+      {<<"Adhoc select In (*)">>,
+       fun adhoc_select_in_star/0},
+      {<<"Adhoc select AND">>,
+       fun adhoc_select_and/0},
+      {<<"Adhoc select OR">>,
+       fun adhoc_select_or/0},
+      {<<"Adhoc select complex">>,
+       fun adhoc_select_complex/0},
       
       {<<"Adhoc insert">>,
        fun adhoc_insert/0},
@@ -301,17 +319,64 @@ fill(L, N, DefaultValue) ->
     end.
 
 
-select_all() ->
+adhoc_select_all() ->
     ExpectedNumRows = length(?NAMES),
-    {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>, all),
+    {ok, Rows} = sqerl:adhoc_select([<<"*">>], <<"users">>, all),
     ?assertEqual(ExpectedNumRows, length(Rows)).
 
-select_equals() ->
+adhoc_select_equals_int() ->
     ExpectedRows = [[{<<"last_name">>, <<"Smith">>}]],
-    {ok, Rows} = sqerl:adhoc_select([<<"last_name">>], <<"users">>, {<<"id">>, equals, 1}),
+    {ok, Rows} = sqerl:adhoc_select([<<"last_name">>], <<"users">>,
+                                    {<<"id">>, equals, 1}),
     ?assertEqual(ExpectedRows, Rows).
 
-select_in_ids() ->
+adhoc_select_equals_timestamp() ->
+    ExpectedRows = [[{<<"last_name">>, <<"Presley">>}]],
+    {ok, Rows} = sqerl:adhoc_select([<<"last_name">>], <<"users">>,
+                                    {<<"created">>, equals, {datetime,{{2011,10,4},{16,47,46}}}}),
+    ?assertEqual(ExpectedRows, Rows).
+
+adhoc_select_equals_boolean() ->
+    ExpectedRows = [[{<<"last_name">>, <<"Presley">>}]],
+    {ok, Rows} = sqerl:adhoc_select([<<"last_name">>], <<"users">>,
+                                    {<<"active">>, equals, false}),
+    ?assertEqual(ExpectedRows, Rows).
+
+adhoc_select_equals_str() ->
+    ExpectedRows = [[{<<"id">>, 1}]],
+    {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>,
+                                    {<<"last_name">>, equals, <<"Smith">>}),
+    ?assertEqual(ExpectedRows, Rows).
+
+adhoc_select_nequals_str() ->
+    {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>,
+                                    {<<"last_name">>, nequals, <<"Smith">>}),
+    ExpectedRows = [[{<<"id">>,2}],[{<<"id">>,3}],[{<<"id">>,4}]],
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_nequals_int() ->
+    {ok, Rows} = sqerl:adhoc_select([<<"last_name">>], <<"users">>,
+                                    {<<"id">>, nequals, 1}),
+    ExpectedRows = [
+                    [{<<"last_name">>,<<"Presley">>}],
+                    [{<<"last_name">>,<<"Anderson">>}],
+                    [{<<"last_name">>,<<"Maier">>}]
+                   ],
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_not() ->
+    Cols = [<<"id">>],
+    Table = <<"users">>,
+    Where = {'not', {<<"last_name">>, equals, <<"Smith">>}},
+    {ok, Rows} = sqerl:adhoc_select(Cols, Table, Where),
+    ExpectedRows = [
+                    [{<<"id">>, 2}],
+                    [{<<"id">>, 3}],
+                    [{<<"id">>, 4}]
+                   ],
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_in_ids() ->
     %% previous test setup has users with id 1 and 2; no users with id 309, 409
     ExpectedRows = [
                     [{<<"last_name">>, <<"Smith">>}],
@@ -321,9 +386,9 @@ select_in_ids() ->
     {ok, Rows} = sqerl:adhoc_select([<<"last_name">>],
                                     <<"users">>,
                                     {<<"id">>, in, Values}),
-    ?assertEqual(ExpectedRows, Rows).
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
 
-select_in_names() ->
+adhoc_select_in_names() ->
     %% previous test setup has users with last names Smith and Anderson but not Toto and Tata
     ExpectedRows = [
                     [{<<"id">>, 1},{<<"first_name">>, <<"Kevin">>}],
@@ -333,9 +398,9 @@ select_in_names() ->
     {ok, Rows} = sqerl:adhoc_select([<<"id">>, <<"first_name">>],
                                     <<"users">>,
                                     {<<"last_name">>, in, Values}),
-    ?assertEqual(ExpectedRows, Rows).
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
 
-select_in_star() ->
+adhoc_select_in_star() ->
     %% previous test setup has user with last name Smith but not Toto
     ExpectedNumRows = 1,
     ExpectedNumCols = 7,
@@ -345,6 +410,46 @@ select_in_star() ->
                                     {<<"last_name">>, in, Values}),
     ?assertEqual(ExpectedNumRows, length(Rows)),
     ?assertEqual(ExpectedNumCols, length(lists:nth(1, Rows))).
+
+adhoc_select_and() ->
+    Cols = [<<"id">>],
+    Table = <<"users">>,
+    Where1 = {<<"id">>, gt, 1},
+    Where2 = {<<"last_name">>, nequals, <<"Smith">>},
+    Where = {'and', [Where1, Where2]},
+    {ok, Rows} = sqerl:adhoc_select(Cols, Table, Where),
+    ExpectedRows = [
+                    [{<<"id">>, 2}],
+                    [{<<"id">>, 3}],
+                    [{<<"id">>, 4}]
+                   ],
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_or() ->
+    Cols = [<<"id">>],
+    Table = <<"users">>,
+    Where1 = {<<"id">>, gt, 1},
+    Where2 = {<<"last_name">>, nequals, <<"Smith">>},
+    Where = {'or', [Where1, Where2]},
+    {ok, Rows} = sqerl:adhoc_select(Cols, Table, Where),
+    ExpectedRows = [
+                    [{<<"id">>, 2}],
+                    [{<<"id">>, 3}],
+                    [{<<"id">>, 4}]
+                   ],
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_complex() ->
+    Where = {'and', [{<<"high_score">>, gt, 10},
+                     {'or', [{<<"last_name">>, in, [<<"Maier">>, <<"Anderson">>]},
+                             {<<"active">>, equals, false}]}
+                     ]},
+    {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>, Where),
+    ExpectedRows = [
+                    [{<<"id">>, 2}],
+                    [{<<"id">>, 4}]
+                   ],
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
 
 adhoc_insert() ->
     Table = <<"users">>,
