@@ -177,19 +177,14 @@ execute(QueryOrStatement, Parameters) ->
                    {binary(), equals, any()} |
                    {binary(), in, [any()]}) ->
     {ok, any()}.
-adhoc_select(Columns, Table, all) ->
-    SQL = sqerl_adhoc:select(Columns, Table, all),
-    execute(SQL);
-adhoc_select(Columns, Table, {Field, equals, Value}) ->
-    SQL = sqerl_adhoc:select(Columns, Table, {Field, equals, param_style()}),
-    execute(SQL, [Value]);
-adhoc_select(Columns, Table, {Field, in, Values}) ->
-    SQL = sqerl_adhoc:select(Columns, Table, {Field, in, length(Values), param_style()}),
+adhoc_select(Columns, Table, Where) ->
+    {SQL, Values} = sqerl_adhoc:select(Columns, Table, Where, param_style()),
+    %%error_logger:info_msg("~p <- ~p~n", [SQL, Values]),
     execute(SQL, Values).
 
 %% @doc Adhoc delete.
-adhoc_delete(Table, {Field, in, Values}) ->
-    SQL = sqerl_adhoc:delete(Table, {Field, in, length(Values), param_style()}),
+adhoc_delete(Table, Where) ->
+    {SQL, Values} = sqerl_adhoc:delete(Table, Where, param_style()),
     execute(SQL, Values).
 
 %% @doc Insert records.

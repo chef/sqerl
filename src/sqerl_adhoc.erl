@@ -21,8 +21,8 @@
 
 -module(sqerl_adhoc).
 
--export([select/3,
-         delete/2,
+-export([select/4,
+         delete/3,
          insert/4]).
 
 -ifdef(TEST).
@@ -59,28 +59,26 @@
 %% ParamStyle is qmark (?, ?, ... for e.g. mysql) 
 %% or dollarn ($1, $2, etc. for e.g. pgsql)
 %%
--spec select([binary()], binary(),
-             all |
-             {binary(), equals, qmark | dollarn} |
-             {binary(), in, integer(), qmark | dollarn}) -> binary().
-select(Columns, Table, all) ->
+-spec select([binary()], binary(), term(), atom()) -> binary().
+select(Columns, Table, all, _ParamStyle) ->
     ensure_safe([Columns, Table]),
     Parts = [<<"SELECT">>, 
              column_parts(Columns),
              <<"FROM">>, 
              Table],
-    Query = join(Parts, <<" ">>),
-    list_to_binary(lists:flatten(Query));
-select(Columns, Table, Where) ->
+    SQL = list_to_binary(join(Parts, <<" ">>)),
+    {SQL, []};
+select(Columns, Table, Where, ParamStyle) ->
     ensure_safe([Columns, Table]),
+    {WhereSQL, Values} = where_parts(Where, ParamStyle),
     Parts = [<<"SELECT">>, 
              column_parts(Columns),
              <<"FROM">>, 
              Table,
              <<"WHERE">>,
-             where_parts(Where)],
-    Query = join(Parts, <<" ">>),
-    list_to_binary(Query).
+             WhereSQL],
+    SQL = list_to_binary(join(Parts, <<" ">>)),
+    {SQL, Values}.
 
 
 %% @doc Generate DELETE statement
@@ -90,15 +88,16 @@ select(Columns, Table, Where) ->
 %% 1> delete(<<"users">>, {<<"id">>, equals, qmark}).
 %% <<"DELETE FROM users WHERE id = ?">>
 %%
--spec delete(binary(), any()) -> binary().
-delete(Table, Where) ->
+-spec delete(binary(), any(), atom()) -> binary().
+delete(Table, Where, ParamStyle) ->
     ensure_safe(Table),
+    {WhereSQL, Values} = where_parts(Where, ParamStyle),
     Parts = [<<"DELETE FROM">>,
              Table,
              <<"WHERE">>,
-             where_parts(Where)],
-    Query = join(Parts, <<" ">>),
-    list_to_binary(lists:flatten(Query)).
+             WhereSQL],
+    SQL = list_to_binary(join(Parts, <<" ">>)),
+    {SQL, Values}.
 
 
 %% @doc Generate INSERT statement.
@@ -148,15 +147,66 @@ column_parts(Columns) -> join(Columns, <<",">>).
 
 %% @doc Generate "WHERE" parts of query.
 %% See select/3 for more details.
-where_parts({Field, equals, ParamStyle}) ->
-    ensure_safe([Field]),
-    [Field, <<" = ">>, placeholder(1, ParamStyle)];
-where_parts({Field, in, NumValues, ParamStyle})
-  when is_integer(NumValues), NumValues > 0 ->
-    ensure_safe([Field]),
-    PlaceHolders = join(placeholders(NumValues, ParamStyle), <<",">>),
-    [Field, <<" IN (">>, PlaceHolders,<<")">>].
+where_parts(Where, ParamStyle) ->
+    where_parts(Where, ParamStyle, 0).
 
+where_parts({'not', Where}, ParamStyle, ParamPosOffset) ->
+    where_unary(<<"NOT">>, Where, ParamStyle, ParamPosOffset);
+where_parts({Field, equals, Value}, ParamStyle, ParamPosOffset) ->
+    where_binary(Field, <<"=">>, Value, ParamStyle, ParamPosOffset);
+where_parts({Field, nequals, Value}, ParamStyle, ParamPosOffset) ->
+    where_binary(Field, <<"!=">>, Value, ParamStyle, ParamPosOffset);
+where_parts({Field, gt, Value}, ParamStyle, ParamPosOffset) ->
+    where_binary(Field, <<">">>, Value, ParamStyle, ParamPosOffset);
+where_parts({Field, gte, Value}, ParamStyle, ParamPosOffset) ->
+    where_binary(Field, <<">=">>, Value, ParamStyle, ParamPosOffset);
+where_parts({Field, lt, Value}, ParamStyle, ParamPosOffset) ->
+    where_binary(Field, <<"<">>, Value, ParamStyle, ParamPosOffset);
+where_parts({Field, lte, Value}, ParamStyle, ParamPosOffset) ->
+    where_binary(Field, <<"<=">>, Value, ParamStyle, ParamPosOffset);
+where_parts({Field, in, Values}, ParamStyle, ParamPosOffset) ->
+  where_values(Field, <<"IN">>, Values, ParamStyle, ParamPosOffset);
+where_parts({Field, notin, Values}, ParamStyle, ParamPosOffset) ->
+  where_values(Field, <<"NOT IN">>, Values, ParamStyle, ParamPosOffset);
+where_parts({'and', WhereList}, ParamStyle, ParamPosOffset) ->
+    where_logic(<<"AND">>, WhereList, ParamStyle, ParamPosOffset);
+where_parts({'or', WhereList}, ParamStyle, ParamPosOffset) ->
+    where_logic(<<"OR">>, WhereList, ParamStyle, ParamPosOffset).
+
+where_unary(Op, Where, ParamStyle, ParamPosOffset) ->
+    {WhereSub, Values} = where_parts(Where, ParamStyle, ParamPosOffset),
+    {[Op, <<" (">>, WhereSub, <<")">>], Values}.
+
+where_binary(Field, Op, Value, ParamStyle, ParamPosOffset) ->
+    ensure_safe([Field]),
+    {[Field, <<" ">>, Op, <<" ">>, placeholder(1 + ParamPosOffset, ParamStyle)], [Value]}.
+
+where_logic(Op, WhereList, ParamStyle, ParamPosOffset)
+  when length(WhereList) > 1 ->
+    {WhereSubs, Values} = where_subs(WhereList, ParamStyle, ParamPosOffset),
+    Parts = [<<"(">>,
+             join(WhereSubs, <<" ", Op/binary, " ">>),
+             <<")">>],
+    {Parts, Values}.
+
+where_values(Field, Op, Values, ParamStyle, ParamPosOffset)
+  when length(Values) > 0 ->
+    ensure_safe([Field]),
+    PlaceHolders = join(placeholders(length(Values), ParamPosOffset, ParamStyle), <<",">>),
+    {[Field, <<" ">>, Op, <<" (">>, PlaceHolders, <<")">>], Values}.
+
+
+where_subs(WhereList, ParamStyle, ParamPosOffset) when length(WhereList) > 1 ->
+    where_subs(WhereList, ParamStyle, ParamPosOffset, [], []).
+
+where_subs([], _ParamStyle, _ParamOffset, WherePartsAcc, ValuesAcc) ->
+    {lists:reverse(WherePartsAcc), lists:reverse(ValuesAcc)};
+where_subs([Where|WhereList], ParamStyle, ParamPosOffset, WherePartsAcc, ValuesAcc) ->
+    {WherePart, Values} = where_parts(Where, ParamStyle, ParamPosOffset),
+    ParamPosOffset2 = ParamPosOffset + length(Values),
+    where_subs(WhereList, ParamStyle, ParamPosOffset2,
+               [WherePart|WherePartsAcc],
+               lists:reverse(Values) ++ ValuesAcc).
 
 %%
 %% SQL Value Safety
@@ -200,9 +250,7 @@ ensure_safe([H|T]) ->
 %% 1> placeholders(3, 4, dollarn).
 %% [<<"$5">>,<<"$6">>,<<"$7">>]
 %%
--spec placeholders(integer(), atom()) -> [binary()].
-placeholders(NumValues, Style) ->
-    placeholders(NumValues, 0, Style).
+-spec placeholders(integer(), integer(), atom()) -> [binary()].
 placeholders(NumValues, Offset, Style) when NumValues > 0 ->
     [placeholder(N + Offset, Style) || N <- lists:seq(1, NumValues)].
 
