@@ -44,6 +44,8 @@
 %% API
 -export([start_link/0,
          start_link/1,
+         prepare/3,
+         unprepare/2,
          exec_prepared_select/3,
          exec_prepared_statement/3,
          execute/2,
@@ -71,6 +73,8 @@
 %% @hidden
 behaviour_info(callbacks) ->
     [{init, 1},
+     {prepare, 3},
+     {unprepare, 3},
      {execute, 3},
      {exec_prepared_statement, 3},
      {exec_prepared_select, 3},
@@ -91,6 +95,16 @@ exec_prepared_select(Cn, Name, Args) when is_pid(Cn),
 exec_prepared_statement(Cn, Name, Args) when is_pid(Cn),
                                              is_atom(Name) ->
     gen_server:call(Cn, {exec_prepared_stmt, Name, Args}, infinity).
+
+%% @doc Prepare a statement
+%%
+-spec prepare(pid(), atom(), binary()) -> ok | {error, any()}.
+prepare(Cn, Name, SQL) when is_pid(Cn), is_atom(Name), is_binary(SQL) ->
+    gen_server:call(Cn, {prepare, Name, SQL}, infinity).
+
+%% @doc Unprepare a previously prepared statement
+unprepare(Cn, Name) when is_pid(Cn), is_atom(Name) ->
+    gen_server:call(Cn, {unprepare, Name, none}).
 
 %% @doc Execute SQL or prepared statement.
 %% See execute/3 for return values.
@@ -142,14 +156,20 @@ init(DbType) ->
             {stop, Error}
     end.
 
-handle_call({exec_prepared_select, Name, Args}, From, State) ->
-    exec_driver({exec_prepared_select, Name, Args}, From, State);
+%%handle_call({exec_prepared_select, Name, Args}, From, State) ->
+%%    exec_driver({exec_prepared_select, Name, Args}, From, State);
 
 handle_call({exec_prepared_stmt, Name, Args}, From, State) ->
     exec_driver({exec_prepared_statement, Name, Args}, From, State);
 
-handle_call({execute, QueryOrStatementName, Args}, From, State) ->
-    exec_driver({execute, QueryOrStatementName, Args}, From, State);
+%%handle_call({execute, QueryOrStatementName, Args}, From, State) ->
+%%    exec_driver({execute, QueryOrStatementName, Args}, From, State);
+
+%%handle_call({prepare, QueryOrStatementName, Args}, From, State) ->
+%%    exec_driver({prepare, QueryOrStatementName, Args}, From, State);
+
+handle_call({Call, QueryOrStatementName, Args}, From, State) ->
+    exec_driver({Call, QueryOrStatementName, Args}, From, State);
 
 handle_call(close, _From, State) ->
     {stop, normal, ok, State};
