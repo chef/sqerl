@@ -28,6 +28,8 @@
 
 %% sqerl_client callbacks
 -export([init/1,
+         prepare/3,
+         unprepare/3,
          execute/3,
          exec_prepared_statement/3,
          exec_prepared_select/3,
@@ -40,10 +42,30 @@
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
 %% See sqerl_sql:placeholder
+-spec sql_parameter_style() -> atom().
 sql_parameter_style() -> qmark.
+
+%% @doc Prepare a statement
+%%
+-spec prepare(atom(), binary(), term()) -> {ok, term()}.
+prepare(Name, SQL, #state{cn=_Cn}=State) ->
+    ok = emysql:prepare(Name, SQL),
+    {ok, State}.
+
+%% @doc Unprepare a previously prepared statement
+%%
+-spec unprepare(atom(), [], term()) -> {ok, term()}.
+unprepare(_Name, _Args, #state{cn=_Cn}=State) ->
+    %% unsupported by emysql.
+    %% but emysql can re-prepare statements,
+    %% so as long as we re-use statements
+    %% it should be ok.
+    {ok, State}.
+
 
 %% The MySQL driver supports a general execute
 %% for ad-hoc queries or prepared statements.
+-spec execute(atom() | binary(), [any()], term()) -> {ok, any()} | {error, any()}.
 execute(NameOrQuery, Args, #state{cn=Cn}=State) ->
     NArgs = input_transforms(Args, State),
     case catch emysql_conn:execute(Cn, NameOrQuery, NArgs) of
