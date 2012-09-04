@@ -55,6 +55,53 @@ select_in_star_test() ->
                                     {<<"Field">>, in, 4, qmark}),
     ?assertEqual(Expected, Generated).
 
+%% delete tests
+%%
+delete_test() ->
+    Actual = sqerl_adhoc:delete(<<"users">>, {<<"name">>, in, 3, qmark}),
+    Expected = <<"DELETE FROM users WHERE name IN (?,?,?)">>,
+    ?assertEqual(Expected, Actual).
+
+%% insert tests
+%%
+insert_test() ->
+    Actual = sqerl_adhoc:insert(<<"users">>, [<<"id">>, <<"name">>], 3, dollarn),
+    Expected = <<"INSERT INTO users ( id,name ) VALUES ($1,$2),($3,$4),($5,$6)">>,
+    ?assertEqual(Expected, Actual).
+
+insert_single_row_test() ->
+    Actual = sqerl_adhoc:insert(<<"users">>, [<<"id">>, <<"name">>], 1, dollarn),
+    Expected = <<"INSERT INTO users ( id,name ) VALUES ($1,$2)">>,
+    ?assertEqual(Expected, Actual).
+
+insert_qmark_test() ->
+    Actual = sqerl_adhoc:insert(<<"users">>, [<<"id">>, <<"name">>], 3, qmark),
+    Expected = <<"INSERT INTO users ( id,name ) VALUES (?,?),(?,?),(?,?)">>,
+    ?assertEqual(Expected, Actual).
+
+
+%% values_part(s) tests
+%%
+values_part_test() ->
+    Actual = list_to_binary(sqerl_adhoc:values_part(3, 0, dollarn)),
+    Expected = <<"($1,$2,$3)">>,
+    ?assertEqual(Expected, Actual).
+
+values_part_offset_test() ->
+    Actual = list_to_binary(sqerl_adhoc:values_part(3, 3, dollarn)),
+    Expected = <<"($4,$5,$6)">>,
+    ?assertEqual(Expected, Actual).
+
+values_parts_test() ->
+    Actual = list_to_binary(sqerl_adhoc:values_parts(3, 3, dollarn)),
+    Expected = <<"($1,$2,$3),($4,$5,$6),($7,$8,$9)">>,
+    ?assertEqual(Expected, Actual).
+
+values_parts_single_row_test() ->
+    Actual = list_to_binary(sqerl_adhoc:values_parts(3, 1, dollarn)),
+    Expected = <<"($1,$2,$3)">>,
+    ?assertEqual(Expected, Actual).
+
 %% ensure_safe tests
 %%
 ensure_safe_string_test() ->
@@ -102,6 +149,9 @@ placeholders_le0_test() ->
     ?assertException(error, function_clause, sqerl_adhoc:placeholders(0, qmark)),
     ?assertException(error, function_clause, sqerl_adhoc:placeholders(-2, qmark)).
 
+placeholders_offset_test() ->
+    ?assertEqual([<<"$5">>, <<"$6">>, <<"$7">>], sqerl_adhoc:placeholders(3, 4, dollarn)).
+
 placeholder_qmark_test() ->
     %% For qmark style, it should always be a qmark
     ?assertEqual(<<"?">>, sqerl_adhoc:placeholder(1, qmark)),
@@ -120,13 +170,11 @@ placeholder_bad_style_test() ->
     ?assertException(error, function_clause, sqerl_adhoc:placeholder(1, unsupported)),
     ?assertException(error, function_clause, sqerl_adhoc:placeholder(4, toto)).
 
-
 %% join test
 %%
 join_test() ->
-    ?assertEqual([], sqerl_adhoc:join([], 0)),
-    ?assertEqual([1], sqerl_adhoc:join([1], 0)),
-    ?assertEqual([1, 0, 2, 0, 3], sqerl_adhoc:join([1, 2, 3], 0)),
+    ?assertEqual([], sqerl_adhoc:join([], <<",">>)),
+    ?assertEqual([<<"1">>], sqerl_adhoc:join([<<"1">>], <<",">>)),
     ?assertEqual([<<"1">>, <<",">>, <<"2">>, <<",">>, <<"3">>],
                  sqerl_adhoc:join([<<"1">>, <<"2">>, <<"3">>], <<",">>)).
 

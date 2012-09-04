@@ -130,6 +130,13 @@ basic_test_() ->
        fun select_in_names/0},
       {<<"Select In (*)">>,
        fun select_in_star/0},
+      
+      {<<"Adhoc insert">>,
+       fun adhoc_insert/0},
+      {<<"Adhoc insert many users">>,
+       fun adhoc_insert_many_users/0},
+      {<<"Adhoc insert even more users">>,
+       fun adhoc_insert_even_more_users/0},
 
       {<<"Tolerates bounced server">>,
        {timeout, 10,
@@ -329,7 +336,7 @@ select_in_names() ->
     ?assertEqual(ExpectedRows, Rows).
 
 select_in_star() ->
-    %% previous test setup has user with last names Smith but not Toto
+    %% previous test setup has user with last name Smith but not Toto
     ExpectedNumRows = 1,
     ExpectedNumCols = 7,
     Values = [<<"Smith">>, <<"Toto">>],
@@ -338,3 +345,46 @@ select_in_star() ->
                                     {<<"last_name">>, in, Values}),
     ?assertEqual(ExpectedNumRows, length(Rows)),
     ?assertEqual(ExpectedNumCols, length(lists:nth(1, Rows))).
+
+adhoc_insert() ->
+    Table = <<"users">>,
+    Columns = [<<"first_name">>,
+               <<"last_name">>,
+               <<"high_score">>,
+               <<"active">>],
+    Data = [[<<"Joe1">>, <<"Smith">>, 17, true],
+            [<<"Joe2">>, <<"Anderson">>, 23, false]],
+    adhoc_insert_delete_test(Table, Columns, Data).
+
+adhoc_insert_delete_test(Table, Columns, Data) ->
+    {ok, InsertCount} = sqerl:adhoc_insert(Table, Columns, Data),
+    %% verify data was inserted correctly -- relies on first field
+    %% values in test being unique.
+    Field = lists:nth(1, Columns),
+    Values = [Value || [Value|_] <- Data],
+    Where = {Field, in, Values},
+    {ok, Rows} = sqerl:adhoc_select(Columns, Table, Where),
+    {ReturnedColumns, ReturnedData} = sqerl:extract_insert_data(Rows),
+    %% clean up before asserts
+    {ok, DeleteCount} = sqerl:adhoc_delete(Table, Where),
+    %% now verify...
+    ?assertEqual(length(Data), InsertCount),
+    ?assertEqual(Columns, ReturnedColumns),
+    ?assertEqual(Data, ReturnedData),
+    ?assertEqual(length(Data), DeleteCount).
+
+adhoc_insert_many_users() ->
+    Table = <<"users">>,
+    Columns = [<<"first_name">>,
+               <<"last_name">>],
+    F = fun(I) -> list_to_binary(integer_to_list(I)) end,
+    Data = [[F(I), F(I)] || I <- lists:seq(1, 35)],
+    adhoc_insert_delete_test(Table, Columns, Data).
+
+adhoc_insert_even_more_users() ->
+    Table = <<"users">>,
+    Columns = [<<"first_name">>,
+               <<"last_name">>],
+    F = fun(I) -> list_to_binary(integer_to_list(I)) end,
+    Data = [[F(I), F(I)] || I <- lists:seq(1000, 2004)],
+    adhoc_insert_delete_test(Table, Columns, Data).

@@ -33,9 +33,12 @@
          statement/4,
          execute/1,
          execute/2,
-         adhoc_select/3]).
+         adhoc_select/3,
+         adhoc_delete/2,
+         adhoc_insert/2,
+         adhoc_insert/3,
+         extract_insert_data/1]).
 
--include_lib("eunit/include/eunit.hrl").
 -include_lib("sqerl.hrl").
 
 -define(MAX_RETRIES, 5).
@@ -178,13 +181,104 @@ adhoc_select(Columns, Table, all) ->
     SQL = sqerl_adhoc:select(Columns, Table, all),
     execute(SQL);
 adhoc_select(Columns, Table, {Field, equals, Value}) ->
-    ParameterStyle = sqerl_client:sql_parameter_style(),
-    SQL = sqerl_adhoc:select(Columns, Table, {Field, equals, ParameterStyle}),
+    SQL = sqerl_adhoc:select(Columns, Table, {Field, equals, param_style()}),
     execute(SQL, [Value]);
 adhoc_select(Columns, Table, {Field, in, Values}) ->
-    ParameterStyle = sqerl_client:sql_parameter_style(),
-    SQL = sqerl_adhoc:select(Columns, Table, {Field, in, length(Values), ParameterStyle}),
+    SQL = sqerl_adhoc:select(Columns, Table, {Field, in, length(Values), param_style()}),
     execute(SQL, Values).
+
+%% @doc Adhoc delete.
+adhoc_delete(Table, {Field, in, Values}) ->
+    SQL = sqerl_adhoc:delete(Table, {Field, in, length(Values), param_style()}),
+    execute(SQL, Values).
+
+%% @doc Insert records.
+%%
+%% Prepares a statement and call it repeatedly.
+%% Inserts ?BULK_SIZE records at a time until
+%% there are fewer records and it inserts
+%% the rest at one time.
+%%
+%% - Columns, RowsValues
+%%   e.g. {[<<"first_name">>, <<"last_name">>],
+%%         [[<<"Joe">>, <<"Blow">>],
+%%          [<<"John">>, <<"Doe">>]]}
+%%
+%% - Rows: list of proplists (such as returned by a select)
+%%   e.g. [
+%%         [{<<"id">>, 1},{<<"first_name">>, <<"Kevin">>}],
+%%         [{<<"id">>, 2},{<<"first_name">>, <<"Mark">>}]
+%%        ]
+%% Returns {ok, Count}
+%%
+%% 1> adhoc_insert(<<"users">>,
+%%        {[<<"first_name">>, <<"last_name">>],
+%%         [[<<"Joe">>, <<"Blow">>],
+%%          [<<"John">>, <<"Doe">>]]}).
+%% {ok, 2}
+%%
+-define(BULK_SIZE, 10). %% small for now for test purposes
+-define(ADHOC_INSERT_STMT_ATOM, '__adhoc_insert').
+
+adhoc_insert(Table, Rows) ->
+    %% reformat Rows to desired format
+    {Columns, RowsValues} = extract_insert_data(Rows),
+    adhoc_insert(Table, Columns, RowsValues).
+
+adhoc_insert(Table, Columns, RowsValues) when length(RowsValues) < ?BULK_SIZE,
+                                              length(Columns) > 0 ->
+    %% Do one bulk insert since we have less than BULK_SIZE rows
+    SQL = sqerl_adhoc:insert(Table, Columns, length(RowsValues), param_style()),
+    execute(SQL, lists:flatten(RowsValues));
+
+adhoc_insert(Table, Columns, RowsValues) when length(RowsValues) >= ?BULK_SIZE ->
+    %% Prepare a bulk insert statement and execute as many times as needed.
+    SQL = sqerl_adhoc:insert(Table, Columns, ?BULK_SIZE, param_style()),
+    ok = prepare(?ADHOC_INSERT_STMT_ATOM, SQL),
+    {ok, Count, RemainingRowsValues} = adhoc_prepared_insert(RowsValues),
+    ok = unprepare(?ADHOC_INSERT_STMT_ATOM),
+    {ok, RemainingCount} = adhoc_insert(Table, Columns, RemainingRowsValues),
+    {ok, Count + RemainingCount}.
+
+prepare(Name, SQL) ->
+    F = fun(Cn) -> sqerl_client:prepare(Cn, Name, SQL) end,
+    with_connection(F).
+
+unprepare(Name) ->
+    F = fun(Cn) -> sqerl_client:unprepare(Cn, Name) end,
+    with_connection(F).
+
+%% @doc Insert data with insert statement already prepared
+adhoc_prepared_insert(RowsValues) ->
+    adhoc_prepared_insert(RowsValues, 0).
+
+adhoc_prepared_insert(RowsValues, CountSoFar) when length(RowsValues) >= ?BULK_SIZE ->
+    {RowsValuesToInsert, Rest} = lists:split(?BULK_SIZE, RowsValues),
+    {ok, Count} = statement(?ADHOC_INSERT_STMT_ATOM, lists:flatten(RowsValuesToInsert)),
+    adhoc_prepared_insert(Rest, CountSoFar + Count);
+adhoc_prepared_insert(RowsValues, CountSoFar) when length(RowsValues) < ?BULK_SIZE ->
+    {ok, CountSoFar, RowsValues}.
+
+%% @doc Extract insert data from Rows (list of proplists).
+%% Assumes all rows have the same format.
+%% Returns {Columns, RowsValues}.
+%%
+%% 1> extract_insert_data([
+%%                         [{<<"id">>, 1}, {<<"name">>, <<"Joe">>}],
+%%                         [{<<"id">>, 2}, {<<"name">>, <<"Jeff">>}],
+%%                        ]).
+%% {[<<"id">>,<<"name">>],[[1,<<"Joe">>],[2,<<"Jeff">>]]}
+%%
+-spec extract_insert_data([[{binary(), any()}]]) -> {[binary()], [[any()]]}.
+extract_insert_data(Rows) ->
+    FirstRow = lists:nth(1, Rows),
+    Columns = [C || {C, _V} <- FirstRow],
+    RowsValues = [[V || {_C, V} <- Row] || Row <- Rows],
+    {Columns, RowsValues}.
+
+%% @doc Shortcut for sqerl_client:parameter_style()
+-spec param_style() -> atom().
+param_style() -> sqerl_client:sql_parameter_style().
 
 
 %% @doc Call function with a DB connection.
