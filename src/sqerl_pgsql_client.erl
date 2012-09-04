@@ -34,7 +34,7 @@
          is_connected/1,
          sql_parameter_style/0,
          prepare/3,
-         unprepare/2]).
+         unprepare/3]).
 
 -record(state,  {cn,
                  statements = dict:new() :: dict(),
@@ -95,6 +95,11 @@ prepare(Name, SQL, #state{cn=Cn, statements=Statements}=State) ->
     {ok, UpdatedState}.
 
 %% @doc Unprepare a previously prepared statement
+%% Interface uses 3 parameters. In this case the 
+%% second one is unused.
+unprepare(Name, _, State) ->
+    unprepare(Name, State).
+
 -spec unprepare(atom(), state()) -> {ok, state()}.
 unprepare(Name, #state{cn=Cn, statements=Statements}=State) ->
     {ok, UpdatedStatements} = unload_statement(Cn, Name, Statements),
@@ -240,9 +245,9 @@ unload_statement(Connection, Name, Dict) ->
 %% @doc Call DB to unprepare a previously prepared statement.
 -spec unprepare_statement(connection(), atom()) -> ok.
 unprepare_statement(Connection, Name) when is_atom(Name) ->
-    SQL = io_lib:format("DEALLOCATED ~s", [Name]),
-    %% Might have to do squery here (execute uses equery)
-    {ok, _} = execute(Connection, SQL, []),
+    SQL = list_to_binary([<<"DEALLOCATE ">>, atom_to_binary(Name, latin1)]),
+    %% Have to do squery here (execute/3 uses equery which will try to prepare)
+    {ok, _, _} = pgsql:squery(Connection, SQL),
     ok.
 
 
