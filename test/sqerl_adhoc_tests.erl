@@ -113,6 +113,13 @@ delete_test() ->
     Actual = sqerl_adhoc:delete(<<"users">>, {<<"name">>, in, Values}, qmark),
     ?assertEqual(Expected, Actual).
 
+%% update tests
+%%
+update_test() ->
+    Expected = {<<"UPDATE t SET f1 = $1, f2 = $2 WHERE id = $3">>, [1, 2, 3]},
+    Actual = sqerl_adhoc:update(<<"t">>, [{<<"f1">>, 1}, {<<"f2">>, 2}], {<<"id">>, equals, 3}, dollarn),
+    ?assertEqual(Expected, Actual).
+
 %% insert tests
 %%
 insert_test() ->

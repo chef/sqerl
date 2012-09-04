@@ -149,6 +149,9 @@ basic_test_() ->
       {<<"Adhoc select complex">>,
        fun adhoc_select_complex/0},
       
+      {<<"Adhoc update">>,
+       fun adhoc_update/0},
+      
       {<<"Adhoc insert">>,
        fun adhoc_insert/0},
       {<<"Adhoc insert many users">>,
@@ -450,6 +453,18 @@ adhoc_select_complex() ->
                     [{<<"id">>, 4}]
                    ],
     ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_update() ->
+    RowUpdate = [{<<"last_name">>, <<"MAIER">>}, {<<"first_name">>, <<"Toto">>}],
+    Where = {<<"last_name">>, equals, <<"Maier">>},
+    {ok, Count} = sqerl:adhoc_update(<<"users">>, RowUpdate, Where),
+    ?assertEqual(1, Count),
+    {ok, [Row]} = sqerl:adhoc_select([<<"first_name">>], <<"users">>, {<<"last_name">>, equals, <<"MAIER">>}),
+    ?assertEqual([{<<"first_name">>, <<"Toto">>}], Row),
+    RowUpdate2 = [{<<"last_name">>, <<"Maier">>}, {<<"first_name">>, <<"Chris">>}],
+    Where2 = {<<"last_name">>, equals, <<"MAIER">>},
+    {ok, Count2} = sqerl:adhoc_update(<<"users">>, RowUpdate2, Where2),
+    ?assertEqual(1, Count2).
 
 adhoc_insert() ->
     Table = <<"users">>,
