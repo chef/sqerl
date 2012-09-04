@@ -35,6 +35,7 @@
          execute/2,
          adhoc_select/3,
          adhoc_delete/2,
+         adhoc_update/3,
          adhoc_insert/2,
          adhoc_insert/3,
          extract_insert_data/1]).
@@ -176,15 +177,30 @@ execute(QueryOrStatement, Parameters) ->
                    {all} |
                    {binary(), equals, any()} |
                    {binary(), in, [any()]}) ->
-    {ok, any()}.
+    {ok, list()} | {error, any()}.
 adhoc_select(Columns, Table, Where) ->
     {SQL, Values} = sqerl_adhoc:select(Columns, Table, Where, param_style()),
     %%error_logger:info_msg("~p <- ~p~n", [SQL, Values]),
     execute(SQL, Values).
 
 %% @doc Adhoc delete.
+%% Uses the same Where specifications as adhoc_select/3.
+%% Returns {ok, Count} or {error, ErrorInfo}.
+%%
+-spec adhoc_delete(binary(), term()) -> {ok, integer()} | {error, any()}.
 adhoc_delete(Table, Where) ->
     {SQL, Values} = sqerl_adhoc:delete(Table, Where, param_style()),
+    execute(SQL, Values).
+
+%% @doc Adhoc update.
+%% Updates records matching Where specifications with
+%% fields and values in given Row.
+%% Uses the same Where specifications as adhoc_select/3.
+%% Returns {ok, Count} or {error, ErrorInfo}.
+%%
+-spec adhoc_update(binary(), list(), term()) -> {ok, integer()} | {error, any()}.
+adhoc_update(Table, Row, Where) ->
+    {SQL, Values} = sqerl_adhoc:update(Table, Row, Where, param_style()),
     execute(SQL, Values).
 
 %% @doc Insert records.

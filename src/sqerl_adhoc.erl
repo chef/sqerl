@@ -23,7 +23,8 @@
 
 -export([select/4,
          delete/3,
-         insert/4]).
+         insert/4,
+         update/4]).
 
 -ifdef(TEST).
 -compile([export_all]).
@@ -32,35 +33,37 @@
 -include_lib("eunit/include/eunit.hrl").
 
 %% @doc Generates SELECT SQL depending on Where form.
+%% Returns {SQL, ParameterValues} which can be passed on to be executed.
 %% SQL generated uses parameter place holders so query can be
 %% prepared.
 %%
 %% Note: Validates that parameters are safe.
 %%
 %% Where = all
-%% Does not generate a WHERE clause. Returns all records in table.
+%% Does not generate a WHERE clause. Matches all records in table.
 %%
-%% 1> select([<<"*">>], <<"users">>, all).
-%% <<"SELECT * FROM users">>
+%% 1> select([<<"*">>], <<"users">>, all, qmark).
+%% {<<"SELECT * FROM users">>, []}
 %%
-%% Where = {Field, equals, ParamStyle}
+%% Where = {Field, equals, Values}
 %% Generates SELECT ... WHERE Field = ?
 %%
-%% 1> select([<<"name">>], <<"users">>, {<<"id">>, equals, qmark}).
-%% <<"SELECT name FROM users WHERE id = ?">>
+%% 1> select([<<"name">>], <<"users">>, {<<"id">>, equals, 1}, qmark).
+%% {<<"SELECT name FROM users WHERE id = ?">>, [1]}
 %%
-%% Where = {Field, in, NumValues, ParamStyle}
+%% Where = {Field, in, Values}
 %% Generates SELECT ... IN SQL with parameter strings (not values),
 %% which can be prepared and executed.
 %%
-%% 1> select([<<"name">>], <<"users">>, {<<"id">>, in, [1,2,3], qmark}).
-%% <<"SELECT name FROM users WHERE id IN (?, ?, ?)">>
+%% 1> select([<<"name">>], <<"users">>, {<<"id">>, in, [1,2,3]}, qmark).
+%% {<<"SELECT name FROM users WHERE id IN (?, ?, ?)">>, [1,2,3]}
 %%
 %% ParamStyle is qmark (?, ?, ... for e.g. mysql) 
 %% or dollarn ($1, $2, etc. for e.g. pgsql)
 %%
 -spec select([binary()], binary(), term(), atom()) -> binary().
 select(Columns, Table, all, _ParamStyle) ->
+    %% "all" is an exception because we don't generate a where clause at all.
     ensure_safe([Columns, Table]),
     Parts = [<<"SELECT">>, 
              column_parts(Columns),
@@ -81,12 +84,50 @@ select(Columns, Table, Where, ParamStyle) ->
     {SQL, Values}.
 
 
+%% @doc Generate UPDATE statement
+%% Update is given under the form of a Row (proplist).
+%% Uses the same Where specifications as select/4 except for "all" which is 
+%% not supported.
+%%
+%% 1> update(<<"users">>, [{<<"last_name">>, <<"Toto">>}], {<<"id">>, equals, 1}, qmark).
+%% {<<"UPDATE users SET last_name = ? WHERE id = ?">>, [<<"Toto">>, 1]}
+%%
+-spec update(binary(), list(), any(), atom()) -> {binary(), list()}.
+update(Table, Row, Where, ParamStyle) ->
+    ensure_safe(Table),
+    {SetSQL, SetValues} = set_parts(Row, ParamStyle),
+    {WhereSQL, WhereValues} = where_parts(Where, ParamStyle, length(SetValues)),
+    Parts = [<<"UPDATE">>,
+             Table,
+             <<"SET">>,
+             SetSQL,
+             <<"WHERE">>,
+             WhereSQL],
+    SQL = list_to_binary(join(Parts, <<" ">>)),
+    {SQL, SetValues ++ WhereValues}.
+
+%% @doc Generate set parts of update query.
+set_parts(Row, ParamStyle) when length(Row) > 0 ->
+    set_parts(Row, ParamStyle, 0).
+
+set_parts(Row, ParamStyle, ParamPosOffset) ->
+    set_parts(Row, ParamStyle, ParamPosOffset, [], []).
+
+set_parts([], _ParamStyle, _ParamPosOffset, PartsAcc, ValuesAcc) ->
+    {join(lists:reverse(PartsAcc), <<", ">>), lists:reverse(ValuesAcc)};
+
+set_parts([{Field, Value}|T], ParamStyle, ParamPosOffset, PartsAcc, ValuesAcc) ->
+    ensure_safe(Field),
+    Parts = [Field, <<" = ">>, placeholder(1 + ParamPosOffset, ParamStyle)],
+    set_parts(T, ParamStyle, ParamPosOffset + 1, [Parts|PartsAcc], [Value|ValuesAcc]).
+
+
 %% @doc Generate DELETE statement
+%% Uses the same Where specifications as select/4.
+%% See select/4 for details about the "Where" parameter.
 %%
-%% See select/3 for details about the "Where" parameter.
-%%
-%% 1> delete(<<"users">>, {<<"id">>, equals, qmark}).
-%% <<"DELETE FROM users WHERE id = ?">>
+%% 1> delete(<<"users">>, {<<"id">>, equals, 1}, qmark).
+%% {<<"DELETE FROM users WHERE id = ?">>, [1]}
 %%
 -spec delete(binary(), any(), atom()) -> binary().
 delete(Table, Where, ParamStyle) ->
@@ -100,7 +141,7 @@ delete(Table, Where, ParamStyle) ->
     {SQL, Values}.
 
 
-%% @doc Generate INSERT statement.
+%% @doc Generate INSERT statement for N rows.
 %%
 %% 1> insert(<<"users">>, [<<"id">>, <<"name">>], 3, qmark).
 %% <<"INSERT INTO users (name) VALUES (?,?),(?,?),(?,?)">>
@@ -146,7 +187,7 @@ values_part(NumColumns, Offset, ParamStyle) ->
 column_parts(Columns) -> join(Columns, <<",">>).
 
 %% @doc Generate "WHERE" parts of query.
-%% See select/3 for more details.
+%% See select/4 for more details.
 where_parts(Where, ParamStyle) ->
     where_parts(Where, ParamStyle, 0).
 
@@ -173,14 +214,20 @@ where_parts({'and', WhereList}, ParamStyle, ParamPosOffset) ->
 where_parts({'or', WhereList}, ParamStyle, ParamPosOffset) ->
     where_logic(<<"OR">>, WhereList, ParamStyle, ParamPosOffset).
 
+%% @doc Generate where part for a unary operator
+%% e.g. NOT (...)
 where_unary(Op, Where, ParamStyle, ParamPosOffset) ->
     {WhereSub, Values} = where_parts(Where, ParamStyle, ParamPosOffset),
     {[Op, <<" (">>, WhereSub, <<")">>], Values}.
 
+%% @doc Generate where part for a binary operator
+%% e.g. Field = Value
 where_binary(Field, Op, Value, ParamStyle, ParamPosOffset) ->
     ensure_safe([Field]),
     {[Field, <<" ">>, Op, <<" ">>, placeholder(1 + ParamPosOffset, ParamStyle)], [Value]}.
 
+%% @doc Generate where part for a logic operator
+%% e.g. Where1 AND Where2 AND Where3
 where_logic(Op, WhereList, ParamStyle, ParamPosOffset)
   when length(WhereList) > 1 ->
     {WhereSubs, Values} = where_subs(WhereList, ParamStyle, ParamPosOffset),
@@ -189,18 +236,22 @@ where_logic(Op, WhereList, ParamStyle, ParamPosOffset)
              <<")">>],
     {Parts, Values}.
 
+%% @doc Generate where part for a values operator
+%% e.g. Field IN (Value1, Value2, ...)
 where_values(Field, Op, Values, ParamStyle, ParamPosOffset)
   when length(Values) > 0 ->
     ensure_safe([Field]),
     PlaceHolders = join(placeholders(length(Values), ParamPosOffset, ParamStyle), <<",">>),
     {[Field, <<" ">>, Op, <<" (">>, PlaceHolders, <<")">>], Values}.
 
-
+%% @doc Generate where parts for a where list.
+%% Results can be 'joined' with the intended operator.
 where_subs(WhereList, ParamStyle, ParamPosOffset) when length(WhereList) > 1 ->
     where_subs(WhereList, ParamStyle, ParamPosOffset, [], []).
 
 where_subs([], _ParamStyle, _ParamOffset, WherePartsAcc, ValuesAcc) ->
     {lists:reverse(WherePartsAcc), lists:reverse(ValuesAcc)};
+
 where_subs([Where|WhereList], ParamStyle, ParamPosOffset, WherePartsAcc, ValuesAcc) ->
     {WherePart, Values} = where_parts(Where, ParamStyle, ParamPosOffset),
     ParamPosOffset2 = ParamPosOffset + length(Values),
