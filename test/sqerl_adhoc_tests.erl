@@ -76,6 +76,14 @@ select_in_star_test() ->
                                     {<<"Field">>, in, Values}, qmark),
     ?assertEqual(Expected, Generated).
 
+select_notin_test() ->
+    Values = [<<"1">>, <<"2">>, <<"3">>, <<"4">>],
+    Expected = {<<"SELECT * FROM Table1 WHERE Field NOT IN (?,?,?,?)">>, Values},
+    Generated = sqerl_adhoc:select([<<"*">>], 
+                                    <<"Table1">>, 
+                                    {<<"Field">>, notin, Values}, qmark),
+    ?assertEqual(Expected, Generated).
+
 select_and_test() ->
     select_logic_test('and', <<"AND">>).
 
