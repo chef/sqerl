@@ -148,6 +148,12 @@ basic_test_() ->
        fun adhoc_select_or/0},
       {<<"Adhoc select complex">>,
        fun adhoc_select_complex/0},
+      {<<"Adhoc select order by">>,
+       fun adhoc_select_order_by/0},
+      {<<"Adhoc select limit">>,
+       fun adhoc_select_limit/0},
+      {<<"Adhoc select offset">>,
+       fun adhoc_select_offset/0},
       
       {<<"Adhoc update">>,
        fun adhoc_update/0},
@@ -453,6 +459,33 @@ adhoc_select_complex() ->
                     [{<<"id">>, 4}]
                    ],
     ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_order_by() ->
+    {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>, all, [{order_by, [<<"id">>]}]),
+    ExpectedRows = [
+                    [{<<"id">>, 1}],
+                    [{<<"id">>, 2}],
+                    [{<<"id">>, 3}],
+                    [{<<"id">>, 4}]
+                   ],
+    ?assertEqual(ExpectedRows, Rows).
+
+adhoc_select_limit() ->
+    {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>, all, [{order_by, [<<"id">>]}, {limit, 2}]),
+    ExpectedRows = [
+                    [{<<"id">>, 1}],
+                    [{<<"id">>, 2}]
+                   ],
+    ?assertEqual(ExpectedRows, Rows).
+
+adhoc_select_offset() ->
+    {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>, all, [{order_by, [<<"id">>]}, {limit, {2, offset, 2}}]),
+    ExpectedRows = [
+                    [{<<"id">>, 3}],
+                    [{<<"id">>, 4}]
+                   ],
+    ?assertEqual(ExpectedRows, Rows).
+
 
 adhoc_update() ->
     RowUpdate = [{<<"last_name">>, <<"MAIER">>}, {<<"first_name">>, <<"Toto">>}],

@@ -24,9 +24,14 @@
 
 %% select tests
 %%
+select_undefined_test() ->
+    Expected = {<<"SELECT * FROM users">>, []},
+    Generated = sqerl_adhoc:select([<<"*">>], <<"users">>, [], qmark),
+    ?assertEqual(Expected, Generated).
+
 select_all_test() ->
     Expected = {<<"SELECT * FROM users">>, []},
-    Generated = sqerl_adhoc:select([<<"*">>], <<"users">>, all, qmark),
+    Generated = sqerl_adhoc:select([<<"*">>], <<"users">>, [{where, all}], qmark),
     ?assertEqual(Expected, Generated).
 
 select_equals_test() ->
@@ -49,7 +54,7 @@ select_lte_test() ->
 
 select_op_test(OpAtom, OpString) ->
     Expected = {<<"SELECT * FROM users WHERE id ", OpString/binary, " ?">>, [1]},
-    Generated = sqerl_adhoc:select([<<"*">>], <<"users">>, {<<"id">>, OpAtom, 1}, qmark),
+    Generated = sqerl_adhoc:select([<<"*">>], <<"users">>, [{where, {<<"id">>, OpAtom, 1}}], qmark),
     ?assertEqual(Expected, Generated).
 
 select_in_qmark_test() -> 
@@ -57,7 +62,7 @@ select_in_qmark_test() ->
     Expected = {<<"SELECT Field1,Field2 FROM Table1 WHERE Field IN (?,?,?,?)">>, Values},
     Generated = sqerl_adhoc:select([<<"Field1">>, <<"Field2">>], 
                                     <<"Table1">>, 
-                                    {<<"Field">>, in, Values}, qmark),
+                                    [{where, {<<"Field">>, in, Values}}], qmark),
     ?assertEqual(Expected, Generated).
 
 select_in_dollarn_test() ->
@@ -65,7 +70,7 @@ select_in_dollarn_test() ->
     Expected = {<<"SELECT Field1,Field2 FROM Table1 WHERE Field IN ($1,$2,$3,$4)">>, Values},
     Generated = sqerl_adhoc:select([<<"Field1">>, <<"Field2">>],
                                     <<"Table1">>,
-                                    {<<"Field">>, in, Values}, dollarn),
+                                    [{where, {<<"Field">>, in, Values}}], dollarn),
     ?assertEqual(Expected, Generated).
 
 select_in_star_test() ->
@@ -73,7 +78,7 @@ select_in_star_test() ->
     Expected = {<<"SELECT * FROM Table1 WHERE Field IN (?,?,?,?)">>, Values},
     Generated = sqerl_adhoc:select([<<"*">>], 
                                     <<"Table1">>, 
-                                    {<<"Field">>, in, Values}, qmark),
+                                    [{where, {<<"Field">>, in, Values}}], qmark),
     ?assertEqual(Expected, Generated).
 
 select_notin_test() ->
@@ -81,7 +86,7 @@ select_notin_test() ->
     Expected = {<<"SELECT * FROM Table1 WHERE Field NOT IN (?,?,?,?)">>, Values},
     Generated = sqerl_adhoc:select([<<"*">>], 
                                     <<"Table1">>, 
-                                    {<<"Field">>, notin, Values}, qmark),
+                                    [{where, {<<"Field">>, notin, Values}}], qmark),
     ?assertEqual(Expected, Generated).
 
 select_and_test() ->
@@ -101,7 +106,7 @@ select_logic_test(OpAtom, OpString) ->
                     " Field2 = $2 ",
                     OpString/binary,
                     " Field3 IN ($3,$4,$5))">>,
-    {SQL, Values} = sqerl_adhoc:select([<<"Field4">>], <<"Table1">>, Where, dollarn),
+    {SQL, Values} = sqerl_adhoc:select([<<"Field4">>], <<"Table1">>, [{where, Where}], dollarn),
     ?assertEqual(ExpectedSQL, SQL),
     ?assertEqual(ExpectedValues, Values).
 
@@ -110,8 +115,57 @@ select_not_test() ->
     Where1 = {<<"Field1">>, equals, Value1},
     Where = {'not', Where1},
     Expected = {<<"SELECT id FROM t WHERE NOT (Field1 = ?)">>, [Value1]},
-    Actual = sqerl_adhoc:select([<<"id">>], <<"t">>, Where, qmark),
+    Actual = sqerl_adhoc:select([<<"id">>], <<"t">>, [{where, Where}], qmark),
     ?assertEqual(Expected, Actual).
+
+select_complex_test() ->
+    Actual = sqerl_adhoc:select([<<"id">>, <<"name">>],
+                                <<"t">>,
+                                [{where, {'or',[
+                                                {'and', [
+                                                         {<<"id">>, in, [1, 2, 3]},
+                                                         {<<"name">>, nequals, <<"Toto">>}
+                                                        ]},
+                                                {<<"name">>, equals, <<"Boss">>}
+                                               ]}
+                                 },
+                                 {order_by, {[<<"id">>, <<"name">>], desc}},
+                                 {limit, {20, offset, 40}}
+                                ],
+                                dollarn),
+    ExpectedValues = [1, 2, 3, <<"Toto">>, <<"Boss">>],
+    ExpectedSQL = <<"SELECT id,name FROM t ",
+                    "WHERE ((id IN ($1,$2,$3) AND name != $4) OR name = $5) ",
+                    "ORDER BY id, name DESC LIMIT 20 OFFSET 40">>,
+    Expected = {ExpectedSQL, ExpectedValues},
+    ?assertEqual(Expected, Actual).
+
+order_by_test() ->
+    Fields = [<<"F1">>, <<"F2">>],
+    Actual = sqerl_adhoc:order_by_sql(Fields),
+    Expected = <<" ORDER BY F1, F2 ASC">>,
+    ?assertEqual(Expected, Actual).
+
+order_by_desc_test() ->
+    Fields = [<<"F1">>, <<"F2">>],
+    Direction = desc,
+    Actual = sqerl_adhoc:order_by_sql({Fields, Direction}),
+    Expected = <<" ORDER BY F1, F2 DESC">>,
+    ?assertEqual(Expected, Actual).
+
+order_by_undefined_test() ->
+    Actual = sqerl_adhoc:order_by_sql(undefined),
+    Expected = <<"">>,
+    ?assertEqual(Expected, Actual).
+
+limit_test() ->
+    ?assertEqual(<<" LIMIT 100">>, sqerl_adhoc:limit_sql(100)).
+
+limit_undefined_test() ->
+    ?assertEqual(<<"">>, sqerl_adhoc:limit_sql(undefined)).
+
+limit_offset_test() ->
+    ?assertEqual(<<" LIMIT 100 OFFSET 200">>, sqerl_adhoc:limit_sql({100, offset, 200})).
 
 %% delete tests
 %%
