@@ -34,6 +34,7 @@
          execute/1,
          execute/2,
          adhoc_select/3,
+         adhoc_select/4,
          adhoc_delete/2,
          adhoc_update/3,
          adhoc_insert/2,
@@ -154,17 +155,7 @@ execute(QueryOrStatement, Parameters) ->
     with_connection(F).
 
 %% @doc Execute an adhoc query: adhoc_select(Columns, Table, Where)
-%% Returns Columns from Table for records matching Where specifications.
-%% Note that input is validated for safe values.
-%%
-%% Where: all
-%% Returns all records.
-%%
-%% Where: {Field, equals, Value}
-%% SELECT ... Field = Value
-%%
-%% Where: {Field, in, Values}
-%% SELECT ... Field IN (Values)
+%% or adhoc_select(Columns, Table, Where, Clauses)
 %%
 %% Returns:
 %% - {ok, Rows}
@@ -172,15 +163,39 @@ execute(QueryOrStatement, Parameters) ->
 %%
 %% See execute/2 for more details on return data.
 %%
--spec adhoc_select([binary()],
-                   binary(),
-                   {all} |
-                   {binary(), equals, any()} |
-                   {binary(), in, [any()]}) ->
+%% Where Clause
+%% -------------
+%% Form: {where, Where}
+%%
+%% Where = all|undefined -- Does not generate a WHERE clause.
+%%                          Matches all records in table.
+%% Where = {Field, equals|nequals|gt|gte|lt|lte, Value}
+%% Where = {Field, in|notin, Values}
+%% Where = {'and'|'or', WhereList} -- Composes WhereList with AND or OR
+%%
+%% adhoc_select/4 takes an additional Clauses argument which
+%% is a list of additional clauses for the query.
+%%
+%% Order By Clause
+%% ---------------
+%% Form: {orderby, Fields | {Fields, asc|desc}}
+%%
+%% Limit/Offset Clause
+%% --------------------
+%% Form: {limit, Limit} | {limit, {Limit, offset, Offset}}
+%%
+%% See itest:adhoc_select_complex/0 for an example of a complex query
+%% that uses several clauses.
+%%
+-spec adhoc_select([binary()], binary(), term()) ->
     {ok, list()} | {error, any()}.
 adhoc_select(Columns, Table, Where) ->
-    {SQL, Values} = sqerl_adhoc:select(Columns, Table, Where, param_style()),
-    %%error_logger:info_msg("~p <- ~p~n", [SQL, Values]),
+    adhoc_select(Columns, Table, Where, []).
+
+-spec adhoc_select([binary()], binary(), term(), list()) ->
+          {ok, list()} | {error, any()}.
+adhoc_select(Columns, Table, Where, Clauses) ->
+    {SQL, Values} = sqerl_adhoc:select(Columns, Table, [{where, Where}|Clauses], param_style()),
     execute(SQL, Values).
 
 %% @doc Adhoc delete.
@@ -230,6 +245,9 @@ adhoc_update(Table, Row, Where) ->
 %%
 -define(BULK_SIZE, 10). %% small for now for test purposes
 -define(ADHOC_INSERT_STMT_ATOM, '__adhoc_insert').
+
+%% TODO: What if some inserts in a batch fail? Error out or continue?
+%% TODO: Transactionality? Retries?
 
 adhoc_insert(Table, Rows) ->
     %% reformat Rows to desired format

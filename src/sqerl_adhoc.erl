@@ -32,57 +32,108 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-%% @doc Generates SELECT SQL depending on Where form.
+%% @doc Generates SELECT SQL.
 %% Returns {SQL, ParameterValues} which can be passed on to be executed.
 %% SQL generated uses parameter place holders so query can be
 %% prepared.
 %%
 %% Note: Validates that parameters are safe.
 %%
-%% Where = all
+%% Clauses = clause list
+%% Clause = Where|Order By|Limit
+%%
+%%
+%% Where Clause
+%% -------------
+%% Form: {where, Where}
+%%
+%% Where = all|undefined
 %% Does not generate a WHERE clause. Matches all records in table.
 %%
-%% 1> select([<<"*">>], <<"users">>, all, qmark).
+%% 1> select([<<"*">>], <<"users">>, [], qmark).
 %% {<<"SELECT * FROM users">>, []}
 %%
-%% Where = {Field, equals, Values}
-%% Generates SELECT ... WHERE Field = ?
+%% Where = {Field, equals|nequals|gt|gte|lt|lte, Value}
+%% Generates SELECT ... WHERE Field =|!=|>|>=|<|<= ?
 %%
-%% 1> select([<<"name">>], <<"users">>, {<<"id">>, equals, 1}, qmark).
+%% 1> select([<<"name">>], <<"users">>, [{where, {<<"id">>, equals, 1}}], qmark).
 %% {<<"SELECT name FROM users WHERE id = ?">>, [1]}
 %%
-%% Where = {Field, in, Values}
-%% Generates SELECT ... IN SQL with parameter strings (not values),
+%% Where = {Field, in|notin, Values}
+%% Generates SELECT ... IN|NOT IN SQL with parameter strings (not values),
 %% which can be prepared and executed.
 %%
-%% 1> select([<<"name">>], <<"users">>, {<<"id">>, in, [1,2,3]}, qmark).
+%% 1> select([<<"name">>], <<"users">>, [{where, {<<"id">>, in, [1,2,3]}}], qmark).
 %% {<<"SELECT name FROM users WHERE id IN (?, ?, ?)">>, [1,2,3]}
+%%
+%% Where = {'and'|'or', WhereList}
+%% Composes WhereList with AND or OR
+%%
+%% 1> select([<<"id">>], <<"t">>, [{where, {'or', [{<<"id">>, lt, 5}, {<<"id">>, gt, 10}]}}]).
+%% {<<"SELECT id FROM t WHERE (id < ? OR id > ?)">>, [5,10]}
+%%
+%%
+%% Order By Clause
+%% ---------------
+%% Form: {orderby, Fields | {Fields, asc|desc}}
+%%
+%% Limit/Offset Clause
+%% --------------------
+%% Form: {limit, Limit} | {limit, {Limit, offset, Offset}}
 %%
 %% ParamStyle is qmark (?, ?, ... for e.g. mysql) 
 %% or dollarn ($1, $2, etc. for e.g. pgsql)
 %%
 -spec select([binary()], binary(), term(), atom()) -> binary().
-select(Columns, Table, all, _ParamStyle) ->
-    %% "all" is an exception because we don't generate a where clause at all.
+select(Columns, Table, Clauses, ParamStyle) ->
     ensure_safe([Columns, Table]),
-    Parts = [<<"SELECT">>, 
-             column_parts(Columns),
-             <<"FROM">>, 
-             Table],
-    SQL = list_to_binary(join(Parts, <<" ">>)),
-    {SQL, []};
-select(Columns, Table, Where, ParamStyle) ->
-    ensure_safe([Columns, Table]),
-    {WhereSQL, Values} = where_parts(Where, ParamStyle),
-    Parts = [<<"SELECT">>, 
-             column_parts(Columns),
-             <<"FROM">>, 
-             Table,
-             <<"WHERE">>,
-             WhereSQL],
-    SQL = list_to_binary(join(Parts, <<" ">>)),
+    {WhereSQL, Values} = where_sql(proplists:get_value(where, Clauses), ParamStyle),
+    OrderBySQL = order_by_sql(proplists:get_value(order_by, Clauses)),
+    LimitSQL = limit_sql(proplists:get_value(limit, Clauses)),
+    Parts = [<<"SELECT ">>, column_parts(Columns),
+             <<" FROM ">>, Table,
+             WhereSQL,
+             OrderBySQL,
+             LimitSQL],
+    SQL = list_to_binary(Parts),
     {SQL, Values}.
 
+%% Returns {SQL, Values}
+%% SQL is clause of SQL query, e.g. <<"WHERE F = ?">>.
+%% Returns empty binary if no where clause is needed.
+where_sql(undefined, _ParamStyle) ->
+    {<<"">>, []};
+where_sql(all, _ParamStyle) ->
+    {<<"">>, []};
+where_sql(Where, ParamStyle) ->
+    {Parts, Values} = where_parts(Where, ParamStyle),
+    SQL = list_to_binary(Parts),
+    {<<" WHERE ", SQL/binary>>, Values}.
+
+%% Returns "ORDER BY ..." SQL
+order_by_sql(undefined) ->
+    <<"">>;
+order_by_sql({Fields, Direction}) ->
+    ensure_safe(Fields),
+    FieldsSQL = list_to_binary(join(Fields, <<", ">>)),
+    DirectionSQL = case Direction of
+                       asc -> <<" ASC">>;
+                       desc -> <<" DESC">>
+                   end,
+    <<" ORDER BY ", FieldsSQL/binary, DirectionSQL/binary>>;
+order_by_sql(Fields) ->
+    order_by_sql({Fields, asc}).
+
+%% Returns LIMIT ... SQL
+limit_sql(undefined) ->
+    <<"">>;
+limit_sql(Limit) when is_integer(Limit) ->
+    LimitBin = list_to_binary(integer_to_list(Limit)),
+    <<" LIMIT ", LimitBin/binary>>;
+limit_sql({Limit, offset, Offset}) when is_integer(Limit), is_integer(Offset) ->
+    LimitBin = list_to_binary(integer_to_list(Limit)),
+    OffsetBin = list_to_binary(integer_to_list(Offset)),
+    <<" LIMIT ", LimitBin/binary, " OFFSET ", OffsetBin/binary>>.
 
 %% @doc Generate UPDATE statement
 %% Update is given under the form of a Row (proplist).
@@ -187,7 +238,9 @@ values_part(NumColumns, Offset, ParamStyle) ->
 column_parts(Columns) -> join(Columns, <<",">>).
 
 %% @doc Generate "WHERE" parts of query.
-%% See select/4 for more details.
+%% Returns {SQL, Values}
+%% SQL is a list of binaries
+%% See select/4 for more details on supported forms.
 where_parts(Where, ParamStyle) ->
     where_parts(Where, ParamStyle, 0).
 
