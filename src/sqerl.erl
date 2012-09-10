@@ -39,6 +39,7 @@
          adhoc_update/3,
          adhoc_insert/2,
          adhoc_insert/3,
+         adhoc_insert/4,
          extract_insert_data/1]).
 
 -include_lib("sqerl.hrl").
@@ -243,30 +244,32 @@ adhoc_update(Table, Row, Where) ->
 %%          [<<"John">>, <<"Doe">>]]}).
 %% {ok, 2}
 %%
--define(BULK_SIZE, 10). %% small for now for test purposes
+-define(DEFAULT_BATCH_SIZE, 100).
 -define(ADHOC_INSERT_STMT_ATOM, '__adhoc_insert').
 
 %% TODO: What if some inserts in a batch fail? Error out or continue?
 %% TODO: Transactionality? Retries?
 
 adhoc_insert(Table, Rows) ->
+    adhoc_insert(Table, Rows, ?DEFAULT_BATCH_SIZE).
+
+adhoc_insert(Table, Rows, BatchSize) ->
     %% reformat Rows to desired format
     {Columns, RowsValues} = extract_insert_data(Rows),
-    adhoc_insert(Table, Columns, RowsValues).
+    adhoc_insert(Table, Columns, RowsValues, BatchSize).
 
-adhoc_insert(Table, Columns, RowsValues) when length(RowsValues) < ?BULK_SIZE,
-                                              length(Columns) > 0 ->
+adhoc_insert(Table, Columns, RowsValues, BatchSize) when length(RowsValues) < BatchSize ->
     %% Do one bulk insert since we have less than BULK_SIZE rows
     SQL = sqerl_adhoc:insert(Table, Columns, length(RowsValues), param_style()),
     execute(SQL, lists:flatten(RowsValues));
 
-adhoc_insert(Table, Columns, RowsValues) when length(RowsValues) >= ?BULK_SIZE ->
+adhoc_insert(Table, Columns, RowsValues, BatchSize) when length(RowsValues) >= BatchSize ->
     %% Prepare a bulk insert statement and execute as many times as needed.
-    SQL = sqerl_adhoc:insert(Table, Columns, ?BULK_SIZE, param_style()),
+    SQL = sqerl_adhoc:insert(Table, Columns, BatchSize, param_style()),
     ok = prepare(?ADHOC_INSERT_STMT_ATOM, SQL),
-    {ok, Count, RemainingRowsValues} = adhoc_prepared_insert(RowsValues),
+    {ok, Count, RemainingRowsValues} = adhoc_prepared_insert(RowsValues, BatchSize),
     ok = unprepare(?ADHOC_INSERT_STMT_ATOM),
-    {ok, RemainingCount} = adhoc_insert(Table, Columns, RemainingRowsValues),
+    {ok, RemainingCount} = adhoc_insert(Table, Columns, RemainingRowsValues, BatchSize),
     {ok, Count + RemainingCount}.
 
 prepare(Name, SQL) ->
@@ -278,14 +281,14 @@ unprepare(Name) ->
     with_connection(F).
 
 %% @doc Insert data with insert statement already prepared
-adhoc_prepared_insert(RowsValues) ->
-    adhoc_prepared_insert(RowsValues, 0).
+adhoc_prepared_insert(RowsValues, BatchSize) ->
+    adhoc_prepared_insert(RowsValues, BatchSize, 0).
 
-adhoc_prepared_insert(RowsValues, CountSoFar) when length(RowsValues) >= ?BULK_SIZE ->
-    {RowsValuesToInsert, Rest} = lists:split(?BULK_SIZE, RowsValues),
+adhoc_prepared_insert(RowsValues, BatchSize, CountSoFar) when length(RowsValues) >= BatchSize ->
+    {RowsValuesToInsert, Rest} = lists:split(BatchSize, RowsValues),
     {ok, Count} = statement(?ADHOC_INSERT_STMT_ATOM, lists:flatten(RowsValuesToInsert)),
-    adhoc_prepared_insert(Rest, CountSoFar + Count);
-adhoc_prepared_insert(RowsValues, CountSoFar) when length(RowsValues) < ?BULK_SIZE ->
+    adhoc_prepared_insert(Rest, BatchSize, CountSoFar + Count);
+adhoc_prepared_insert(RowsValues, BatchSize, CountSoFar) when length(RowsValues) < BatchSize ->
     {ok, CountSoFar, RowsValues}.
 
 %% @doc Extract insert data from Rows (list of proplists).
