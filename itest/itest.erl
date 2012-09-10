@@ -164,6 +164,8 @@ basic_test_() ->
        fun adhoc_insert_many_users/0},
       {<<"Adhoc insert even more users">>,
        fun adhoc_insert_even_more_users/0},
+      {<<"Adhoc insert rows">>,
+       fun adhoc_insert_rows/0},
 
       {<<"Tolerates bounced server">>,
        {timeout, 10,
@@ -507,10 +509,10 @@ adhoc_insert() ->
                <<"active">>],
     Data = [[<<"Joe1">>, <<"Smith">>, 17, true],
             [<<"Joe2">>, <<"Anderson">>, 23, false]],
-    adhoc_insert_delete_test(Table, Columns, Data).
+    adhoc_insert_delete_test(Table, Columns, Data, 10).
 
-adhoc_insert_delete_test(Table, Columns, Data) ->
-    {ok, InsertCount} = sqerl:adhoc_insert(Table, Columns, Data),
+adhoc_insert_delete_test(Table, Columns, Data, BatchSize) ->
+    {ok, InsertCount} = sqerl:adhoc_insert(Table, Columns, Data, BatchSize),
     %% verify data was inserted correctly -- relies on first field
     %% values in test being unique.
     Field = lists:nth(1, Columns),
@@ -532,7 +534,7 @@ adhoc_insert_many_users() ->
                <<"last_name">>],
     F = fun(I) -> list_to_binary(integer_to_list(I)) end,
     Data = [[F(I), F(I)] || I <- lists:seq(1, 35)],
-    adhoc_insert_delete_test(Table, Columns, Data).
+    adhoc_insert_delete_test(Table, Columns, Data, 10).
 
 adhoc_insert_even_more_users() ->
     Table = <<"users">>,
@@ -540,4 +542,19 @@ adhoc_insert_even_more_users() ->
                <<"last_name">>],
     F = fun(I) -> list_to_binary(integer_to_list(I)) end,
     Data = [[F(I), F(I)] || I <- lists:seq(1000, 2004)],
-    adhoc_insert_delete_test(Table, Columns, Data).
+    adhoc_insert_delete_test(Table, Columns, Data, 100).
+
+adhoc_insert_rows() ->
+    Table = <<"users">>,
+    F = fun(I) -> list_to_binary(integer_to_list(I)) end,
+    Rows = [[{<<"first_name">>, F(I)}, {<<"last_name">>, F(I)}] || I <- lists:seq(3000, 4004)],
+    {ok, InsertCount} = sqerl:adhoc_insert(Table, Rows, 100),
+    %% verify data was inserted correctly -- relies on first field
+    Where = {<<"first_name">>, in, [F(I) || I <- lists:seq(3000, 4004)]},
+    {ok, ReturnedRows} = sqerl:adhoc_select([<<"first_name">>, <<"last_name">>], Table, Where),
+    %% clean up before asserts
+    {ok, DeleteCount} = sqerl:adhoc_delete(Table, Where),
+    %% now verify...
+    ?assertEqual(length(Rows), InsertCount),
+    ?assertEqual(Rows, ReturnedRows),
+    ?assertEqual(length(Rows), DeleteCount).
