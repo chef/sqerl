@@ -194,7 +194,8 @@ adhoc_select(Columns, Table, Where) ->
 -spec adhoc_select([binary()], binary(), term(), list()) ->
           {ok, list()} | {error, any()}.
 adhoc_select(Columns, Table, Where, Clauses) ->
-    {SQL, Values} = sqerl_adhoc:select(Columns, Table, [{where, Where}|Clauses], param_style()),
+    {SQL, Values} = sqerl_adhoc:select(Columns, Table, 
+                      [{where, Where}|Clauses], param_style()),
     execute(SQL, Values).
 
 %% @doc Adhoc delete.
@@ -270,7 +271,7 @@ bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= Batc
     SQL = sqerl_adhoc:insert(Table, Columns, BatchSize, param_style()),
     PrepInsertUnprepare = fun(Cn) ->
         ok = sqerl_client:prepare(Cn, ?ADHOC_INSERT_STMT_ATOM, SQL),
-        {ok, Count, RemainingRowsValues} = adhoc_prepared_insert(Cn, RowsValues, BatchSize),
+        {ok, Count, RemainingRowsValues} = adhoc_prepared_insert(Cn, RowsValues, NumRows, BatchSize),
         ok = sqerl_client:unprepare(Cn, ?ADHOC_INSERT_STMT_ATOM),
         {ok, Count, RemainingRowsValues}
     end,
@@ -281,14 +282,14 @@ bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= Batc
 
 
 %% @doc Insert data with insert statement already prepared
-adhoc_prepared_insert(Cn, RowsValues, BatchSize) ->
-    adhoc_prepared_insert(Cn, RowsValues, BatchSize, 0).
+adhoc_prepared_insert(Cn, RowsValues, NumRows, BatchSize) ->
+    adhoc_prepared_insert(Cn, RowsValues, NumRows, BatchSize, 0).
 
-adhoc_prepared_insert(Cn, RowsValues, BatchSize, CountSoFar) when length(RowsValues) >= BatchSize ->
+adhoc_prepared_insert(Cn, RowsValues, NumRows, BatchSize, CountSoFar) when NumRows >= BatchSize ->
     {RowsValuesToInsert, Rest} = lists:split(BatchSize, RowsValues),
     {ok, Count} = sqerl_client:execute(Cn, ?ADHOC_INSERT_STMT_ATOM, lists:flatten(RowsValuesToInsert)),
-    adhoc_prepared_insert(Cn, Rest, BatchSize, CountSoFar + Count);
-adhoc_prepared_insert(_Cn, RowsValues, BatchSize, CountSoFar) when length(RowsValues) < BatchSize ->
+    adhoc_prepared_insert(Cn, Rest, NumRows - Count, BatchSize, CountSoFar + Count);
+adhoc_prepared_insert(_Cn, RowsValues, NumRows, BatchSize, CountSoFar) when NumRows < BatchSize ->
     {ok, CountSoFar, RowsValues}.
 
 %% @doc Extract insert data from Rows (list of proplists).
