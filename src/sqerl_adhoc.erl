@@ -26,6 +26,8 @@
          insert/4,
          update/4]).
 
+-include_lib("sqerl.hrl").
+
 -ifdef(TEST).
 -compile([export_all]).
 -endif.
@@ -84,7 +86,7 @@
 %% ParamStyle is qmark (?, ?, ... for e.g. mysql) 
 %% or dollarn ($1, $2, etc. for e.g. pgsql)
 %%
--spec select([binary()], binary(), term(), atom()) -> binary().
+%%-spec select([sql_word()], sql_word(), [] | [sql_clause()], atom()) -> {binary(), list()}.
 select(Columns, Table, Clauses, ParamStyle) ->
     ensure_safe([Columns, Table]),
     {WhereSQL, Values} = where_sql(proplists:get_value(where, Clauses), ParamStyle),
@@ -143,7 +145,7 @@ limit_sql({Limit, offset, Offset}) when is_integer(Limit), is_integer(Offset) ->
 %% 1> update(<<"users">>, [{<<"last_name">>, <<"Toto">>}], {<<"id">>, equals, 1}, qmark).
 %% {<<"UPDATE users SET last_name = ? WHERE id = ?">>, [<<"Toto">>, 1]}
 %%
--spec update(binary(), list(), any(), atom()) -> {binary(), list()}.
+-spec update(sql_word(), row(), sql_clause(), atom()) -> {binary(), list()}.
 update(Table, Row, Where, ParamStyle) ->
     ensure_safe(Table),
     {SetSQL, SetValues} = set_parts(Row, ParamStyle),
@@ -180,7 +182,7 @@ set_parts([{Field, Value}|T], ParamStyle, ParamPosOffset, PartsAcc, ValuesAcc) -
 %% 1> delete(<<"users">>, {<<"id">>, equals, 1}, qmark).
 %% {<<"DELETE FROM users WHERE id = ?">>, [1]}
 %%
--spec delete(binary(), any(), atom()) -> binary().
+-spec delete(sql_word(), sql_clause(), atom()) -> {binary(), [any()]}.
 delete(Table, Where, ParamStyle) ->
     ensure_safe(Table),
     {WhereSQL, Values} = where_parts(Where, ParamStyle),
@@ -197,7 +199,7 @@ delete(Table, Where, ParamStyle) ->
 %% 1> insert(<<"users">>, [<<"id">>, <<"name">>], 3, qmark).
 %% <<"INSERT INTO users (name) VALUES (?,?),(?,?),(?,?)">>
 %%
--spec insert(binary(), [binary()], integer(), atom()) -> binary().
+%%-spec insert(sql_word(), [sql_word()], integer(), atom()) -> binary().
 insert(Table, Columns, NumRows, ParamStyle) when
     NumRows > 0,
     length(Columns) > 0 ->
@@ -213,7 +215,7 @@ insert(Table, Columns, NumRows, ParamStyle) when
     list_to_binary(lists:flatten(Query)).
 
 %% @doc Generate values parts of insert query
--spec values_parts(integer(), integer(), atom()) -> [binary()].
+%%-spec values_parts(integer(), integer(), atom()) -> [binary()].
 values_parts(NumColumns, NumRows, ParamStyle) ->
     values_parts(NumColumns, NumRows, ParamStyle, 0).
 

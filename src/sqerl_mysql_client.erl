@@ -24,6 +24,7 @@
 
 -behaviour(sqerl_client).
 
+-include_lib("sqerl.hrl").
 -include_lib("emysql/include/emysql.hrl").
 
 %% sqerl_client callbacks
@@ -40,7 +41,7 @@
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
 %% See sqerl_adhoc:placeholder
--spec sql_parameter_style() -> atom().
+%%-spec sql_parameter_style() -> atom().
 sql_parameter_style() -> qmark.
 
 %% @doc Prepare a statement
@@ -63,7 +64,7 @@ unprepare(_Name, _Args, #state{cn=_Cn}=State) ->
 
 %% The MySQL driver supports a general execute
 %% for ad-hoc queries or prepared statements.
--spec execute(atom() | binary(), [any()], term()) -> {ok, any()} | {error, any()}.
+-spec execute(StatementOrQuery :: sql_query(), Parameters :: [any()], State :: term()) -> {sql_result(), #state{}}.
 execute(NameOrQuery, Args, #state{cn=Cn}=State) ->
     NArgs = input_transforms(Args, State),
     case catch emysql_conn:execute(Cn, NameOrQuery, NArgs) of

@@ -23,6 +23,7 @@
 
 -behaviour(sqerl_client).
 
+-include_lib("sqerl.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("epgsql/include/pgsql.hrl").
 
@@ -45,7 +46,6 @@
          stmt :: any() } ).
 
 -type connection() :: pid().
--type state() :: any().
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
@@ -63,9 +63,11 @@
 %%
 %% Row:  proplist e.g. [{<<"id">>, 1}, {<<"name">>, <<"Toto">>}]
 %%
--spec execute(binary() | atom(), [any()], any()) ->
-    {ok, [[{atom(), any()}]] | integer()} | {error, any()}.
-execute(SQL, Parameters, #state{cn=Cn}=State) when is_binary(SQL) ->
+-spec execute(StatementOrQuery :: sql_query(), 
+              Parameters :: [any()], State :: term()) -> 
+          {sql_result(), #state{}}.
+execute(SQL, Parameters, #state{cn=Cn}=State) 
+  when is_binary(SQL) ->
     TParameters = input_transforms(Parameters),
     Result = pgsql:equery(Cn, SQL, TParameters),
     case Result of
@@ -81,7 +83,9 @@ execute(SQL, Parameters, #state{cn=Cn}=State) when is_binary(SQL) ->
             {{error, {unexpected_result, Other}}, State}
     end;
 %% Prepared statement execution
-execute(StatementName, Parameters, #state{cn=Cn, statements=Statements, ctrans=CTrans}=State) when is_atom(StatementName) ->
+execute(StatementName, Parameters, 
+        #state{cn=Cn, statements=Statements, ctrans=CTrans}=State) 
+  when is_atom(StatementName) ->
     PrepStmt = dict:fetch(StatementName, Statements),
     Stmt = PrepStmt#prepared_statement.stmt,
     TParameters = input_transforms(Parameters, PrepStmt, State),
@@ -106,7 +110,6 @@ execute(StatementName, Parameters, #state{cn=Cn, statements=Statements, ctrans=C
     Result.
 
 %% @doc Prepare a new statement.
--spec prepare(atom(), binary() | string(), state()) -> {ok, state()}.
 prepare(Name, SQL, #state{cn=Cn, statements=Statements}=State) ->
     {ok, UpdatedStatements} = load_statement(Cn, Name, SQL, Statements),
     UpdatedState = State#state{statements=UpdatedStatements},
@@ -118,7 +121,7 @@ prepare(Name, SQL, #state{cn=Cn, statements=Statements}=State) ->
 unprepare(Name, _, State) ->
     unprepare(Name, State).
 
--spec unprepare(atom(), state()) -> {ok, state()}.
+-spec unprepare(atom(), #state{}) -> {ok, #state{}}.
 unprepare(Name, #state{cn=Cn, statements=Statements}=State) ->
     {ok, UpdatedStatements} = unload_statement(Cn, Name, Statements),
     UpdatedState = State#state{statements=UpdatedStatements},
@@ -169,7 +172,7 @@ init(Config) ->
 
 %% Internal functions
 
--spec load_statements(connection(), [tuple()], dict()) -> {ok, dict()} |  {error, any()}.
+%%-spec load_statements(connection(), [tuple()], dict()) -> {ok, dict()} |  {error, any()}.
 load_statements(_Connection, [], Dict) ->
     {ok, Dict};
 load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
@@ -180,7 +183,7 @@ load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
 
 %% @doc Load a statement: prepare and store in statement state dict.
 %% Returns {ok, UpdatedDict} or {error, ErrorInfo}
--spec load_statement(connection(), atom(), binary(), dict()) -> {ok, dict()}.
+%%-spec load_statement(connection(), atom(), binary(), dict()) -> {ok, dict()} | {error, term()}.
 load_statement(Connection, Name, SQL, Dict) ->
     case prepare_statement(Connection, Name, SQL) of
         {ok, {Name, P}} ->
@@ -195,7 +198,7 @@ load_statement(Connection, Name, SQL, Dict) ->
 %% @doc Prepare a statement on the connection. Does not manage
 %% state.
 -spec prepare_statement(connection(), atom(), binary()) ->
-    {ok, {atom(), term()}} | {error, term()}.
+    {ok, {StatementName :: atom(), #prepared_statement{}}} | {error, term()}.
 prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
     case pgsql:parse(Connection, atom_to_list(Name), SQL, []) of
         {ok, Statement} ->
@@ -236,7 +239,6 @@ unprepare_statement(Connection, Name) when is_atom(Name) ->
 %%%
 
 %% @doc Format results of a query to expected standard (list of proplists).
--spec format_result([term()], [term()]) -> any().
 format_result(Columns, Rows) ->
     %% Results from simple queries return Columns, Rows
     %% Columns are records
@@ -264,7 +266,7 @@ format_result_test() ->
 %% Result packet can be from a prepared statement execution
 %% (column data is embedded in prepared statement record),
 %% or from a simple query
--spec unpack_rows(any(), [[any()]]) -> [[{any(), any()}]].
+-spec unpack_rows(#prepared_statement{} | [sql_word()], [tuple()]) -> rows().
 unpack_rows(#prepared_statement{output_fields=ColumnData}, Rows) ->
     %% Takes in a prepared statement record that
     %% holds column data that holds column names
@@ -281,7 +283,7 @@ unpack_rows(ColumnNames, Rows) ->
 %% extract_column_names({result_column_data, Columns}).
 %% With column data from a prepared statement, call as
 %% extract_column_names({prepared_column_data, ColumnData}).
--spec extract_column_names({atom(), [tuple()]}) -> [any()].
+%%-spec extract_column_names({atom(), [tuple()]}) -> [any()].
 extract_column_names({result_column_data, Columns}) ->
     %% For column data coming from a query result
     [Name || {column, Name, _Type, _Size, _Modifier, _Format} <- Columns];
