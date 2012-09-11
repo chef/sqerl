@@ -133,7 +133,7 @@ execute_statement(StmtName, StmtArgs, XformName, XformArgs) ->
 
 %% @doc Execute query or statement with no parameters
 %% See execute/2 for return info.
--spec execute(binary() | string() | atom()) -> {ok, any()} | {error, any()}.
+-spec execute(sql_query() | atom()) -> sql_result().
 execute(QueryOrStatement) ->
     execute(QueryOrStatement, []).
 
@@ -148,7 +148,7 @@ execute(QueryOrStatement) ->
 %%
 %% Row is a proplist, e.g. [{<<"id">>, 1}, {<<"name">>, <<"John">>}]
 %%
--spec execute(binary() | string() | atom(), [any()]) -> {ok, any()} | {error, any()}.
+-spec execute(sql_query() | atom(), [] | [term()]) -> sql_result().
 execute(QueryOrStatement, Parameters) ->
     F = fun(Cn) -> sqerl_client:execute(Cn, QueryOrStatement, Parameters) end,
     with_db(F).
@@ -186,13 +186,11 @@ execute(QueryOrStatement, Parameters) ->
 %% See itest:adhoc_select_complex/0 for an example of a complex query
 %% that uses several clauses.
 %%
--spec adhoc_select([binary()], binary(), term()) ->
-    {ok, list()} | {error, any()}.
+%% -spec adhoc_select([binary() | string()], binary() | string(), sql_clause()) -> sql_result().
 adhoc_select(Columns, Table, Where) ->
     adhoc_select(Columns, Table, Where, []).
 
--spec adhoc_select([binary()], binary(), term(), list()) ->
-          {ok, list()} | {error, any()}.
+%% -spec adhoc_select([binary() | string()], binary() | string(), sql_clause(), [] | [sql_clause]) -> sql_result().
 adhoc_select(Columns, Table, Where, Clauses) ->
     {SQL, Values} = sqerl_adhoc:select(Columns, Table, 
                       [{where, Where}|Clauses], param_style()),
@@ -271,15 +269,14 @@ bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= Batc
     SQL = sqerl_adhoc:insert(Table, Columns, BatchSize, param_style()),
     PrepInsertUnprepare = fun(Cn) ->
         ok = sqerl_client:prepare(Cn, ?ADHOC_INSERT_STMT_ATOM, SQL),
-        {ok, Count, RemainingRowsValues} = adhoc_prepared_insert(Cn, RowsValues, NumRows, BatchSize),
-        ok = sqerl_client:unprepare(Cn, ?ADHOC_INSERT_STMT_ATOM),
-        {ok, Count, RemainingRowsValues}
+        try adhoc_prepared_insert(Cn, RowsValues, NumRows, BatchSize)
+        after sqerl_client:unprepare(Cn, ?ADHOC_INSERT_STMT_ATOM)
+        end
     end,
     {ok, Count, RemainingRowsValues} = with_db(PrepInsertUnprepare),
     RemainingNumRows = NumRows - Count,
     {ok, RemainingCount} = bulk_insert(Table, Columns, RemainingRowsValues, RemainingNumRows, BatchSize),
     {ok, Count + RemainingCount}.
-
 
 %% @doc Insert data with insert statement already prepared
 adhoc_prepared_insert(Cn, RowsValues, NumRows, BatchSize) ->

@@ -21,6 +21,8 @@
 
 -module(sqerl_client).
 
+-include_lib("sqerl.hrl").
+
 -behaviour(gen_server).
 
 -define(LOG_STATEMENT(Name, Args), case application:get_env(sqerl, log_statements) of
@@ -61,23 +63,23 @@
          terminate/2,
          code_change/3]).
 
-%% behavior callback
--export([behaviour_info/1]).
-
 -record(state, {cb_mod,
                 cb_state,
                 timeout}).
 
-%% @hidden
-behaviour_info(callbacks) ->
-    [{init, 1},
-     {prepare, 3},
-     {unprepare, 3},
-     {execute, 3},
-     {is_connected, 1},
-     {sql_parameter_style, 0}];
-behaviour_info(_) ->
-    undefined.
+%% behavior callback definitions
+-callback init(Config :: row()) -> 
+    term().
+-callback prepare(StatementName :: atom(), SQL :: binary(), State :: term()) -> 
+    {ok, State :: term()}.
+-callback unprepare(StatementName :: atom(), _, State :: term()) -> 
+    {ok, State :: term()}.
+-callback execute(StatementOrQuery :: sql_query(), Parameters :: [any()], State :: term()) -> 
+    {sql_result(), State :: term()}.
+-callback is_connected(State :: term()) -> 
+    {true, State :: term()} | false.
+-callback sql_parameter_style() -> 
+    atom().
 
 %% @doc Prepare a statement
 %%
@@ -92,7 +94,7 @@ unprepare(Cn, Name) when is_pid(Cn), is_atom(Name) ->
 %% @doc Execute SQL or prepared statement.
 %% See execute/3 for return values.
 -spec execute(pid(), binary() | atom()) -> 
-          {ok, [any()]} | {error, any()}.
+          {ok, [[tuple()]]} | {error, atom() | tuple()}.
 execute(Cn, QueryOrStatement) ->
     execute(Cn, QueryOrStatement, []).
 
@@ -102,7 +104,7 @@ execute(Cn, QueryOrStatement) ->
 %% - {ok, Count}
 %% - {error, ErrorInfo}
 -spec execute(pid(), binary() | atom(), [any()]) -> 
-          {ok, [any()]} | {error, any()}.
+          {ok, [[tuple()]]} | {error, atom() | tuple()}.
 execute(Cn, QueryOrStatement, Parameters) when is_pid(Cn) ->
     gen_server:call(Cn, {execute, QueryOrStatement, Parameters}, infinity).
 
@@ -200,19 +202,19 @@ read_statements(Path) when is_list(Path) ->
 %%%
 
 %% @doc Returns SQL parameter style atom, e.g. qmark, dollarn.
--spec sql_parameter_style() -> atom().
+%%-spec sql_parameter_style() -> atom().
 sql_parameter_style() ->
     Mod = drivermod(),
     Mod:sql_parameter_style().
 
 %% @doc Returns DB driver module atom according to environment.
--spec drivermod() -> atom().
+%%-spec drivermod() -> atom().
 drivermod() -> 
     drivermod(dbtype()).
 
 %% @doc Returns DB driver module atom for given DB type atom 
 %% (e.g. pgsql, mysql).
--spec drivermod(atom()) -> atom().
+%%-spec drivermod(atom()) -> atom().
 drivermod(DBType) ->
     case DBType of
         pgsql -> sqerl_pgsql_client;
