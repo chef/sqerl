@@ -46,8 +46,6 @@
          start_link/1,
          prepare/3,
          unprepare/2,
-         exec_prepared_select/3,
-         exec_prepared_statement/3,
          execute/2,
          execute/3,
          close/1,
@@ -76,25 +74,10 @@ behaviour_info(callbacks) ->
      {prepare, 3},
      {unprepare, 3},
      {execute, 3},
-     {exec_prepared_statement, 3},
-     {exec_prepared_select, 3},
      {is_connected, 1},
      {sql_parameter_style, 0}];
 behaviour_info(_) ->
     undefined.
-
-%%% A select statement returns a list of tuples, or an error.
-%%% The prepared statement to use is named by an atom.
--spec exec_prepared_select(pid(), atom(), [any()]) -> [] | [{any(), any()}] | {error, any()}.
-exec_prepared_select(Cn, Name, Args) when is_pid(Cn),
-                                          is_atom(Name) ->
-    gen_server:call(Cn, {exec_prepared_select, Name, Args}, infinity).
-
-%%% Unlike a select statement, this just returns an integer or an error.
--spec exec_prepared_statement(pid(), atom(), []) -> integer() | {error, any()}.
-exec_prepared_statement(Cn, Name, Args) when is_pid(Cn),
-                                             is_atom(Name) ->
-    gen_server:call(Cn, {exec_prepared_statement, Name, Args}, infinity).
 
 %% @doc Prepare a statement
 %%

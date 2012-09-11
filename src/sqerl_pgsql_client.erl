@@ -29,8 +29,6 @@
 %% sqerl_client callbacks
 -export([init/1,
          execute/3,
-         exec_prepared_statement/3,
-         exec_prepared_select/3,
          is_connected/1,
          sql_parameter_style/0,
          prepare/3,
@@ -82,10 +80,30 @@ execute(SQL, Parameters, #state{cn=Cn}=State) when is_binary(SQL) ->
         Other ->
             {{error, {unexpected_result, Other}}, State}
     end;
-%% Statement execution
-execute(StatementName, Parameters, State) when is_atom(StatementName) ->
-    %% Use existing function for prepared statements
-    exec_prepared_select(StatementName, Parameters, State).
+%% Prepared statement execution
+execute(StatementName, Parameters, #state{cn=Cn, statements=Statements, ctrans=CTrans}=State) when is_atom(StatementName) ->
+    PrepStmt = dict:fetch(StatementName, Statements),
+    Stmt = PrepStmt#prepared_statement.stmt,
+    TParameters = input_transforms(Parameters, PrepStmt, State),
+    ok = pgsql:bind(Cn, Stmt, TParameters),
+    %% Note: we might get partial results here for big selects!
+    Result =
+        try
+            case pgsql:execute(Cn, Stmt) of
+                {ok, Count} when is_integer(Count) ->
+                    commit(Cn, Count, State);
+                {ok, RowData} when is_list(RowData) ->
+                    Rows = unpack_rows(PrepStmt, RowData),
+                    TRows = sqerl_transformers:by_column_name(Rows, CTrans),
+                    {{ok, TRows}, State};
+                Other ->
+                    rollback(Cn, {error, Other}, State)
+            end
+        catch
+            _:X ->
+                rollback(Cn, {error, X}, State)
+        end,
+    Result.
 
 %% @doc Prepare a new statement.
 -spec prepare(atom(), binary() | string(), state()) -> {ok, state()}.
@@ -110,44 +128,6 @@ unprepare(Name, #state{cn=Cn, statements=Statements}=State) ->
 %% See sqerl_sql:placedholder
 sql_parameter_style() -> dollarn.
 
-
--spec exec_prepared_select(atom(), [], state()) -> {{ok, [[tuple()]]} | {error, any()}, state()}.
-exec_prepared_select(Name, Args, #state{cn=Cn, statements=Statements, ctrans=CTrans}=State) ->
-    PrepStmt = dict:fetch(Name, Statements),
-    Stmt = PrepStmt#prepared_statement.stmt,
-    NArgs = input_transforms(Args, PrepStmt, State),
-    ok = pgsql:bind(Cn, Stmt, NArgs),
-    %% Note: we might get partial results here for big selects!
-    Result = pgsql:execute(Cn, Stmt),
-    case Result of
-        {ok, RowData} ->
-            Rows = unpack_rows(PrepStmt, RowData),
-            TRows = sqerl_transformers:by_column_name(Rows, CTrans),
-            {{ok, TRows}, State};
-        Result ->
-            {{error, Result}, State}
-    end.
-
--spec exec_prepared_statement(atom(), [], any()) -> {{ok, integer()} | {error, any()}, state()}.
-exec_prepared_statement(Name, Args, #state{cn=Cn, statements=Statements}=State) ->
-    PrepStmt = dict:fetch(Name, Statements),
-    Stmt = PrepStmt#prepared_statement.stmt,
-    NArgs = input_transforms(Args, PrepStmt, State),
-    ok = pgsql:bind(Cn, Stmt, NArgs),
-    %% Note: we might get partial results here for big selects!
-    Rv =
-        try
-            case pgsql:execute(Cn, Stmt) of
-                {ok, Count} ->
-                    commit(Cn, Count, State);
-                Result ->
-                    rollback(Cn, {error, Result}, State)
-            end
-        catch
-            _:X ->
-                rollback(Cn, {error, X}, State)
-        end,
-    Rv.
 
 is_connected(#state{cn=Cn}=State) ->
     case catch pgsql:squery(Cn, ?PING_QUERY) of

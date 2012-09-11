@@ -57,13 +57,19 @@ checkout() ->
 checkin(Connection) ->
     pooler:return_member(Connection).
 
+%% @doc Call function with a DB connection.
+%% Function must take one DB connection argument.
+%% It should return {ok, Results} or {error, ErrorInfo}.
+%% Call will be retried where possible (e.g. DB connection was closed).
+%% ErrorInfo is no_connections if all attempts have failed, or whatever
+%% is provided by the DB client.
 with_db(Call) ->
     with_db(Call, ?MAX_RETRIES).
 
 with_db(_Call, 0) ->
     {error, no_connections};
 with_db(Call, Retries) ->
-    case pooler:take_member("sqerl") of
+    case checkout() of
         error_no_members ->
             {error, no_connections};
         error_no_pool ->
@@ -74,12 +80,14 @@ with_db(Call, Retries) ->
             %% process). So a crash here will not leak a connection.
             case Call(Cn) of
                 {error, closed} ->
-                    %% TODO: sqerl_client:close(Cn)?
+                    sqerl_client:close(Cn),
                     with_db(Call, Retries - 1);
                 Result ->
-                    pooler:return_member(Cn),
+                    checkin(Cn),
                     Result
-            end
+            end;
+        Other ->
+            {error, Other}
     end.
 
 select(StmtName, StmtArgs) ->
@@ -91,8 +99,7 @@ select(StmtName, StmtArgs, XformName) ->
     select(StmtName, StmtArgs, XformName, []).
 
 select(StmtName, StmtArgs, XformName, XformArgs) ->
-    case execute_statement(StmtName, StmtArgs, XformName, XformArgs,
-                           exec_prepared_select) of
+    case execute_statement(StmtName, StmtArgs, XformName, XformArgs) of
         {ok, []} ->
             {ok, none};
         {ok, Results} ->
@@ -108,8 +115,7 @@ statement(StmtName, StmtArgs, XformName) ->
     statement(StmtName, StmtArgs, XformName, []).
 
 statement(StmtName, StmtArgs, XformName, XformArgs) ->
-    case execute_statement(StmtName, StmtArgs, XformName, XformArgs,
-                           exec_prepared_statement) of
+    case execute_statement(StmtName, StmtArgs, XformName, XformArgs) of
         {ok, 0} ->
             {ok, none};
         {ok, N} when is_number(N) ->
@@ -118,20 +124,12 @@ statement(StmtName, StmtArgs, XformName, XformArgs) ->
             parse_error(Reason)
     end.
 
-execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
+execute_statement(StmtName, StmtArgs, XformName, XformArgs) ->
     Xformer = erlang:apply(sqerl_transformers, XformName, XformArgs),
-    F = fun(Cn) ->
-                case sqerl_client:Executor(Cn, StmtName, StmtArgs) of
-                    {ok, Results} ->
-                        Xformer(Results);
-                    {error, closed} ->
-                        sqerl_client:close(Cn),
-                        {error, closed};
-                    Error ->
-                        Error
-                end end,
-    with_db(F).
-
+    case execute(StmtName, StmtArgs) of
+        {ok, Results} -> Xformer(Results);
+        Other         -> Other
+    end.
 
 %% @doc Execute query or statement with no parameters
 %% See execute/2 for return info.
@@ -153,7 +151,7 @@ execute(QueryOrStatement) ->
 -spec execute(binary() | string() | atom(), [any()]) -> {ok, any()} | {error, any()}.
 execute(QueryOrStatement, Parameters) ->
     F = fun(Cn) -> sqerl_client:execute(Cn, QueryOrStatement, Parameters) end,
-    with_connection(F).
+    with_db(F).
 
 %% @doc Execute an adhoc query: adhoc_select(Columns, Table, Where)
 %% or adhoc_select(Columns, Table, Where, Clauses)
@@ -266,29 +264,26 @@ adhoc_insert(Table, Columns, RowsValues, BatchSize) when length(RowsValues) < Ba
 adhoc_insert(Table, Columns, RowsValues, BatchSize) when length(RowsValues) >= BatchSize ->
     %% Prepare a bulk insert statement and execute as many times as needed.
     SQL = sqerl_adhoc:insert(Table, Columns, BatchSize, param_style()),
-    ok = prepare(?ADHOC_INSERT_STMT_ATOM, SQL),
-    {ok, Count, RemainingRowsValues} = adhoc_prepared_insert(RowsValues, BatchSize),
-    ok = unprepare(?ADHOC_INSERT_STMT_ATOM),
+    PrepInsertUnprepare = fun(Cn) ->
+        ok = sqerl_client:prepare(Cn, ?ADHOC_INSERT_STMT_ATOM, SQL),
+        {ok, Count, RemainingRowsValues} = adhoc_prepared_insert(Cn, RowsValues, BatchSize),
+        ok = sqerl_client:unprepare(Cn, ?ADHOC_INSERT_STMT_ATOM),
+        {ok, Count, RemainingRowsValues}
+    end,
+    {ok, Count, RemainingRowsValues} = with_db(PrepInsertUnprepare),
     {ok, RemainingCount} = adhoc_insert(Table, Columns, RemainingRowsValues, BatchSize),
     {ok, Count + RemainingCount}.
 
-prepare(Name, SQL) ->
-    F = fun(Cn) -> sqerl_client:prepare(Cn, Name, SQL) end,
-    with_connection(F).
-
-unprepare(Name) ->
-    F = fun(Cn) -> sqerl_client:unprepare(Cn, Name) end,
-    with_connection(F).
 
 %% @doc Insert data with insert statement already prepared
-adhoc_prepared_insert(RowsValues, BatchSize) ->
-    adhoc_prepared_insert(RowsValues, BatchSize, 0).
+adhoc_prepared_insert(Cn, RowsValues, BatchSize) ->
+    adhoc_prepared_insert(Cn, RowsValues, BatchSize, 0).
 
-adhoc_prepared_insert(RowsValues, BatchSize, CountSoFar) when length(RowsValues) >= BatchSize ->
+adhoc_prepared_insert(Cn, RowsValues, BatchSize, CountSoFar) when length(RowsValues) >= BatchSize ->
     {RowsValuesToInsert, Rest} = lists:split(BatchSize, RowsValues),
-    {ok, Count} = statement(?ADHOC_INSERT_STMT_ATOM, lists:flatten(RowsValuesToInsert)),
-    adhoc_prepared_insert(Rest, BatchSize, CountSoFar + Count);
-adhoc_prepared_insert(RowsValues, BatchSize, CountSoFar) when length(RowsValues) < BatchSize ->
+    {ok, Count} = sqerl_client:execute(Cn, ?ADHOC_INSERT_STMT_ATOM, lists:flatten(RowsValuesToInsert)),
+    adhoc_prepared_insert(Cn, Rest, BatchSize, CountSoFar + Count);
+adhoc_prepared_insert(_Cn, RowsValues, BatchSize, CountSoFar) when length(RowsValues) < BatchSize ->
     {ok, CountSoFar, RowsValues}.
 
 %% @doc Extract insert data from Rows (list of proplists).
@@ -313,41 +308,6 @@ extract_insert_data(Rows) ->
 param_style() -> sqerl_client:sql_parameter_style().
 
 
-%% @doc Call function with a DB connection.
-%% Function must take one DB connection argument.
-%% It should return {ok, Results} or {error, ErrorInfo}.
-%% Call will be retried where possible (e.g. DB connection was closed).
-%% Returns {ok, Results} or {error, ErrorInfo}.
-%% ErrorInfo is no_connection if all attempts have failed, or whatever
-%% is provided by the DB client.
-%%
-%% TODO: yes, this is almost the same as with_db. Both will be merged
-%% down the road after clarifying some things...
-with_connection(F) ->
-    with_connection(F, ?MAX_RETRIES).
-with_connection(_F, 0) ->
-    {error, no_connection};
-with_connection(F, Retries) ->
-    case checkout() of
-        Cn when is_pid(Cn) ->
-            %% We don't need a try/catch around Call(Cn) because pooler links both the
-            %% connection and the process that has the connection checked out (this
-            %% process). So a crash here will not leak a connection.
-            case F(Cn) of
-                %% The only case we retry: a 'closed' error
-                {error, closed} ->
-                    sqerl_client:close(Cn), %% should it be closed?
-                    %% TODO: the connection is bad and not checked back in.
-                    %% How does the pooler handle that?
-                    with_connection(F, Retries - 1);
-                Result ->
-                    checkin(Cn),
-                    Result
-            end;
-        Other ->
-            {error, Other}
-    end.
-
 %% @doc Utility for generating specific message tuples from database-specific error
 %% messages.  The 1-argument form determines which database is being used by querying
 %% Sqerl's configuration at runtime, while the 2-argument form takes the database type as a
@@ -364,6 +324,8 @@ parse_error(Reason) ->
                         | {error, {error, error, _, _, _}}) -> sqerl_error().
 parse_error(_DbType, no_connections) ->
     {error, no_connections};
+parse_error(_DbType, error_no_members) ->
+    {error, error_no_members};
 parse_error(_DbType, {no_pool, Type}) ->
     {error, {no_pool, Type}};
 

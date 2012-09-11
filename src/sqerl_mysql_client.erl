@@ -31,8 +31,6 @@
          prepare/3,
          unprepare/3,
          execute/3,
-         exec_prepared_statement/3,
-         exec_prepared_select/3,
          is_connected/1,
          sql_parameter_style/0]).
 
@@ -94,9 +92,6 @@ execute(NameOrQuery, Args, #state{cn=Cn}=State) ->
         [#result_packet{}=Result, #ok_packet{}] ->
             process_result_packet(Result, State)
     end.
-
-exec_prepared_select(Name, Args, State)    -> execute(Name, Args, State).
-exec_prepared_statement(Name, Args, State) -> execute(Name, Args, State).
 
 is_connected(#state{cn=Cn}=State) ->
     case catch emysql_conn:execute(Cn, ?PING_QUERY, []) of
