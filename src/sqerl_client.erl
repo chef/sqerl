@@ -94,7 +94,7 @@ exec_prepared_select(Cn, Name, Args) when is_pid(Cn),
 -spec exec_prepared_statement(pid(), atom(), []) -> integer() | {error, any()}.
 exec_prepared_statement(Cn, Name, Args) when is_pid(Cn),
                                              is_atom(Name) ->
-    gen_server:call(Cn, {exec_prepared_stmt, Name, Args}, infinity).
+    gen_server:call(Cn, {exec_prepared_statement, Name, Args}, infinity).
 
 %% @doc Prepare a statement
 %%
@@ -155,18 +155,6 @@ init(DbType) ->
         Error ->
             {stop, Error}
     end.
-
-%%handle_call({exec_prepared_select, Name, Args}, From, State) ->
-%%    exec_driver({exec_prepared_select, Name, Args}, From, State);
-
-handle_call({exec_prepared_stmt, Name, Args}, From, State) ->
-    exec_driver({exec_prepared_statement, Name, Args}, From, State);
-
-%%handle_call({execute, QueryOrStatementName, Args}, From, State) ->
-%%    exec_driver({execute, QueryOrStatementName, Args}, From, State);
-
-%%handle_call({prepare, QueryOrStatementName, Args}, From, State) ->
-%%    exec_driver({prepare, QueryOrStatementName, Args}, From, State);
 
 handle_call({Call, QueryOrStatementName, Args}, From, State) ->
     exec_driver({Call, QueryOrStatementName, Args}, From, State);
