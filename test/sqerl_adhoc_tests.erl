@@ -140,6 +140,29 @@ select_complex_test() ->
     Expected = {ExpectedSQL, ExpectedValues},
     ?assertEqual(Expected, Actual).
 
+select_string_test() ->
+    %% tests using strings instead of binary
+    Actual = sqerl_adhoc:select(["id", "name"],
+                                "t",
+                                [{where, {'or',[
+                                                {'and', [
+                                                         {"id", in, [1, 2, 3]},
+                                                         {"name", nequals, "Toto"}
+                                                        ]},
+                                                {"name", equals, "Boss"}
+                                               ]}
+                                 },
+                                 {order_by, {["id", "name"], desc}},
+                                 {limit, {20, offset, 40}}
+                                ],
+                                dollarn),
+    ExpectedValues = [1, 2, 3, "Toto", "Boss"],
+    ExpectedSQL = <<"SELECT id,name FROM t ",
+                    "WHERE ((id IN ($1,$2,$3) AND name != $4) OR name = $5) ",
+                    "ORDER BY id, name DESC LIMIT 20 OFFSET 40">>,
+    Expected = {ExpectedSQL, ExpectedValues},
+    ?assertEqual(Expected, Actual).
+
 order_by_test() ->
     Fields = [<<"F1">>, <<"F2">>],
     Actual = sqerl_adhoc:order_by_sql(Fields),
@@ -156,6 +179,12 @@ order_by_desc_test() ->
 order_by_undefined_test() ->
     Actual = sqerl_adhoc:order_by_sql(undefined),
     Expected = <<"">>,
+    ?assertEqual(Expected, Actual).
+
+order_by_string_test() ->
+    Fields = ["F1", "F2"],
+    Actual = sqerl_adhoc:order_by_sql(Fields),
+    Expected = <<" ORDER BY F1, F2 ASC">>,
     ?assertEqual(Expected, Actual).
 
 limit_test() ->

@@ -375,9 +375,6 @@ placeholder(Pos, dollarn) ->
 %%
 %% 1> join([1,2,3], 0).
 %% [1,0,2,0,3]
-%%
-%%join([], _Sep) -> [];
-%%join([H|T], Sep) -> [H] ++ lists:append([[Sep] ++ [X] || X <- T]).
 
 join([], _Sep) -> [];
 join(L, Sep) -> join(L, Sep, []).

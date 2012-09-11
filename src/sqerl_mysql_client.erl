@@ -39,7 +39,7 @@
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
-%% See sqerl_sql:placeholder
+%% See sqerl_adhoc:placeholder
 -spec sql_parameter_style() -> atom().
 sql_parameter_style() -> qmark.
 
