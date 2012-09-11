@@ -247,6 +247,7 @@ adhoc_update(Table, Row, Where) ->
 
 %% TODO: What if some inserts in a batch fail? Error out or continue?
 %% TODO: Transactionality? Retries?
+%% TODO: parallel inserts?
 
 adhoc_insert(Table, Rows) ->
     adhoc_insert(Table, Rows, ?DEFAULT_BATCH_SIZE).
@@ -256,12 +257,15 @@ adhoc_insert(Table, Rows, BatchSize) ->
     {Columns, RowsValues} = extract_insert_data(Rows),
     adhoc_insert(Table, Columns, RowsValues, BatchSize).
 
-adhoc_insert(Table, Columns, RowsValues, BatchSize) when length(RowsValues) < BatchSize ->
+adhoc_insert(Table, Columns, RowsValues, BatchSize) ->
+    NumRows = length(RowsValues),
+    bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize).
+
+bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows < BatchSize ->
     %% Do one bulk insert since we have less than BULK_SIZE rows
     SQL = sqerl_adhoc:insert(Table, Columns, length(RowsValues), param_style()),
     execute(SQL, lists:flatten(RowsValues));
-
-adhoc_insert(Table, Columns, RowsValues, BatchSize) when length(RowsValues) >= BatchSize ->
+bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= BatchSize ->
     %% Prepare a bulk insert statement and execute as many times as needed.
     SQL = sqerl_adhoc:insert(Table, Columns, BatchSize, param_style()),
     PrepInsertUnprepare = fun(Cn) ->
@@ -271,7 +275,8 @@ adhoc_insert(Table, Columns, RowsValues, BatchSize) when length(RowsValues) >= B
         {ok, Count, RemainingRowsValues}
     end,
     {ok, Count, RemainingRowsValues} = with_db(PrepInsertUnprepare),
-    {ok, RemainingCount} = adhoc_insert(Table, Columns, RemainingRowsValues, BatchSize),
+    RemainingNumRows = NumRows - Count,
+    {ok, RemainingCount} = bulk_insert(Table, Columns, RemainingRowsValues, RemainingNumRows, BatchSize),
     {ok, Count + RemainingCount}.
 
 
