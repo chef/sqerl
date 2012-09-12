@@ -35,8 +35,6 @@
          execute/2,
          adhoc_select/3,
          adhoc_select/4,
-         adhoc_delete/2,
-         adhoc_update/3,
          adhoc_insert/2,
          adhoc_insert/3,
          adhoc_insert/4,
@@ -196,26 +194,6 @@ adhoc_select(Columns, Table, Where, Clauses) ->
                       [{where, Where}|Clauses], param_style()),
     execute(SQL, Values).
 
-%% @doc Adhoc delete.
-%% Uses the same Where specifications as adhoc_select/3.
-%% Returns {ok, Count} or {error, ErrorInfo}.
-%%
--spec adhoc_delete(binary(), term()) -> {ok, integer()} | {error, any()}.
-adhoc_delete(Table, Where) ->
-    {SQL, Values} = sqerl_adhoc:delete(Table, Where, param_style()),
-    execute(SQL, Values).
-
-%% @doc Adhoc update.
-%% Updates records matching Where specifications with
-%% fields and values in given Row.
-%% Uses the same Where specifications as adhoc_select/3.
-%% Returns {ok, Count} or {error, ErrorInfo}.
-%%
--spec adhoc_update(binary(), list(), term()) -> {ok, integer()} | {error, any()}.
-adhoc_update(Table, Row, Where) ->
-    {SQL, Values} = sqerl_adhoc:update(Table, Row, Where, param_style()),
-    execute(SQL, Values).
-
 %% @doc Insert records.
 %%
 %% Prepares a statement and call it repeatedly.
@@ -305,6 +283,31 @@ extract_insert_data(Rows) ->
     Columns = [C || {C, _V} <- FirstRow],
     RowsValues = [[V || {_C, V} <- Row] || Row <- Rows],
     {Columns, RowsValues}.
+
+
+%% The following illustrates how we could also implement adhoc update/delete
+%% if ever desired.
+%%
+%% @doc Adhoc delete.
+%% Uses the same Where specifications as adhoc_select/3.
+%% Returns {ok, Count} or {error, ErrorInfo}.
+%%
+%%-spec adhoc_delete(binary(), term()) -> {ok, integer()} | {error, any()}.
+%%adhoc_delete(Table, Where) ->
+%%    {SQL, Values} = sqerl_adhoc:delete(Table, Where, param_style()),
+%%    execute(SQL, Values).
+
+%% @doc Adhoc update.
+%% Updates records matching Where specifications with
+%% fields and values in given Row.
+%% Uses the same Where specifications as adhoc_select/3.
+%% Returns {ok, Count} or {error, ErrorInfo}.
+%%
+%%-spec adhoc_update(binary(), list(), term()) -> {ok, integer()} | {error, any()}.
+%%adhoc_update(Table, Row, Where) ->
+%%    {SQL, Values} = sqerl_adhoc:update(Table, Row, Where, param_style()),
+%%    execute(SQL, Values).
+
 
 %% @doc Shortcut for sqerl_client:parameter_style()
 -spec param_style() -> atom().
