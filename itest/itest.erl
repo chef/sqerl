@@ -155,8 +155,8 @@ basic_test_() ->
       {<<"Adhoc select offset">>,
        fun adhoc_select_offset/0},
       
-      {<<"Adhoc update">>,
-       fun adhoc_update/0},
+      %%{<<"Adhoc update">>,
+      %% fun adhoc_update/0},
       
       {<<"Adhoc insert">>,
        fun adhoc_insert/0},
