@@ -38,7 +38,8 @@
          adhoc_insert/2,
          adhoc_insert/3,
          adhoc_insert/4,
-         extract_insert_data/1]).
+         extract_insert_data/1,
+         adhoc_delete/2]).
 
 -include_lib("sqerl.hrl").
 
@@ -285,18 +286,18 @@ extract_insert_data(Rows) ->
     {Columns, RowsValues}.
 
 
-%% The following illustrates how we could also implement adhoc update/delete
-%% if ever desired.
-%%
 %% @doc Adhoc delete.
 %% Uses the same Where specifications as adhoc_select/3.
 %% Returns {ok, Count} or {error, ErrorInfo}.
 %%
-%%-spec adhoc_delete(binary(), term()) -> {ok, integer()} | {error, any()}.
-%%adhoc_delete(Table, Where) ->
-%%    {SQL, Values} = sqerl_adhoc:delete(Table, Where, param_style()),
-%%    execute(SQL, Values).
+-spec adhoc_delete(binary(), term()) -> {ok, integer()} | {error, any()}.
+adhoc_delete(Table, Where) ->
+    {SQL, Values} = sqerl_adhoc:delete(Table, Where, param_style()),
+    execute(SQL, Values).
 
+%% The following illustrates how we could also implement adhoc update
+%% if ever desired.
+%%
 %% @doc Adhoc update.
 %% Updates records matching Where specifications with
 %% fields and values in given Row.
