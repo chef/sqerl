@@ -88,12 +88,12 @@
 %%
 %%-spec select([sql_word()], sql_word(), [] | [sql_clause()], atom()) -> {binary(), list()}.
 select(Columns, Table, Clauses, ParamStyle) ->
-    ensure_safe([Columns, Table]),
+    [SafeColumns, SafeTable] = ensure_safe([Columns, Table]),
     {WhereSQL, Values} = where_sql(proplists:get_value(where, Clauses), ParamStyle),
     OrderBySQL = order_by_sql(proplists:get_value(order_by, Clauses)),
     LimitSQL = limit_sql(proplists:get_value(limit, Clauses)),
-    Parts = [<<"SELECT ">>, column_parts(Columns),
-             <<" FROM ">>, Table,
+    Parts = [<<"SELECT ">>, column_parts(SafeColumns),
+             <<" FROM ">>, SafeTable,
              WhereSQL,
              OrderBySQL,
              LimitSQL],
@@ -116,8 +116,8 @@ where_sql(Where, ParamStyle) ->
 order_by_sql(undefined) ->
     <<"">>;
 order_by_sql({Fields, Direction}) ->
-    ensure_safe(Fields),
-    FieldsSQL = list_to_binary(join(Fields, <<", ">>)),
+    SafeFields = ensure_safe(Fields),
+    FieldsSQL = list_to_binary(join(SafeFields, <<", ">>)),
     DirectionSQL = case Direction of
                        asc -> <<" ASC">>;
                        desc -> <<" DESC">>
@@ -147,11 +147,11 @@ limit_sql({Limit, offset, Offset}) when is_integer(Limit), is_integer(Offset) ->
 %%
 -spec update(sql_word(), row(), sql_clause(), atom()) -> {binary(), list()}.
 update(Table, Row, Where, ParamStyle) ->
-    ensure_safe(Table),
+    SafeTable = ensure_safe(Table),
     {SetSQL, SetValues} = set_parts(Row, ParamStyle),
     {WhereSQL, WhereValues} = where_parts(Where, ParamStyle, length(SetValues)),
     Parts = [<<"UPDATE">>,
-             Table,
+             SafeTable,
              <<"SET">>,
              SetSQL,
              <<"WHERE">>,
@@ -170,8 +170,8 @@ set_parts([], _ParamStyle, _ParamPosOffset, PartsAcc, ValuesAcc) ->
     {join(lists:reverse(PartsAcc), <<", ">>), lists:reverse(ValuesAcc)};
 
 set_parts([{Field, Value}|T], ParamStyle, ParamPosOffset, PartsAcc, ValuesAcc) ->
-    ensure_safe(Field),
-    Parts = [Field, <<" = ">>, placeholder(1 + ParamPosOffset, ParamStyle)],
+    SafeField = ensure_safe(Field),
+    Parts = [SafeField, <<" = ">>, placeholder(1 + ParamPosOffset, ParamStyle)],
     set_parts(T, ParamStyle, ParamPosOffset + 1, [Parts|PartsAcc], [Value|ValuesAcc]).
 
 
@@ -184,10 +184,10 @@ set_parts([{Field, Value}|T], ParamStyle, ParamPosOffset, PartsAcc, ValuesAcc) -
 %%
 -spec delete(sql_word(), sql_clause(), atom()) -> {binary(), [any()]}.
 delete(Table, Where, ParamStyle) ->
-    ensure_safe(Table),
+    SafeTable = ensure_safe(Table),
     {WhereSQL, Values} = where_parts(Where, ParamStyle),
     Parts = [<<"DELETE FROM">>,
-             Table,
+             SafeTable,
              <<"WHERE">>,
              WhereSQL],
     SQL = list_to_binary(join(Parts, <<" ">>)),
@@ -203,11 +203,11 @@ delete(Table, Where, ParamStyle) ->
 insert(Table, Columns, NumRows, ParamStyle) when
     NumRows > 0,
     length(Columns) > 0 ->
-    ensure_safe([Table, Columns]),
+    [SafeTable, SafeColumns] = ensure_safe([Table, Columns]),
     Parts = [<<"INSERT INTO">>,
-             Table,
+             SafeTable,
              <<"(">>,
-             column_parts(Columns),
+             column_parts(SafeColumns),
              <<")">>,
              <<"VALUES">>,
              values_parts(length(Columns), NumRows, ParamStyle)],
@@ -237,6 +237,7 @@ values_part(NumColumns, Offset, ParamStyle) ->
 
 %% @doc Generate columns parts of query
 %% (Just joins them with comma).
+%% Assumes input has been validated for safety.
 column_parts(Columns) -> join(Columns, <<",">>).
 
 %% @doc Generate "WHERE" parts of query.
@@ -278,8 +279,8 @@ where_unary(Op, Where, ParamStyle, ParamPosOffset) ->
 %% @doc Generate where part for a binary operator
 %% e.g. Field = Value
 where_binary(Field, Op, Value, ParamStyle, ParamPosOffset) ->
-    ensure_safe([Field]),
-    {[Field, <<" ">>, Op, <<" ">>, placeholder(1 + ParamPosOffset, ParamStyle)], [Value]}.
+    SafeField = ensure_safe([Field]),
+    {[SafeField, <<" ">>, Op, <<" ">>, placeholder(1 + ParamPosOffset, ParamStyle)], [Value]}.
 
 %% @doc Generate where part for a logic operator
 %% e.g. Where1 AND Where2 AND Where3
@@ -295,9 +296,9 @@ where_logic(Op, WhereList, ParamStyle, ParamPosOffset)
 %% e.g. Field IN (Value1, Value2, ...)
 where_values(Field, Op, Values, ParamStyle, ParamPosOffset)
   when length(Values) > 0 ->
-    ensure_safe([Field]),
+    SafeField = ensure_safe(Field),
     PlaceHolders = join(placeholders(length(Values), ParamPosOffset, ParamStyle), <<",">>),
-    {[Field, <<" ">>, Op, <<" (">>, PlaceHolders, <<")">>], Values}.
+    {[SafeField, <<" ">>, Op, <<" (">>, PlaceHolders, <<")">>], Values}.
 
 %% @doc Generate where parts for a where list.
 %% Results can be 'joined' with the intended operator.
@@ -323,19 +324,20 @@ where_subs([Where|WhereList], ParamStyle, ParamPosOffset, WherePartsAcc, ValuesA
 
 %% @doc Checks that value(s) is(are) safe to use while generating SQL.
 %% Walks io lists.
--spec ensure_safe(binary()|string()) -> true.
+%% Returns safe binary value (converts atoms and strings to binary).
+-spec ensure_safe(binary()|string()|atom()) -> true.
 ensure_safe(Value) when is_binary(Value) ->
     {match, _} = re:run(Value, ?SAFE_VALUE_RE), 
-    true;
+    Value;
 ensure_safe([H|T]) when is_integer(H) ->
     %% string
-    {match, _} = re:run([H|T], ?SAFE_VALUE_RE), 
-    true;
+    ensure_safe(list_to_binary([H|T]));
+ensure_safe(Value) when is_atom(Value) ->
+    ensure_safe(atom_to_list(Value));
 ensure_safe([H]) -> 
-    ensure_safe(H);
+    [ensure_safe(H)];
 ensure_safe([H|T]) ->
-    ensure_safe(H),
-    ensure_safe(T).
+    [ensure_safe(H)|ensure_safe(T)].
 
 
 %%

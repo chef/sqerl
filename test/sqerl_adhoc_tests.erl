@@ -163,6 +163,29 @@ select_string_test() ->
     Expected = {ExpectedSQL, ExpectedValues},
     ?assertEqual(Expected, Actual).
 
+select_atom_test() ->
+    %% tests using atoms instead of binary
+    Actual = sqerl_adhoc:select([id, name],
+                                t,
+                                [{where, {'or',[
+                                                {'and', [
+                                                         {id, in, [1, 2, 3]},
+                                                         {name, nequals, 'Toto'}
+                                                        ]},
+                                                {name, equals, 'Boss'}
+                                               ]}
+                                 },
+                                 {order_by, {[id, name], desc}},
+                                 {limit, {20, offset, 40}}
+                                ],
+                                dollarn),
+    ExpectedValues = [1, 2, 3, 'Toto', 'Boss'],
+    ExpectedSQL = <<"SELECT id,name FROM t ",
+                    "WHERE ((id IN ($1,$2,$3) AND name != $4) OR name = $5) ",
+                    "ORDER BY id, name DESC LIMIT 20 OFFSET 40">>,
+    Expected = {ExpectedSQL, ExpectedValues},
+    ?assertEqual(Expected, Actual).
+
 order_by_test() ->
     Fields = [<<"F1">>, <<"F2">>],
     Actual = sqerl_adhoc:order_by_sql(Fields),
@@ -185,6 +208,12 @@ order_by_string_test() ->
     Fields = ["F1", "F2"],
     Actual = sqerl_adhoc:order_by_sql(Fields),
     Expected = <<" ORDER BY F1, F2 ASC">>,
+    ?assertEqual(Expected, Actual).
+
+order_by_atom_test() ->
+    Fields = [f1, f2],
+    Actual = sqerl_adhoc:order_by_sql(Fields),
+    Expected = <<" ORDER BY f1, f2 ASC">>,
     ?assertEqual(Expected, Actual).
 
 limit_test() ->
@@ -254,13 +283,16 @@ values_parts_single_row_test() ->
 %% ensure_safe tests
 %%
 ensure_safe_string_test() ->
-    ensure_safe("ABCdef123_*").
+    ?assertEqual(<<"ABCdef123_*">>, ensure_safe("ABCdef123_*")).
 
 ensure_safe_binary_test() ->
-    ensure_safe(<<"ABCdef123_*">>).
+    ?assertEqual(<<"ABCdef123_*">>, ensure_safe(<<"ABCdef123_*">>)).
+
+ensure_safe_atom_test() ->
+    ?assertEqual(<<"ABCdef123_*">>, ensure_safe('ABCdef123_*')).
 
 ensure_safe(Value) ->
-    ?assertEqual(true, sqerl_adhoc:ensure_safe(Value)).
+    sqerl_adhoc:ensure_safe(Value).
 
 ensure_safe_bad_values_test() ->
     BadValues = "`-=[]\;',./~!@#$%^&()+{}|:\"<>?",

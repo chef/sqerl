@@ -148,6 +148,10 @@ basic_test_() ->
        fun adhoc_select_or/0},
       {<<"Adhoc select complex">>,
        fun adhoc_select_complex/0},
+      {<<"Adhoc select strings">>,
+       fun adhoc_select_complex_strings/0},
+      {<<"Adhoc select atoms">>,
+       fun adhoc_select_complex_atoms/0},
       {<<"Adhoc select order by">>,
        fun adhoc_select_order_by/0},
       {<<"Adhoc select limit">>,
@@ -456,6 +460,30 @@ adhoc_select_complex() ->
                              {<<"active">>, equals, false}]}
                      ]},
     {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>, Where),
+    ExpectedRows = [
+                    [{<<"id">>, 2}],
+                    [{<<"id">>, 4}]
+                   ],
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_complex_strings() ->
+    Where = {'and', [{"high_score", gt, 10},
+                     {'or', [{"last_name", in, ["Maier", "Anderson"]},
+                             {"active", equals, false}]}
+                     ]},
+    {ok, Rows} = sqerl:adhoc_select(["id"], "users", Where),
+    ExpectedRows = [
+                    [{<<"id">>, 2}],
+                    [{<<"id">>, 4}]
+                   ],
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_complex_atoms() ->
+    Where = {'and', [{high_score, gt, 10},
+                     {'or', [{last_name, in, ['Maier', 'Anderson']},
+                             {active, equals, false}]}
+                     ]},
+    {ok, Rows} = sqerl:adhoc_select([id], users, Where),
     ExpectedRows = [
                     [{<<"id">>, 2}],
                     [{<<"id">>, 4}]
