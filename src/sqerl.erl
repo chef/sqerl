@@ -235,10 +235,12 @@ adhoc_insert(Table, Rows, BatchSize) ->
     {Columns, RowsValues} = extract_insert_data(Rows),
     adhoc_insert(Table, Columns, RowsValues, BatchSize).
 
-adhoc_insert(Table, Columns, RowsValues, BatchSize) ->
+adhoc_insert(Table, Columns, RowsValues, BatchSize) when BatchSize > 0 ->
     NumRows = length(RowsValues),
     bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize).
 
+bulk_insert(_Table, _Columns, _RowsValues, 0, _BatchSize) ->
+    {ok, 0};
 bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows < BatchSize ->
     %% Do one bulk insert since we have less than BULK_SIZE rows
     SQL = sqerl_adhoc:insert(Table, Columns, length(RowsValues), param_style()),
