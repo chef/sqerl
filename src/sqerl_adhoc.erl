@@ -185,10 +185,9 @@ set_parts([{Field, Value}|T], ParamStyle, ParamPosOffset, PartsAcc, ValuesAcc) -
 -spec delete(sql_word(), sql_clause(), atom()) -> {binary(), [any()]}.
 delete(Table, Where, ParamStyle) ->
     SafeTable = ensure_safe(Table),
-    {WhereSQL, Values} = where_parts(Where, ParamStyle),
+    {WhereSQL, Values} = where_sql(Where, ParamStyle),
     Parts = [<<"DELETE FROM">>,
              SafeTable,
-             <<"WHERE">>,
              WhereSQL],
     SQL = list_to_binary(join(Parts, <<" ">>)),
     {SQL, Values}.
