@@ -74,13 +74,16 @@ exec_prepared_statement(Name, Args, #state{cn=Cn, statements=Statements}=State) 
         try
             case pgsql:execute(Cn, Stmt) of
                 {ok, Count} ->
-                    commit(Cn, Count, State);
+                    pgsql:sync(Cn),
+                    {{ok, Count}, State};
                 Result ->
-                    rollback(Cn, {error, Result}, State)
+                    pgsql:sync(Cn),
+                    {{error, Result}, State}
             end
         catch
             _:X ->
-                rollback(Cn, {error, X}, State)
+                pgsql:sync(Cn),
+                {{error, X}, State}
         end,
     Rv.
 
@@ -171,19 +174,3 @@ transform(_Type, X) ->
 
 input_transforms(Data, #prepared_statement{input_types=Types}, _State) ->
     [ transform(T, E) || {T,E} <- lists:zip(Types, Data) ].
-
-commit(Cn, Result, State) ->
-    case pgsql:squery(Cn, "COMMIT") of
-        {ok, [], []} ->
-            {{ok, Result}, State};
-        Error when is_tuple(Error) ->
-            {Error, State}
-    end.
-
-rollback(Cn, Error, State) ->
-    case pgsql:squery(Cn, "ROLLBACK") of
-        {ok, [], []} ->
-            {Error, State};
-        _Err ->
-            {Error, State}
-    end.
