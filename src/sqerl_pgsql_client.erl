@@ -33,7 +33,9 @@
          is_connected/1,
          sql_parameter_style/0,
          prepare/3,
-         unprepare/3]).
+         unprepare/3,
+         commit/3,
+         rollback/3]).
 
 -record(state,  {cn,
                  statements = dict:new() :: dict(),
@@ -95,17 +97,20 @@ execute(StatementName, Parameters,
         try
             case pgsql:execute(Cn, Stmt) of
                 {ok, Count} when is_integer(Count) ->
-                    commit(Cn, Count, State);
+                    pgsql:sync(Cn),
+                    {{ok, Count}, State};
                 {ok, RowData} when is_list(RowData) ->
                     Rows = unpack_rows(PrepStmt, RowData),
                     TRows = sqerl_transformers:by_column_name(Rows, CTrans),
                     {{ok, TRows}, State};
                 Other ->
-                    rollback(Cn, {error, Other}, State)
+                    pgsql:sync(Cn),
+                    {{error, Other}, State}
             end
         catch
             _:X ->
-                rollback(Cn, {error, X}, State)
+                pgsql:sync(Cn),
+                {{error, X}, State}
         end,
     Result.
 
@@ -340,3 +345,4 @@ rollback(Cn, Error, State) ->
         _Err ->
             {Error, State}
     end.
+
