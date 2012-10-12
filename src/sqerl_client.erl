@@ -21,6 +21,8 @@
 
 -module(sqerl_client).
 
+-include_lib("sqerl.hrl").
+
 -behaviour(gen_server).
 
 -define(LOG_STATEMENT(Name, Args), case application:get_env(sqerl, log_statements) of
@@ -44,8 +46,8 @@
 %% API
 -export([start_link/0,
          start_link/1,
-         exec_prepared_select/3,
-         exec_prepared_statement/3,
+         execute/2,
+         execute/3,
          close/1]).
 
 %% gen_server callbacks
@@ -66,25 +68,21 @@
 %% @hidden
 behaviour_info(callbacks) ->
     [{init, 1},
-     {exec_prepared_statement, 3},
-     {exec_prepared_select, 3},
+     {execute, 3},
      {is_connected, 1}];
 behaviour_info(_) ->
     undefined.
 
-%%% A select statement returns a list of tuples, or an error.
-%%% The prepared statement to use is named by an atom.
--spec exec_prepared_select(pid(), atom(), [any()]) -> [] | [{any(), any()}] | {error, any()}.
-exec_prepared_select(Cn, Name, Args) when is_pid(Cn),
-                                          is_atom(Name) ->
-    gen_server:call(Cn, {exec_prepared_select, Name, Args}, infinity).
+%% @doc Execute SQL or prepared statement with no parameters.
+%% See execute/3 for return values.
+-spec execute(pid(), dbquery()) -> dbresults().
+execute(Cn, QueryOrStatement) ->
+    execute(Cn, QueryOrStatement, []).
 
-%%% Unlike a select statement, this just returns an integer or an error.
--spec exec_prepared_statement(pid(), atom(), []) -> integer() | {error, any()}.
-exec_prepared_statement(Cn, Name, Args) when is_pid(Cn),
-                                             is_atom(Name) ->
-    gen_server:call(Cn, {exec_prepared_stmt, Name, Args}, infinity).
-
+%% @doc Execute SQL or prepared statement with parameters.
+-spec execute(pid(), dbquery(), [any()]) -> dbresults().
+execute(Cn, QueryOrStatement, Parameters) when is_pid(Cn) ->
+    gen_server:call(Cn, {execute, QueryOrStatement, Parameters}, infinity).
 
 %%% Close a connection
 -spec close(pid()) -> ok.
@@ -122,23 +120,10 @@ init(DbType) ->
             {stop, Error}
     end.
 
-handle_call({exec_prepared_select, Name, Args}, _From, #state{cb_mod=CBMod,
-                                                              cb_state=CBState,
-                                                              timeout=Timeout}=State) ->
-    ?LOG_STATEMENT(Name, Args),
-    {Result, NewCBState} = CBMod:exec_prepared_select(Name, Args, CBState),
-    ?LOG_RESULT(Result),
-    {reply, Result, State#state{cb_state=NewCBState}, Timeout};
-handle_call({exec_prepared_stmt, Name, Args}, _From, #state{cb_mod=CBMod,
-                                                            cb_state=CBState,
-                                                            timeout=Timeout}=State) ->
-    ?LOG_STATEMENT(Name, Args),
-    {Result, NewCBState} = CBMod:exec_prepared_statement(Name, Args, CBState),
-    ?LOG_RESULT(Result),
-    {reply, Result, State#state{cb_state=NewCBState}, Timeout};
+handle_call({Call, QueryOrStatementName, Args}, From, State) ->
+    exec_driver({Call, QueryOrStatementName, Args}, From, State);
 handle_call(close, _From, State) ->
     {stop, normal, ok, State};
-
 handle_call(_Request, _From, #state{timeout=Timeout}=State) ->
     {reply, ignored, State, Timeout}.
 
@@ -162,6 +147,13 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%% @doc Call DB driver process
+exec_driver({Call, QueryOrName, Args}, _From, #state{cb_mod=CBMod, cb_state=CBState, timeout=Timeout}=State) ->
+    ?LOG_STATEMENT(QueryOrName, Args),
+    {Result, NewCBState} = apply(CBMod, Call, [QueryOrName, Args, CBState]),
+    ?LOG_RESULT(Result),
+    {reply, Result, State#state{cb_state=NewCBState}, Timeout}.
 
 -spec read_statements([{atom(), term()}]
                       | string()

@@ -24,12 +24,12 @@
 
 -behaviour(sqerl_client).
 
+-include_lib("sqerl.hrl"). % for types
 -include_lib("emysql/include/emysql.hrl").
 
 %% sqerl_client callbacks
 -export([init/1,
-         exec_prepared_statement/3,
-         exec_prepared_select/3,
+         execute/3,
          is_connected/1]).
 
 -record(state, {cn,
@@ -37,9 +37,12 @@
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
-exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
-    NArgs = input_transforms(Args, State),
-    case catch emysql_conn:execute(Cn, Name, NArgs) of
+%% @doc execute query or prepared statement.
+%% Emysql has a common interface for both queries and prepared statements.
+-spec execute(StatementOrQuery :: dbquery(), Parameters :: [any()], State :: #state{}) -> {dbresults(), #state{}}.
+execute(NameOrQuery, Args, #state{cn=Cn}=State) ->
+    TArgs = input_transforms(Args, State),
+    case catch emysql_conn:execute(Cn, NameOrQuery, TArgs) of
         %% Socket was unexpectedly closed by server
         {'EXIT', {_, closed}} ->
             {{error, closed}, State};
@@ -47,6 +50,8 @@ exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
             {Error, State};
         #result_packet{}=Result ->
             process_result_packet(Result, State);
+        #ok_packet{affected_rows=Count} ->
+            {{ok, Count}, State};
         #error_packet{code=StatusCode, msg=Message} ->
             {{error, {StatusCode, Message}}, State};
         %% This next clause is because MySQL's stored procedures are ridiculous and can
@@ -62,19 +67,6 @@ exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
         %% don't foresee this as being a problem.
         [#result_packet{}=Result, #ok_packet{}] ->
             process_result_packet(Result, State)
-    end.
-
-exec_prepared_statement(Name, Args, #state{cn=Cn}=State) ->
-    NArgs = input_transforms(Args, State),
-    case catch emysql_conn:execute(Cn, Name, NArgs) of
-        {'EXIT', {_, closed}} ->
-            {{error, closed}, State};
-        {'EXIT', Error} ->
-            {Error, State};
-        #ok_packet{affected_rows=Count} ->
-            {{ok, Count}, State};
-        #error_packet{code=StatusCode, msg=Message} ->
-            {{error, {StatusCode, Message}}, State}
     end.
 
 is_connected(#state{cn=Cn}=State) ->
