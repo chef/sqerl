@@ -1,43 +1,86 @@
-DEPS = deps/emysql deps/meck deps/automeck \
-       deps/pooler deps/epgsql
-REBAR = rebar
+DEPS = $(CURDIR)/deps
 
-DIALYZER_APPS = erts kernel stdlib crypto ssl public_key
+DIALYZER_OPTS = -Wunderspecs
 
-## Set the environment variable $DB_TYPE to either mysql or pgsql
-## to run the correct integration tests.
--include itest/$(DB_TYPE)_conf.mk
+# List dependencies that should be included in a cached dialyzer PLT file.
+# DIALYZER_DEPS = deps/app1/ebin \
+#                 deps/app2/ebin
+DIALYZER_DEPS = deps/epgsql/ebin deps/pooler/ebin deps/emysql/ebin
 
-all: compile eunit
+DEPS_PLT = sqerl.plt
 
+ERLANG_DIALYZER_APPS = asn1 \
+                       compiler \
+                       crypto \
+                       edoc \
+                       edoc \
+                       erts \
+                       eunit \
+                       eunit \
+                       gs \
+                       hipe \
+                       inets \
+                       kernel \
+                       mnesia \
+                       mnesia \
+                       observer \
+                       public_key \
+                       runtime_tools \
+                       runtime_tools \
+                       ssl \
+                       stdlib \
+                       syntax_tools \
+                       syntax_tools \
+                       tools \
+                       webtool \
+                       xmerl
+
+all: compile eunit dialyzer
+
+# Clean ebin and .eunit of this project
 clean:
-	@$(REBAR) skip_deps=true clean
+	@rebar clean skip_deps=true
 
+# Clean this project and all deps
 allclean:
-	@$(REBAR) clean
-
-distclean:
-	@$(REBAR) skip_deps=true clean
-	@rm -rf deps
+	@rebar clean
 
 compile: $(DEPS)
-	@$(REBAR) compile
-	@$(MAKE) dialyzer
+	@rebar compile
 
-dialyzer:
-	@dialyzer -Wunderspecs -r ebin ; \
-	if [ $$? -eq 1 -a ! -f ~/.dialyzer_plt ] ; then \
-	  echo "ERROR: Missing ~/.dialyzer_plt. Please wait while a new PLT is compiled." ; \
-	  dialyzer --build_plt --apps $(DIALYZER_APPS) ; \
-	  $(MAKE) $@ ; \
-	fi
 $(DEPS):
-	@$(REBAR) get-deps
+	@rebar get-deps
 
-eunit: compile
-	@$(REBAR) skip_deps=true eunit
+# Full clean and removal of all deps. Remove deps first to avoid
+# wasted effort of cleaning deps before nuking them.
+distclean:
+	@rm -rf deps $(DEPS_PLT)
+	@rebar clean
+
+eunit:
+	@rebar skip_deps=true eunit
 
 test: eunit
+
+# Only include local PLT if we have deps that we are going to analyze
+ifeq ($(strip $(DIALYZER_DEPS)),)
+dialyzer: ~/.dialyzer_plt
+	@dialyzer $(DIALYZER_OPTS) -r ebin
+else
+dialyzer: ~/.dialyzer_plt $(DEPS_PLT)
+	@dialyzer $(DIALYZER_OPTS) --plts ~/.dialyzer_plt $(DEPS_PLT) -r ebin
+
+$(DEPS_PLT):
+	@dialyzer --build_plt $(DIALYZER_DEPS) --output_plt $(DEPS_PLT)
+endif
+
+~/.dialyzer_plt:
+	@echo "ERROR: Missing ~/.dialyzer_plt. Please wait while a new PLT is compiled."
+	dialyzer --build_plt --apps $(ERLANG_DIALYZER_APPS)
+	@echo "now try your build again"
+
+doc:
+	@rebar doc skip_deps=true
 
 itest_create:
 	@echo Creating integration test database
@@ -54,3 +97,5 @@ itest_run:
 	cd itest;erlc -I ../include *.erl
 	@erl -pa deps/*/ebin -pa ebin -pa itest -noshell -eval "eunit:test(itest, [verbose])" \
 	-s erlang halt -db_type $(DB_TYPE)
+
+.PHONY: all compile eunit test dialyzer clean allclean distclean doc itest itest_clean itest_run
