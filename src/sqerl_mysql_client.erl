@@ -24,22 +24,50 @@
 
 -behaviour(sqerl_client).
 
+-include_lib("sqerl.hrl").
 -include_lib("emysql/include/emysql.hrl").
 
 %% sqerl_client callbacks
 -export([init/1,
-         exec_prepared_statement/3,
-         exec_prepared_select/3,
-         is_connected/1]).
+         prepare/3,
+         unprepare/3,
+         execute/3,
+         is_connected/1,
+         sql_parameter_style/0]).
 
 -record(state, {cn,
                 ctrans :: dict() | undefined }).
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
 
-exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
+%% See sqerl_adhoc:placeholder
+%%-spec sql_parameter_style() -> atom().
+sql_parameter_style() -> qmark.
+
+%% @doc Prepare a statement
+%%
+-spec prepare(atom(), binary(), term()) -> {ok, term()}.
+prepare(Name, SQL, #state{cn=_Cn}=State) ->
+    ok = emysql:prepare(Name, SQL),
+    {ok, State}.
+
+%% @doc Unprepare a previously prepared statement
+%%
+-spec unprepare(atom(), [], term()) -> {ok, term()}.
+unprepare(_Name, _Args, #state{cn=_Cn}=State) ->
+    %% unsupported by emysql.
+    %% but emysql can re-prepare statements,
+    %% so as long as we re-use statements
+    %% it should be ok.
+    {ok, State}.
+
+
+%% The MySQL driver supports a general execute
+%% for ad-hoc queries or prepared statements.
+-spec execute(StatementOrQuery :: sql_query(), Parameters :: [any()], State :: term()) -> {sql_result(), #state{}}.
+execute(NameOrQuery, Args, #state{cn=Cn}=State) ->
     NArgs = input_transforms(Args, State),
-    case catch emysql_conn:execute(Cn, Name, NArgs) of
+    case catch emysql_conn:execute(Cn, NameOrQuery, NArgs) of
         %% Socket was unexpectedly closed by server
         {'EXIT', {_, closed}} ->
             {{error, closed}, State};
@@ -47,6 +75,8 @@ exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
             {Error, State};
         #result_packet{}=Result ->
             process_result_packet(Result, State);
+        #ok_packet{affected_rows=Count} ->
+            {{ok, Count}, State};
         #error_packet{code=StatusCode, msg=Message} ->
             {{error, {StatusCode, Message}}, State};
         %% This next clause is because MySQL's stored procedures are ridiculous and can
@@ -62,19 +92,6 @@ exec_prepared_select(Name, Args, #state{cn=Cn}=State) ->
         %% don't foresee this as being a problem.
         [#result_packet{}=Result, #ok_packet{}] ->
             process_result_packet(Result, State)
-    end.
-
-exec_prepared_statement(Name, Args, #state{cn=Cn}=State) ->
-    NArgs = input_transforms(Args, State),
-    case catch emysql_conn:execute(Cn, Name, NArgs) of
-        {'EXIT', {_, closed}} ->
-            {{error, closed}, State};
-        {'EXIT', Error} ->
-            {Error, State};
-        #ok_packet{affected_rows=Count} ->
-            {{ok, Count}, State};
-        #error_packet{code=StatusCode, msg=Message} ->
-            {{error, {StatusCode, Message}}, State}
     end.
 
 is_connected(#state{cn=Cn}=State) ->
@@ -109,20 +126,16 @@ init(Config) ->
             %% the socket
             erlang:link(Sock),
             erlang:process_flag(trap_exit, true),
-            ok = load_statements(Statements),
+            ok = load_statements(Connection, Statements),
             {ok, #state{cn=Connection, ctrans=CTrans}}
     end.
 
 %% Internal functions
-load_statements([]) ->
+load_statements(_Connection, []) ->
     ok;
-load_statements([{Name, SQL}|T]) ->
-    case emysql:prepare(Name, SQL) of
-        ok ->
-            load_statements(T);
-        Error ->
-            Error
-    end.
+load_statements(Connection, [{Name, SQL}|T]) ->
+    ok = emysql:prepare(Name, SQL),
+    load_statements(Connection, T).
 
 %% Converts contents of result_packet into our "standard"
 %% representation of a list of proplists. In other words,
