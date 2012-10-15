@@ -109,10 +109,12 @@ statement(StmtName, StmtArgs, XformName, XformArgs) ->
     end.
 
 execute_statement(StmtName, StmtArgs, XformName, XformArgs) ->
-    Xformer = erlang:apply(sqerl_transformers, XformName, XformArgs),
     case execute(StmtName, StmtArgs) of
-        {ok, Results} -> Xformer(Results);
-        Other -> Other
+        {ok, Results} ->
+            Xformer = erlang:apply(sqerl_transformers, XformName, XformArgs),
+            Xformer(Results);
+        Other -> 
+            Other
     end.
 
 %% @doc Execute query or statement with no parameters
@@ -131,6 +133,9 @@ execute(QueryOrStatement) ->
 %% - Count
 %%
 %% Row is a proplist, e.g. [{<<"id">>, 1}, {<<"name">>, <<"John">>}]
+%%
+%% Note that both a simple query and a prepared statement can take
+%% parameters.
 %%
 -spec execute(sqerl_query(), [] | [term()]) -> sqerl_results().
 execute(QueryOrStatement, Parameters) ->

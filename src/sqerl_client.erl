@@ -81,7 +81,7 @@ execute(Cn, QueryOrStatement) ->
 
 %% @doc Execute SQL or prepared statement with parameters.
 -spec execute(pid(), sqerl_query(), [any()]) -> sqerl_results().
-execute(Cn, QueryOrStatement, Parameters) when is_pid(Cn) ->
+execute(Cn, QueryOrStatement, Parameters) ->
     gen_server:call(Cn, {execute, QueryOrStatement, Parameters}, infinity).
 
 %%% Close a connection
