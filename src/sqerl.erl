@@ -117,7 +117,7 @@ execute_statement(StmtName, StmtArgs, XformName, XformArgs) ->
 
 %% @doc Execute query or statement with no parameters
 %% See execute/2 for return info.
--spec execute(dbquery() | atom()) -> dbresults().
+-spec execute(sqerl_query()) -> sqerl_results().
 execute(QueryOrStatement) ->
     execute(QueryOrStatement, []).
 
@@ -132,7 +132,7 @@ execute(QueryOrStatement) ->
 %%
 %% Row is a proplist, e.g. [{<<"id">>, 1}, {<<"name">>, <<"John">>}]
 %%
--spec execute(dbquery(), [] | [term()]) -> dbresults().
+-spec execute(sqerl_query(), [] | [term()]) -> sqerl_results().
 execute(QueryOrStatement, Parameters) ->
     F = fun(Cn) -> sqerl_client:execute(Cn, QueryOrStatement, Parameters) end,
     with_db(F).

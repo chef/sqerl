@@ -23,9 +23,9 @@
                         {conflict, term()} |
                         {foreign_key, term()}.
 
--type row() :: [{binary(), term()}].
--type rows() :: [row()].
--type sql() :: string() | binary().
--type dbquery() :: atom() | sql().
--type dbresults() :: {ok, integer() | rows()} | {error, atom() | tuple()}.
+-type sqerl_row() :: [{binary(), term()}].
+-type sqerl_rows() :: [sqerl_row()].
+-type sqerl_sql() :: string() | binary().
+-type sqerl_query() :: atom() | sqerl_sql().
+-type sqerl_results() :: {ok, integer() | sqerl_rows()} | {error, atom() | tuple()}.
 
