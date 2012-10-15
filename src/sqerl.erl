@@ -56,7 +56,7 @@ with_db(Call) ->
 with_db(_Call, 0) ->
     {error, no_connections};
 with_db(Call, Retries) ->
-    case pooler:take_member("sqerl") of
+    case checkout() of
         error_no_members ->
             {error, no_connections};
         error_no_pool ->
@@ -67,9 +67,11 @@ with_db(Call, Retries) ->
             %% process). So a crash here will not leak a connection.
             case Call(Cn) of
                 {error, closed} ->
+                    sqerl_client:close(Cn),
+                    checkin(Cn),
                     with_db(Call, Retries - 1);
                 Result ->
-                    pooler:return_member(Cn),
+                    checkin(Cn),
                     Result
             end
     end.
