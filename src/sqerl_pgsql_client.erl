@@ -69,8 +69,7 @@
                   {sqerl_results(), #state{}}.
 execute(SQL, Parameters, #state{cn=Cn}=State) when is_binary(SQL) ->
     TParameters = input_transforms(Parameters),
-    DBResult = pgsql:equery(Cn, SQL, TParameters),
-    case DBResult of
+    case pgsql:equery(Cn, SQL, TParameters) of
         {ok, Columns, Rows} ->
             {{ok, format_result(Columns, Rows)}, State};
         {ok, Count} ->
@@ -78,9 +77,7 @@ execute(SQL, Parameters, #state{cn=Cn}=State) when is_binary(SQL) ->
         {ok, Count, Columns, Rows} ->
             {{ok, {Count, format_result(Columns, Rows)}}, State};
         {error, Error} ->
-            {{error, Error}, State};
-        Other ->
-            {{error, {unexpected_result, Other}}, State}
+            {{error, Error}, State}
     end;
 %% Prepared statement execution
 execute(StatementName,
@@ -91,23 +88,22 @@ execute(StatementName,
     Stmt = PrepStmt#prepared_statement.stmt,
     TParameters = input_transforms(Parameters, PrepStmt, State),
     ok = pgsql:bind(Cn, Stmt, TParameters),
-    DBResult = try pgsql:execute(Cn, Stmt)
-        catch _:X ->
-            pgsql:sync(Cn),
-            {{error, X}, State}
-        end,
-    Result = case DBResult of
+    Result = try pgsql:execute(Cn, Stmt) of
         {ok, Count} when is_integer(Count) ->
             % returned for update, delete, so sync db
             pgsql:sync(Cn),
             {ok, Count};
         {ok, RowData} when is_list(RowData) ->
+            % query results, read-only, so no sync needed
             Rows = unpack_rows(PrepStmt, RowData),
             TRows = sqerl_transformers:by_column_name(Rows, CTrans),
             {ok, TRows};
         Other ->
             pgsql:sync(Cn),
             {error, Other}
+        catch _:X ->
+            pgsql:sync(Cn),
+            {{error, X}, State}
         end,
     {Result, State}.
 
@@ -209,7 +205,7 @@ unpack_rows(ColumnNames, Rows) ->
 %% extract_column_names({result_column_data, Columns}).
 %% With column data from a prepared statement, call as
 %% extract_column_names({prepared_column_data, ColumnData}).
-%%-spec extract_column_names({atom(), [tuple()]}) -> [any()].
+-spec extract_column_names({atom(), [#column{}]}) -> [any()].
 extract_column_names({result_column_data, Columns}) ->
     %% For column data coming from a query result
     [Name || {column, Name, _Type, _Size, _Modifier, _Format} <- Columns];
@@ -229,11 +225,16 @@ transform(timestamp, X) when is_binary(X) ->
 transform(_Type, X) ->
     X.
 
+%% @doc Transform input for prepared statements.
+%% Prepared statements have type data which we use
+%% to transform the input.
 input_transforms(Data, #prepared_statement{input_types=Types}, _State) ->
     [ transform(T, E) || {T,E} <- lists:zip(Types, Data) ].
 
 %% @doc Transform input without query parameter type data
-%% (i.e. not a prepared statement).
+%% i.e. not a prepared statement. In this case we do
+%% not have expected data types, so we do a more limited
+%% transform (e.g. datetime type).
 -spec input_transforms(list()) -> list().
 input_transforms(Parameters) ->
     [transform(Parameter) || Parameter <- Parameters].
