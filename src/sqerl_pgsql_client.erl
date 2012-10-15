@@ -25,12 +25,15 @@
 
 -include_lib("sqerl.hrl").
 -include_lib("epgsql/include/pgsql.hrl").
--include_lib("eunit/include/eunit.hrl"). % for simple inline tests
 
 %% sqerl_client callbacks
 -export([init/1,
          execute/3,
          is_connected/1]).
+
+-ifdef(TEST).
+-compile([export_all]).
+-endif.
 
 -record(state,  {cn,
                  statements = dict:new() :: dict(),
@@ -181,18 +184,6 @@ format_result(Columns, Rows) ->
     Names = extract_column_names({result_column_data, Columns}),
     unpack_rows(Names, Rows).
 
-format_result_test() ->
-    Columns = [{column, <<"id">>, int4, 4, -1, 0},
-               {column, <<"first_name">>, varchar, -1, 84, 0}],
-    Rows = [{<<1>>, <<"Kevin">>},
-            {<<2>>, <<"Mark">>}],
-    Output = format_result(Columns, Rows),
-    ExpectedOutput = [[{<<"id">>, <<1>>},
-                       {<<"first_name">>, <<"Kevin">>}],
-                      [{<<"id">>, <<2>>},
-                       {<<"first_name">>, <<"Mark">>}]],
-    ?assertEqual(ExpectedOutput, Output).
-
 %% Converts contents of result_packet into our "standard"
 %% representation of a list of proplists. In other words,
 %% each row is converted into a proplist and then collected
@@ -225,14 +216,6 @@ extract_column_names({result_column_data, Columns}) ->
 extract_column_names({prepared_column_data, ColumnData}) ->
     %% For column data coming from a prepared statement
     [Name || {Name, _Type} <- ColumnData].
-
-extract_column_names_test() ->
-    Type = result_column_data,
-    Columns = [{column,<<"id">>,int4,4,-1,0},
-               {column,<<"first_name">>,varchar,-1,84,0}],
-    ExpectedOutput = [<<"id">>, <<"first_name">>],
-    Output = extract_column_names({Type, Columns}),
-    ?assertEqual(ExpectedOutput, Output).
 
 %%%
 %%% Simple hooks to support coercion inputs to match the type expected by pgsql
