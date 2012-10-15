@@ -39,7 +39,9 @@
 
 %% @doc execute query or prepared statement.
 %% Emysql has a common interface for both queries and prepared statements.
--spec execute(StatementOrQuery :: dbquery(), Parameters :: [any()], State :: #state{}) -> {dbresults(), #state{}}.
+-spec execute(StatementOrQuery :: sqerl_query(), 
+              Parameters :: [any()], 
+              State :: #state{}) -> {sqerl_results(), #state{}}.
 execute(NameOrQuery, Args, #state{cn=Cn}=State) ->
     TArgs = input_transforms(Args, State),
     case catch emysql_conn:execute(Cn, NameOrQuery, TArgs) of

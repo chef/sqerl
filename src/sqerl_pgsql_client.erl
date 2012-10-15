@@ -60,10 +60,10 @@
 %%
 %% Row:  proplist e.g. [{<<"id">>, 1}, {<<"name">>, <<"Toto">>}]
 %%
--spec execute(StatementOrQuery :: dbquery(), 
+-spec execute(StatementOrQuery :: sqerl_query(), 
               Parameters :: [any()],
               State :: #state{}) -> 
-                  {dbresults(), #state{}}.
+                  {sqerl_results(), #state{}}.
 execute(SQL, Parameters, #state{cn=Cn}=State) when is_binary(SQL) ->
     TParameters = input_transforms(Parameters),
     DBResult = pgsql:equery(Cn, SQL, TParameters),
@@ -201,7 +201,7 @@ format_result_test() ->
 %% Result packet can be from a prepared statement execution
 %% (column data is embedded in prepared statement record),
 %% or from a simple query.
--spec unpack_rows(#prepared_statement{} | [sql()], [tuple()]) -> rows().
+-spec unpack_rows(#prepared_statement{} | [sqerl_sql()], [tuple()]) -> sqerl_rows().
 unpack_rows(#prepared_statement{output_fields=ColumnData}, Rows) ->
     %% Takes in a prepared statement record that
     %% holds column data that holds column names

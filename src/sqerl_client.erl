@@ -75,12 +75,12 @@ behaviour_info(_) ->
 
 %% @doc Execute SQL or prepared statement with no parameters.
 %% See execute/3 for return values.
--spec execute(pid(), dbquery()) -> dbresults().
+-spec execute(pid(), sqerl_query()) -> sqerl_results().
 execute(Cn, QueryOrStatement) ->
     execute(Cn, QueryOrStatement, []).
 
 %% @doc Execute SQL or prepared statement with parameters.
--spec execute(pid(), dbquery(), [any()]) -> dbresults().
+-spec execute(pid(), sqerl_query(), [any()]) -> sqerl_results().
 execute(Cn, QueryOrStatement, Parameters) when is_pid(Cn) ->
     gen_server:call(Cn, {execute, QueryOrStatement, Parameters}, infinity).
 
