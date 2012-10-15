@@ -94,7 +94,9 @@ execute(StatementName,
             pgsql:sync(Cn),
             {ok, Count};
         {ok, RowData} when is_list(RowData) ->
-            % query results, read-only, so no sync needed
+            % query results, read-only, so no sync needed...?
+            % call it just in case, it shouldn't hurt
+            pgsql:sync(Cn),
             Rows = unpack_rows(PrepStmt, RowData),
             TRows = sqerl_transformers:by_column_name(Rows, CTrans),
             {ok, TRows};
