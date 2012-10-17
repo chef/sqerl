@@ -74,6 +74,9 @@
 %% 1> select([<<"id">>], <<"t">>, [{where, {'or', [{<<"id">>, lt, 5}, {<<"id">>, gt, 10}]}}]).
 %% {<<"SELECT id FROM t WHERE (id < ? OR id > ?)">>, [5,10]}
 %%
+%% Group By Clause
+%% ---------------
+%% Form: {groupby, Fields}
 %%
 %% Order By Clause
 %% ---------------
@@ -90,11 +93,13 @@
 select(Columns, Table, Clauses, ParamStyle) ->
     [SafeColumns, SafeTable] = ensure_safe([Columns, Table]),
     {WhereSQL, Values} = where_sql(proplists:get_value(where, Clauses), ParamStyle),
+    GroupBySQL = group_by_sql(proplists:get_value(group_by, Clauses)),
     OrderBySQL = order_by_sql(proplists:get_value(order_by, Clauses)),
     LimitSQL = limit_sql(proplists:get_value(limit, Clauses)),
     Parts = [<<"SELECT ">>, column_parts(SafeColumns),
              <<" FROM ">>, SafeTable,
              WhereSQL,
+             GroupBySQL,
              OrderBySQL,
              LimitSQL],
     SQL = list_to_binary(Parts),
@@ -111,6 +116,14 @@ where_sql(Where, ParamStyle) ->
     {Parts, Values} = where_parts(Where, ParamStyle),
     SQL = list_to_binary(Parts),
     {<<" WHERE ", SQL/binary>>, Values}.
+
+%% Returns "GROUP BY ..." SQL
+group_by_sql(undefined) ->
+    <<"">>;
+group_by_sql(Fields) ->
+    SafeFields = ensure_safe(Fields),
+    FieldsSQL = list_to_binary(join(SafeFields, <<", ">>)),
+    <<" GROUP BY ", FieldsSQL/binary>>.
 
 %% Returns "ORDER BY ..." SQL
 order_by_sql(undefined) ->

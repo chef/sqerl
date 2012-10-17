@@ -186,6 +186,17 @@ select_atom_test() ->
     Expected = {ExpectedSQL, ExpectedValues},
     ?assertEqual(Expected, Actual).
 
+group_by_test() ->
+    Fields = [<<"F1">>, <<"F2">>],
+    Actual = sqerl_adhoc:group_by_sql(Fields),
+    Expected = <<" GROUP BY F1, F2">>,
+    ?assertEqual(Expected, Actual).
+
+group_by_undefined_test() ->
+    Actual = sqerl_adhoc:group_by_sql(undefined),
+    Expected = <<"">>,
+    ?assertEqual(Expected, Actual).
+
 order_by_test() ->
     Fields = [<<"F1">>, <<"F2">>],
     Actual = sqerl_adhoc:order_by_sql(Fields),
