@@ -294,7 +294,7 @@ values_parts_single_row_test() ->
 %% ensure_safe tests
 %%
 ensure_safe_string_test() ->
-    ?assertEqual(<<"ABCdef123_*">>, ensure_safe("ABCdef123_*")).
+    ?assertEqual(<<"ABCdef123_ ()*">>, ensure_safe("ABCdef123_ ()*")).
 
 ensure_safe_binary_test() ->
     ?assertEqual(<<"ABCdef123_*">>, ensure_safe(<<"ABCdef123_*">>)).
@@ -306,7 +306,7 @@ ensure_safe(Value) ->
     sqerl_adhoc:ensure_safe(Value).
 
 ensure_safe_bad_values_test() ->
-    BadValues = "`-=[]\;',./~!@#$%^&()+{}|:\"<>?",
+    BadValues = "`-=[]\;',./~!@#$%^&+{}|:\"<>?",
     %% we want to test individual values here, so iterate
     [ensure_safe_error(list_to_binary([BadValue])) || BadValue <- BadValues].
 
