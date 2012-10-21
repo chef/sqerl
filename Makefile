@@ -25,7 +25,7 @@ compile: $(DEPS)
 	@$(MAKE) dialyzer
 
 dialyzer:
-	@dialyzer -Wrace_conditions -Wunderspecs -r ebin ; \
+	@dialyzer -Wunderspecs -r ebin ; \
 	if [ $$? -eq 1 -a ! -f ~/.dialyzer_plt ] ; then \
 	  echo "ERROR: Missing ~/.dialyzer_plt. Please wait while a new PLT is compiled." ; \
 	  dialyzer --build_plt --apps $(DIALYZER_APPS) ; \
