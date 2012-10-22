@@ -30,7 +30,9 @@
          select/4,
          statement/2,
          statement/3,
-         statement/4]).
+         statement/4,
+         execute/1,
+         execute/2]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("sqerl.hrl").
@@ -54,7 +56,7 @@ with_db(Call) ->
 with_db(_Call, 0) ->
     {error, no_connections};
 with_db(Call, Retries) ->
-    case pooler:take_member("sqerl") of
+    case checkout() of
         error_no_members ->
             {error, no_connections};
         error_no_pool ->
@@ -65,9 +67,11 @@ with_db(Call, Retries) ->
             %% process). So a crash here will not leak a connection.
             case Call(Cn) of
                 {error, closed} ->
+                    sqerl_client:close(Cn),
+                    checkin(Cn),
                     with_db(Call, Retries - 1);
                 Result ->
-                    pooler:return_member(Cn),
+                    checkin(Cn),
                     Result
             end
     end.
@@ -81,8 +85,7 @@ select(StmtName, StmtArgs, XformName) ->
     select(StmtName, StmtArgs, XformName, []).
 
 select(StmtName, StmtArgs, XformName, XformArgs) ->
-    case execute_statement(StmtName, StmtArgs, XformName, XformArgs,
-                           exec_prepared_select) of
+    case execute_statement(StmtName, StmtArgs, XformName, XformArgs) of
         {ok, []} ->
             {ok, none};
         {ok, Results} ->
@@ -98,8 +101,7 @@ statement(StmtName, StmtArgs, XformName) ->
     statement(StmtName, StmtArgs, XformName, []).
 
 statement(StmtName, StmtArgs, XformName, XformArgs) ->
-    case execute_statement(StmtName, StmtArgs, XformName, XformArgs,
-                           exec_prepared_statement) of
+    case execute_statement(StmtName, StmtArgs, XformName, XformArgs) of
         {ok, 0} ->
             {ok, none};
         {ok, N} when is_number(N) ->
@@ -108,20 +110,39 @@ statement(StmtName, StmtArgs, XformName, XformArgs) ->
             parse_error(Reason)
     end.
 
-execute_statement(StmtName, StmtArgs, XformName, XformArgs, Executor) ->
-    Xformer = erlang:apply(sqerl_transformers, XformName, XformArgs),
-    F = fun(Cn) ->
-                case sqerl_client:Executor(Cn, StmtName, StmtArgs) of
-                    {ok, Results} ->
-                        Xformer(Results);
-                    {error, closed} ->
-                        sqerl_client:close(Cn),
-                        {error, closed};
-                    Error ->
-                        Error
-                end end,
-    with_db(F).
+execute_statement(StmtName, StmtArgs, XformName, XformArgs) ->
+    case execute(StmtName, StmtArgs) of
+        {ok, Results} ->
+            Xformer = erlang:apply(sqerl_transformers, XformName, XformArgs),
+            Xformer(Results);
+        Other -> 
+            Other
+    end.
 
+%% @doc Execute query or statement with no parameters
+%% See execute/2 for return info.
+-spec execute(sqerl_query()) -> sqerl_results().
+execute(QueryOrStatement) ->
+    execute(QueryOrStatement, []).
+
+%% @doc Execute query or statement with parameters.
+%% Returns:
+%% - {ok, Result}
+%% - {error, ErrorInfo}
+%%
+%% Result depends on the query being executed, and can be
+%% - Rows
+%% - Count
+%%
+%% Row is a proplist, e.g. [{<<"id">>, 1}, {<<"name">>, <<"John">>}]
+%%
+%% Note that both a simple query and a prepared statement can take
+%% parameters.
+%%
+-spec execute(sqerl_query(), [] | [term()]) -> sqerl_results().
+execute(QueryOrStatement, Parameters) ->
+    F = fun(Cn) -> sqerl_client:execute(Cn, QueryOrStatement, Parameters) end,
+    with_db(F).
 
 %% @doc Utility for generating specific message tuples from database-specific error
 %% messages.  The 1-argument form determines which database is being used by querying
