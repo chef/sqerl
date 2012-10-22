@@ -118,6 +118,11 @@ basic_test_() ->
       {<<"Select timestamp type">>,
        fun select_lname_by_created/0},
 
+      {<<"Execute simple query">>,
+       fun select_simple/0},
+      {<<"Execute simple query with parameters">>,
+       fun select_simple_with_parameters/0},
+
       {<<"Tolerates bounced server">>,
        {timeout, 10,
         fun bounced_server/0}},
@@ -261,3 +266,23 @@ select_created_by_lname() ->
 select_lname_by_created() ->
     {ok, User1} = sqerl:select(find_lname_by_created, [{datetime, {{2011, 10, 04}, {16, 47, 46}}}], first_as_scalar, [last_name]),
     ?assertMatch(<<"Presley">>, User1).
+
+%%%
+%%% Tests for execute interface
+%%%
+select_simple() ->
+    Sql = <<"select count(*) as num_users from users">>,
+    {ok, Rows} = sqerl:execute(Sql),
+    [[{<<"num_users">>, NumUsers}]] = Rows,
+    ?assertEqual(4, NumUsers).
+
+select_simple_with_parameters() ->
+    Sql = case get_db_type() of
+        mysql -> <<"select id from users where last_name = ?">>;
+        pgsql -> <<"select id from users where last_name = $1">>
+    end,
+    {ok, Rows} = sqerl:execute(Sql, ["Smith"]),
+    ExpectedRows = [[{<<"id">>,1}]],
+    ?assertEqual(ExpectedRows, Rows).
+
+

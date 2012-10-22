@@ -22,3 +22,10 @@
 -type sqerl_error() :: {error, term()} |
                         {conflict, term()} |
                         {foreign_key, term()}.
+
+-type sqerl_row() :: [{binary(), term()}].
+-type sqerl_rows() :: [sqerl_row()].
+-type sqerl_sql() :: string() | binary().
+-type sqerl_query() :: atom() | sqerl_sql().
+-type sqerl_results() :: {ok, integer() | sqerl_rows()} | {error, atom() | tuple()}.
+
