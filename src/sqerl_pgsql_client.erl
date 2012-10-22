@@ -105,7 +105,7 @@ execute(StatementName,
             {error, Other}
         catch _:X ->
             pgsql:sync(Cn),
-            {{error, X}, State}
+            {error, X}
         end,
     {Result, State}.
 
