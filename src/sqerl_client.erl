@@ -63,7 +63,7 @@
                 timeout}).
 
 %% behavior callback definitions
--callback init(Config :: sqerl_row()) -> 
+-callback init(Config :: [{atom(), term()}]) -> 
     term().
 -callback execute(StatementOrQuery :: sqerl_query(), Parameters :: [any()], State :: term()) -> 
     {sqerl_results(), State :: term()}.
