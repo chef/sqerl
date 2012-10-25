@@ -58,20 +58,17 @@
          terminate/2,
          code_change/3]).
 
-%% behavior callback
--export([behaviour_info/1]).
-
 -record(state, {cb_mod,
                 cb_state,
                 timeout}).
 
-%% @hidden
-behaviour_info(callbacks) ->
-    [{init, 1},
-     {execute, 3},
-     {is_connected, 1}];
-behaviour_info(_) ->
-    undefined.
+%% behavior callback definitions
+-callback init(Config :: sqerl_row()) -> 
+    term().
+-callback execute(StatementOrQuery :: sqerl_query(), Parameters :: [any()], State :: term()) -> 
+    {sqerl_results(), State :: term()}.
+-callback is_connected(State :: term()) -> 
+    {true, State :: term()} | false.
 
 %% @doc Execute SQL or prepared statement with no parameters.
 %% See execute/3 for return values.
