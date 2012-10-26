@@ -28,8 +28,11 @@
 
 %% sqerl_client callbacks
 -export([init/1,
+         prepare/3,
+         unprepare/3,
          execute/3,
-         is_connected/1]).
+         is_connected/1,
+         sql_parameter_style/0]).
 
 -ifdef(TEST).
 -compile([export_all]).
@@ -48,6 +51,7 @@
 -type connection() :: pid().
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
+
 
 %% @doc Execute query or prepared statement.
 %% If a binary is provided, it is interpreted as an SQL query.
@@ -109,6 +113,30 @@ execute(StatementName,
         end,
     {Result, State}.
 
+%% @doc Prepare a new statement.
+-spec prepare(atom(), sqerl_sql(), #state{}) -> {ok, #state{}}.
+prepare(Name, SQL, #state{cn=Cn, statements=Statements}=State) ->
+    {ok, UpdatedStatements} = load_statement(Cn, Name, SQL, Statements),
+    UpdatedState = State#state{statements=UpdatedStatements},
+    {ok, UpdatedState}.
+
+%% @doc Unprepare a previously prepared statement
+%% Interface uses 3 parameters. In this case the 
+%% second one is unused.
+-spec unprepare(atom(), [], #state{}) -> {ok, #state{}}.
+unprepare(Name, _, State) ->
+    unprepare(Name, State).
+
+-spec unprepare(atom(), #state{}) -> {ok, #state{}}.
+unprepare(Name, #state{cn=Cn, statements=Statements}=State) ->
+    {ok, UpdatedStatements} = unload_statement(Cn, Name, Statements),
+    UpdatedState = State#state{statements=UpdatedStatements},
+    {ok, UpdatedState}.
+
+%% @see sqerl_adhoc:select/4.
+-spec sql_parameter_style() -> dollarn.
+sql_parameter_style() -> dollarn.
+
 is_connected(#state{cn=Cn}=State) ->
     case catch pgsql:squery(Cn, ?PING_QUERY) of
         {ok, _, _} ->
@@ -153,6 +181,30 @@ init(Config) ->
 load_statements(_Connection, [], Dict) ->
     {ok, Dict};
 load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
+    case load_statement(Connection, Name, SQL, Dict) of
+        {ok, UpdatedDict} -> load_statements(Connection, T, UpdatedDict);
+        {error, Error} -> {error, Error}
+    end.
+
+%% @doc Load a statement: prepare and store in statement state dict.
+%% Returns {ok, UpdatedDict} or {error, ErrorInfo}
+-spec load_statement(connection(), atom(), sqerl_sql(), dict()) -> {ok, dict()} | {error, term()}.
+load_statement(Connection, Name, SQL, Dict) ->
+    case prepare_statement(Connection, Name, SQL) of
+        {ok, {Name, P}} ->
+            {ok, dict:store(Name, P, Dict)};
+        {error, {error, error, _ErrorCode, Msg, Position}} ->
+            {error, {syntax, {Msg, Position}}};
+        {error, Error} ->
+            %% TODO: Discover what errors can flow out of this, and write tests.
+            {error, Error}
+    end.
+
+%% @doc Prepare a statement on the connection. Does not manage
+%% state.
+-spec prepare_statement(connection(), atom(), sqerl_sql()) ->
+    {ok, {StatementName :: atom(), #prepared_statement{}}} | {error, term()}.
+prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
     case pgsql:parse(Connection, atom_to_list(Name), SQL, []) of
         {ok, Statement} ->
             {ok, {statement, SName, Desc, DataTypes}} = pgsql:describe(Connection, Statement),
@@ -162,13 +214,31 @@ load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
               input_types = DataTypes,
               output_fields = ColumnData,
               stmt = Statement},
-            load_statements(Connection, T, dict:store(Name, P, Dict));
+            {ok, {Name, P}};
         {error, {error, error, _ErrorCode, Msg, Position}} ->
             {error, {syntax, {Msg, Position}}};
         Error ->
             %% TODO: Discover what errors can flow out of this, and write tests.
             {error, Error}
     end.
+
+%% @doc Unload statement: unprepare in DB, then update statement
+%% state dict.
+%% Returns {ok, UpdatedDict}.
+-spec unload_statement(connection(), atom(), dict()) -> {ok, dict()}.
+unload_statement(Connection, Name, Dict) ->
+        unprepare_statement(Connection, Name),
+        UpdatedDict = dict:erase(Name, Dict),
+        {ok, UpdatedDict}.
+
+%% @doc Call DB to unprepare a previously prepared statement.
+-spec unprepare_statement(connection(), atom()) -> ok.
+unprepare_statement(Connection, Name) when is_atom(Name) ->
+    SQL = list_to_binary([<<"DEALLOCATE ">>, atom_to_binary(Name, latin1)]),
+    %% Have to do squery here (execute/3 uses equery which will try to prepare)
+    {ok, _, _} = pgsql:squery(Connection, SQL),
+    ok.
+
 
 %%%
 %%% Data format conversion
