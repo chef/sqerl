@@ -123,6 +123,57 @@ basic_test_() ->
       {<<"Execute simple query with parameters">>,
        fun select_simple_with_parameters/0},
 
+      {<<"Adhoc select All">>,
+       fun adhoc_select_all/0},
+      {<<"Adhoc select equals int">>,
+       fun adhoc_select_equals_int/0},
+      {<<"Adhoc select equals string">>,
+       fun adhoc_select_equals_str/0},
+      {<<"Adhoc select equals timestamp">>,
+       fun adhoc_select_equals_timestamp/0},
+      {<<"Adhoc select equals boolean">>,
+       fun adhoc_select_equals_boolean/0},
+      {<<"Adhoc select not equals int">>,
+       fun adhoc_select_nequals_int/0},
+      {<<"Adhoc select not equals str">>,
+       fun adhoc_select_nequals_str/0},
+      {<<"Adhoc select NOT">>,
+       fun adhoc_select_not/0},
+      {<<"Adhoc select In (IDs)">>,
+       fun adhoc_select_in_ids/0},
+      {<<"Adhoc select In (Names)">>,
+       fun adhoc_select_in_names/0},
+      {<<"Adhoc select In (*)">>,
+       fun adhoc_select_in_star/0},
+      {<<"Adhoc select AND">>,
+       fun adhoc_select_and/0},
+      {<<"Adhoc select OR">>,
+       fun adhoc_select_or/0},
+      {<<"Adhoc select complex">>,
+       fun adhoc_select_complex/0},
+      {<<"Adhoc select strings">>,
+       fun adhoc_select_complex_strings/0},
+      {<<"Adhoc select atoms">>,
+       fun adhoc_select_complex_atoms/0},
+      {<<"Adhoc select order by">>,
+       fun adhoc_select_order_by/0},
+      {<<"Adhoc select limit">>,
+       fun adhoc_select_limit/0},
+      {<<"Adhoc select offset">>,
+       fun adhoc_select_offset/0},
+      
+      %%{<<"Adhoc update">>,
+      %% fun adhoc_update/0},
+      
+      {<<"Adhoc insert">>,
+       fun adhoc_insert/0},
+      {<<"Adhoc insert many users">>,
+       fun adhoc_insert_many_users/0},
+      {<<"Adhoc insert even more users">>,
+       fun adhoc_insert_even_more_users/0},
+      {<<"Adhoc insert rows">>,
+       fun adhoc_insert_rows/0},
+
       {<<"Tolerates bounced server">>,
        {timeout, 10,
         fun bounced_server/0}},
@@ -267,6 +318,7 @@ select_lname_by_created() ->
     {ok, User1} = sqerl:select(find_lname_by_created, [{datetime, {{2011, 10, 04}, {16, 47, 46}}}], first_as_scalar, [last_name]),
     ?assertMatch(<<"Presley">>, User1).
 
+
 %%%
 %%% Tests for execute interface
 %%%
@@ -286,3 +338,258 @@ select_simple_with_parameters() ->
     ?assertEqual(ExpectedRows, Rows).
 
 
+%%
+%% Tests for adhoc SQL
+%%
+adhoc_select_all() ->
+    ExpectedNumRows = length(?NAMES),
+    {ok, Rows} = sqerl:adhoc_select([<<"*">>], <<"users">>, all),
+    ?assertEqual(ExpectedNumRows, length(Rows)).
+
+adhoc_select_equals_int() ->
+    ExpectedRows = [[{<<"last_name">>, <<"Smith">>}]],
+    {ok, Rows} = sqerl:adhoc_select([<<"last_name">>], <<"users">>,
+                                    {<<"id">>, equals, 1}),
+    ?assertEqual(ExpectedRows, Rows).
+
+adhoc_select_equals_timestamp() ->
+    ExpectedRows = [[{<<"last_name">>, <<"Presley">>}]],
+    {ok, Rows} = sqerl:adhoc_select([<<"last_name">>], <<"users">>,
+                                    {<<"created">>, equals, {datetime,{{2011,10,4},{16,47,46}}}}),
+    ?assertEqual(ExpectedRows, Rows).
+
+adhoc_select_equals_boolean() ->
+    ExpectedRows = [[{<<"last_name">>, <<"Presley">>}]],
+    {ok, Rows} = sqerl:adhoc_select([<<"last_name">>], <<"users">>,
+                                    {<<"active">>, equals, false}),
+    ?assertEqual(ExpectedRows, Rows).
+
+adhoc_select_equals_str() ->
+    ExpectedRows = [[{<<"id">>, 1}]],
+    {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>,
+                                    {<<"last_name">>, equals, <<"Smith">>}),
+    ?assertEqual(ExpectedRows, Rows).
+
+adhoc_select_nequals_str() ->
+    {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>,
+                                    {<<"last_name">>, nequals, <<"Smith">>}),
+    ExpectedRows = [[{<<"id">>,2}],[{<<"id">>,3}],[{<<"id">>,4}]],
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_nequals_int() ->
+    {ok, Rows} = sqerl:adhoc_select([<<"last_name">>], <<"users">>,
+                                    {<<"id">>, nequals, 1}),
+    ExpectedRows = [
+                    [{<<"last_name">>,<<"Presley">>}],
+                    [{<<"last_name">>,<<"Anderson">>}],
+                    [{<<"last_name">>,<<"Maier">>}]
+                   ],
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_not() ->
+    Cols = [<<"id">>],
+    Table = <<"users">>,
+    Where = {'not', {<<"last_name">>, equals, <<"Smith">>}},
+    {ok, Rows} = sqerl:adhoc_select(Cols, Table, Where),
+    ExpectedRows = [
+                    [{<<"id">>, 2}],
+                    [{<<"id">>, 3}],
+                    [{<<"id">>, 4}]
+                   ],
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_in_ids() ->
+    %% previous test setup has users with id 1 and 2; no users with id 309, 409
+    ExpectedRows = [
+                    [{<<"last_name">>, <<"Smith">>}],
+                    [{<<"last_name">>, <<"Anderson">>}]
+                   ],
+    Values = [1, 2, 309, 409],
+    {ok, Rows} = sqerl:adhoc_select([<<"last_name">>],
+                                    <<"users">>,
+                                    {<<"id">>, in, Values}),
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_in_names() ->
+    %% previous test setup has users with last names Smith and Anderson but not Toto and Tata
+    ExpectedRows = [
+                    [{<<"id">>, 1},{<<"first_name">>, <<"Kevin">>}],
+                    [{<<"id">>, 2},{<<"first_name">>, <<"Mark">>}]
+                   ],
+    Values = [<<"Smith">>, <<"Anderson">>, <<"Toto">>, <<"Tata">>],
+    {ok, Rows} = sqerl:adhoc_select([<<"id">>, <<"first_name">>],
+                                    <<"users">>,
+                                    {<<"last_name">>, in, Values}),
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_in_star() ->
+    %% previous test setup has user with last name Smith but not Toto
+    ExpectedNumRows = 1,
+    ExpectedNumCols = 7,
+    Values = [<<"Smith">>, <<"Toto">>],
+    {ok, Rows} = sqerl:adhoc_select([<<"*">>],
+                                    <<"users">>,
+                                    {<<"last_name">>, in, Values}),
+    ?assertEqual(ExpectedNumRows, length(Rows)),
+    ?assertEqual(ExpectedNumCols, length(lists:nth(1, Rows))).
+
+adhoc_select_and() ->
+    Cols = [<<"id">>],
+    Table = <<"users">>,
+    Where1 = {<<"id">>, gt, 1},
+    Where2 = {<<"last_name">>, nequals, <<"Smith">>},
+    Where = {'and', [Where1, Where2]},
+    {ok, Rows} = sqerl:adhoc_select(Cols, Table, Where),
+    ExpectedRows = [
+                    [{<<"id">>, 2}],
+                    [{<<"id">>, 3}],
+                    [{<<"id">>, 4}]
+                   ],
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_or() ->
+    Cols = [<<"id">>],
+    Table = <<"users">>,
+    Where1 = {<<"id">>, gt, 1},
+    Where2 = {<<"last_name">>, nequals, <<"Smith">>},
+    Where = {'or', [Where1, Where2]},
+    {ok, Rows} = sqerl:adhoc_select(Cols, Table, Where),
+    ExpectedRows = [
+                    [{<<"id">>, 2}],
+                    [{<<"id">>, 3}],
+                    [{<<"id">>, 4}]
+                   ],
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_complex() ->
+    Where = {'and', [{<<"high_score">>, gt, 10},
+                     {'or', [{<<"last_name">>, in, [<<"Maier">>, <<"Anderson">>]},
+                             {<<"active">>, equals, false}]}
+                     ]},
+    {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>, Where),
+    ExpectedRows = [
+                    [{<<"id">>, 2}],
+                    [{<<"id">>, 4}]
+                   ],
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_complex_strings() ->
+    Where = {'and', [{"high_score", gt, 10},
+                     {'or', [{"last_name", in, ["Maier", "Anderson"]},
+                             {"active", equals, false}]}
+                     ]},
+    {ok, Rows} = sqerl:adhoc_select(["id"], "users", Where),
+    ExpectedRows = [
+                    [{<<"id">>, 2}],
+                    [{<<"id">>, 4}]
+                   ],
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_complex_atoms() ->
+    Where = {'and', [{high_score, gt, 10},
+                     {'or', [{last_name, in, ['Maier', 'Anderson']},
+                             {active, equals, false}]}
+                     ]},
+    {ok, Rows} = sqerl:adhoc_select([id], users, Where),
+    ExpectedRows = [
+                    [{<<"id">>, 2}],
+                    [{<<"id">>, 4}]
+                   ],
+    ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
+
+adhoc_select_order_by() ->
+    {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>, all, [{order_by, [<<"id">>]}]),
+    ExpectedRows = [
+                    [{<<"id">>, 1}],
+                    [{<<"id">>, 2}],
+                    [{<<"id">>, 3}],
+                    [{<<"id">>, 4}]
+                   ],
+    ?assertEqual(ExpectedRows, Rows).
+
+adhoc_select_limit() ->
+    {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>, all, [{order_by, [<<"id">>]}, {limit, 2}]),
+    ExpectedRows = [
+                    [{<<"id">>, 1}],
+                    [{<<"id">>, 2}]
+                   ],
+    ?assertEqual(ExpectedRows, Rows).
+
+adhoc_select_offset() ->
+    {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>, all, [{order_by, [<<"id">>]}, {limit, {2, offset, 2}}]),
+    ExpectedRows = [
+                    [{<<"id">>, 3}],
+                    [{<<"id">>, 4}]
+                   ],
+    ?assertEqual(ExpectedRows, Rows).
+
+
+adhoc_update() ->
+    RowUpdate = [{<<"last_name">>, <<"MAIER">>}, {<<"first_name">>, <<"Toto">>}],
+    Where = {<<"last_name">>, equals, <<"Maier">>},
+    {ok, Count} = sqerl:adhoc_update(<<"users">>, RowUpdate, Where),
+    ?assertEqual(1, Count),
+    {ok, [Row]} = sqerl:adhoc_select([<<"first_name">>], <<"users">>, {<<"last_name">>, equals, <<"MAIER">>}),
+    ?assertEqual([{<<"first_name">>, <<"Toto">>}], Row),
+    RowUpdate2 = [{<<"last_name">>, <<"Maier">>}, {<<"first_name">>, <<"Chris">>}],
+    Where2 = {<<"last_name">>, equals, <<"MAIER">>},
+    {ok, Count2} = sqerl:adhoc_update(<<"users">>, RowUpdate2, Where2),
+    ?assertEqual(1, Count2).
+
+adhoc_insert() ->
+    Table = <<"users">>,
+    Columns = [<<"first_name">>,
+               <<"last_name">>,
+               <<"high_score">>,
+               <<"active">>],
+    Data = [[<<"Joe1">>, <<"Smith">>, 17, true],
+            [<<"Joe2">>, <<"Anderson">>, 23, false]],
+    adhoc_insert_delete_test(Table, Columns, Data, 10).
+
+adhoc_insert_delete_test(Table, Columns, Data, BatchSize) ->
+    {ok, InsertCount} = sqerl:adhoc_insert(Table, Columns, Data, BatchSize),
+    %% verify data was inserted correctly -- relies on first field
+    %% values in test being unique.
+    Field = lists:nth(1, Columns),
+    Values = [Value || [Value|_] <- Data],
+    Where = {Field, in, Values},
+    {ok, Rows} = sqerl:adhoc_select(Columns, Table, Where),
+    {ReturnedColumns, ReturnedData} = sqerl:extract_insert_data(Rows),
+    %% clean up before asserts
+    {ok, DeleteCount} = sqerl:adhoc_delete(Table, Where),
+    %% now verify...
+    ?assertEqual(length(Data), InsertCount),
+    ?assertEqual(Columns, ReturnedColumns),
+    ?assertEqual(Data, ReturnedData),
+    ?assertEqual(length(Data), DeleteCount).
+
+adhoc_insert_many_users() ->
+    Table = <<"users">>,
+    Columns = [<<"first_name">>,
+               <<"last_name">>],
+    F = fun(I) -> list_to_binary(integer_to_list(I)) end,
+    Data = [[F(I), F(I)] || I <- lists:seq(1, 35)],
+    adhoc_insert_delete_test(Table, Columns, Data, 10).
+
+adhoc_insert_even_more_users() ->
+    Table = <<"users">>,
+    Columns = [<<"first_name">>,
+               <<"last_name">>],
+    F = fun(I) -> list_to_binary(integer_to_list(I)) end,
+    Data = [[F(I), F(I)] || I <- lists:seq(1000, 2004)],
+    adhoc_insert_delete_test(Table, Columns, Data, 100).
+
+adhoc_insert_rows() ->
+    Table = <<"users">>,
+    F = fun(I) -> list_to_binary(integer_to_list(I)) end,
+    Rows = [[{<<"first_name">>, F(I)}, {<<"last_name">>, F(I)}] || I <- lists:seq(3000, 4004)],
+    {ok, InsertCount} = sqerl:adhoc_insert(Table, Rows, 100),
+    %% verify data was inserted correctly -- relies on first field
+    Where = {<<"first_name">>, in, [F(I) || I <- lists:seq(3000, 4004)]},
+    {ok, ReturnedRows} = sqerl:adhoc_select([<<"first_name">>, <<"last_name">>], Table, Where),
+    %% clean up before asserts
+    {ok, DeleteCount} = sqerl:adhoc_delete(Table, Where),
+    %% now verify...
+    ?assertEqual(length(Rows), InsertCount),
+    ?assertEqual(Rows, ReturnedRows),
+    ?assertEqual(length(Rows), DeleteCount).

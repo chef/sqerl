@@ -102,4 +102,13 @@ itest_run:
 	@erl -pa deps/*/ebin -pa ebin -pa itest -noshell -eval "eunit:test(itest, [verbose])" \
 	-s erlang halt -db_type $(DB_TYPE)
 
+perftest: compile itest_create perftest_run itest_clean
+
+perftest_run:
+	cd itest;erlc -I ../include *.erl
+	@erl -pa deps/*/ebin -pa ebin -pa itest -noshell \
+	-eval "eunit:test(perftest, [verbose])" \
+	-s erlang halt -db_type $(DB_TYPE)
+
 .PHONY: all compile eunit test dialyzer clean allclean distclean doc itest itest_clean itest_create itest_run
+
