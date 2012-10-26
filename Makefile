@@ -82,6 +82,10 @@ endif
 doc:
 	@rebar doc skip_deps=true
 
+## Set the environment variable $DB_TYPE to either mysql or pgsql
+## to run the correct integration tests.
+-include itest/$(DB_TYPE)_conf.mk
+
 itest_create:
 	@echo Creating integration test database
 	@${DB_CMD} < itest/itest_${DB_TYPE}_create.sql
