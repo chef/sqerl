@@ -121,7 +121,7 @@ init(Config) ->
         end,
     %% Need this hokey pool record to create a database connection
     PoolDescriptor = #pool{host=Host, port=Port, user=User, password=Pass,
-                           database=Db, encoding=utf8},
+                           database=Db, encoding=latin1},
     case catch emysql_conn:open_connection(PoolDescriptor) of
         {'EXIT', Error} ->
             error_logger:error_report(Error),
