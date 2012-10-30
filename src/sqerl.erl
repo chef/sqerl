@@ -220,15 +220,15 @@ adhoc_select(Columns, Table, Where, Clauses) ->
 %%          [<<"John">>, <<"Doe">>]]}).
 %% {ok, 2}
 %%
--define(DEFAULT_BATCH_SIZE, 100).
--define(ADHOC_INSERT_STMT_ATOM, '__adhoc_insert').
+-define(SQERL_DEFAULT_BATCH_SIZE, 100).
+-define(SQERL_ADHOC_INSERT_STMT_ATOM, '__adhoc_insert').
 
 %% TODO: What if some inserts in a batch fail? Error out or continue?
 %% TODO: Transactionality? Retries?
 %% TODO: parallel inserts?
 
 adhoc_insert(Table, Rows) ->
-    adhoc_insert(Table, Rows, ?DEFAULT_BATCH_SIZE).
+    adhoc_insert(Table, Rows, ?SQERL_DEFAULT_BATCH_SIZE).
 
 adhoc_insert(Table, Rows, BatchSize) ->
     %% reformat Rows to desired format
@@ -240,21 +240,30 @@ adhoc_insert(Table, Columns, RowsValues, BatchSize) when BatchSize > 0 ->
     bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize).
 
 bulk_insert(_Table, _Columns, _RowsValues, 0, _BatchSize) ->
+    %% 0 rows means we're done!
     {ok, 0};
 bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows < BatchSize ->
-    %% Do one bulk insert since we have less than BULK_SIZE rows
-    SQL = sqerl_adhoc:insert(Table, Columns, length(RowsValues), param_style()),
-    execute(SQL, lists:flatten(RowsValues));
+    %% Do just one bulk insert since we have less than BatchSize rows
+    SQL = sqerl_adhoc:insert(Table, Columns, NumRows, param_style()),
+    %% Need to flatten list of row data (list of lists)
+    %% to a flat list of parameters to the query
+    Parameters = lists:flatten(RowsValues),
+    execute(SQL, Parameters);
 bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= BatchSize ->
-    %% Prepare a bulk insert statement and execute as many times as needed.
+    %% We have at least one batch, so we'll prepare an insert statement
+    %% for batch size. Then adhoc_prepared_insert will iterate over batches.
     SQL = sqerl_adhoc:insert(Table, Columns, BatchSize, param_style()),
     PrepInsertUnprepare = fun(Cn) ->
-        ok = sqerl_client:prepare(Cn, ?ADHOC_INSERT_STMT_ATOM, SQL),
-        try adhoc_prepared_insert(Cn, RowsValues, NumRows, BatchSize)
-        after sqerl_client:unprepare(Cn, ?ADHOC_INSERT_STMT_ATOM)
+        ok = sqerl_client:prepare(Cn, ?SQERL_ADHOC_INSERT_STMT_ATOM, SQL),
+        try
+            adhoc_prepared_insert(Cn, RowsValues, NumRows, BatchSize)
+        after
+            sqerl_client:unprepare(Cn, ?SQERL_ADHOC_INSERT_STMT_ATOM)
         end
     end,
     {ok, Count, RemainingRowsValues} = with_db(PrepInsertUnprepare),
+    %% We've taken care of full batches. We could have some remaining rows
+    %% that didn't add up to a full batch. We'll do one insert for them.
     RemainingNumRows = NumRows - Count,
     {ok, RemainingCount} = bulk_insert(Table, Columns, RemainingRowsValues, RemainingNumRows, BatchSize),
     {ok, Count + RemainingCount}.
@@ -265,7 +274,10 @@ adhoc_prepared_insert(Cn, RowsValues, NumRows, BatchSize) ->
 
 adhoc_prepared_insert(Cn, RowsValues, NumRows, BatchSize, CountSoFar) when NumRows >= BatchSize ->
     {RowsValuesToInsert, Rest} = lists:split(BatchSize, RowsValues),
-    {ok, Count} = sqerl_client:execute(Cn, ?ADHOC_INSERT_STMT_ATOM, lists:flatten(RowsValuesToInsert)),
+    %% Need to flatten list of row data (list of lists)
+    %% to a flat list of parameters to the query
+    Parameters = lists:flatten(RowsValuesToInsert),
+    {ok, Count} = sqerl_client:execute(Cn, ?SQERL_ADHOC_INSERT_STMT_ATOM, Parameters),
     adhoc_prepared_insert(Cn, Rest, NumRows - Count, BatchSize, CountSoFar + Count);
 adhoc_prepared_insert(_Cn, RowsValues, NumRows, BatchSize, CountSoFar) when NumRows < BatchSize ->
     {ok, CountSoFar, RowsValues}.
