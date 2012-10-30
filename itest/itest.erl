@@ -174,6 +174,9 @@ basic_test_() ->
       {<<"Adhoc insert rows">>,
        fun adhoc_insert_rows/0},
 
+      {<<"Insert/select gzip data">>,
+        fun gzip_insert_select/0},
+
       {<<"Tolerates bounced server">>,
        {timeout, 10,
         fun bounced_server/0}},
@@ -593,3 +596,26 @@ adhoc_insert_rows() ->
     ?assertEqual(length(Rows), InsertCount),
     ?assertEqual(Rows, ReturnedRows),
     ?assertEqual(length(Rows), DeleteCount).
+
+%%
+%% Gzip handling tests
+%%
+gzip_insert_select() ->
+    Table = <<"users">>,
+    TextData = <<"data to compress with gzip">>,
+    GzipData = zlib:gzip(TextData),
+    Rows = [[{<<"last_name">>, <<"gzip">>}, {<<"datablob">>, GzipData}]],
+    {ok, InsertCount} = sqerl:adhoc_insert(Table, Rows),
+    ?assertEqual(1, InsertCount),
+    % verify we can query what we just inserted
+    Where = {<<"last_name">>, equals, <<"gzip">>},
+    {ok, ReturnedRows} = sqerl:adhoc_select([<<"last_name">>, <<"datablob">>], Table, Where),
+    % clean up before asserts in case they fail...
+    {ok, DeleteCount} = sqerl:adhoc_delete(Table, Where),
+    % now verify...
+    ?assertEqual(1, length(ReturnedRows)),
+    ?assertEqual(ReturnedRows, Rows),
+    [[{_, _}, {<<"datablob">>, QueriedGzipData}]] = ReturnedRows,
+    ?assertEqual(TextData, zlib:gunzip(QueriedGzipData)),
+    ?assertEqual(1, DeleteCount).
+
