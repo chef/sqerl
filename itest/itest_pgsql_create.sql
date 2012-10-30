@@ -11,7 +11,7 @@ CREATE TABLE users (
        last_name varchar(80),
        high_score int,
        active boolean,
-       datablob text,
+       datablob bytea,
        created timestamp
 );
 
@@ -24,7 +24,7 @@ CREATE TABLE nodes (
        org_id char(32) NOT NULL,
        name varchar(255) NOT NULL,
        environment varchar(255) NOT NULL,
-       serialized_object text,
+       serialized_object bytea,
        last_updated_by char(32) NOT NULL,
        created_at timestamp NOT NULL,
        updated_at timestamp NOT NULL
