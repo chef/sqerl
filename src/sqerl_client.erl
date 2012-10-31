@@ -88,7 +88,9 @@ prepare(Cn, Name, SQL) when is_pid(Cn), is_atom(Name), is_binary(SQL) ->
 %% @doc Unprepare a previously prepared statement
 -spec unprepare(pid(), atom()) -> ok | {error, any()}.
 unprepare(Cn, Name) when is_pid(Cn), is_atom(Name) ->
-    gen_server:call(Cn, {unprepare, Name, none}).
+    %% downstream code standardizes on {Call, StmtNameOrSQL, Args}
+    %% for simplicity so here we just set Args to none
+    gen_server:call(Cn, {unprepare, Name, none}, infinity).
 
 %% @doc Execute SQL or prepared statement with no parameters.
 %% See execute/3 for return values.
@@ -185,6 +187,14 @@ read_statements(Path) when is_list(Path) ->
 
 
 %% @doc Returns SQL parameter style atom, e.g. qmark, dollarn.
+%% Note on approach: here we rely on sqerl config in
+%% application environment to retrieve db type and from there
+%% call the appropriate driver module.
+%% It would be better to not be tied to how sqerl is
+%% configured and instead retrieve that from state somewhere.
+%% However, retrieving that from state implies making a call
+%% to a process somewhere which comes with its set of
+%% implications, contention being a potential issue.
 %%-spec sql_parameter_style() -> atom().
 sql_parameter_style() ->
     Mod = drivermod(),

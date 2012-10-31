@@ -121,8 +121,11 @@ prepare(Name, SQL, #state{cn=Cn, statements=Statements}=State) ->
     {ok, UpdatedState}.
 
 %% @doc Unprepare a previously prepared statement
-%% Interface uses 3 parameters. In this case the 
-%% second one is unused.
+%% Protocol between sqerl_client and db-specific modules
+%% uses 3 parameters (QueryOrName, Args, State) for all
+%% calls for simplicity. For an unprepare call, there are
+%% no arguments, so the second parameter of the function
+%% is unused.
 -spec unprepare(atom(), [], #state{}) -> {ok, #state{}}.
 unprepare(Name, _, State) ->
     unprepare(Name, State).

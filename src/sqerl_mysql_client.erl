@@ -52,7 +52,11 @@ prepare(Name, SQL, #state{cn=_Cn}=State) ->
     {ok, State}.
 
 %% @doc Unprepare a previously prepared statement
-%%
+%% Protocol between sqerl_client and db-specific modules
+%% uses 3 parameters (QueryOrName, Args, State) for all
+%% calls for simplicity. For an unprepare call, there are
+%% no arguments, so the second parameter of the function
+%% is unused.
 -spec unprepare(atom(), [], term()) -> {ok, term()}.
 unprepare(_Name, _Args, #state{cn=_Cn}=State) ->
     %% unsupported by emysql.
