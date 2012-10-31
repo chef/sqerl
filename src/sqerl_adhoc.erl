@@ -246,9 +246,9 @@ values_parts(NumColumns, NumRows, ParamStyle, Offset) ->
 %% @doc Generates values part for one row
 -spec values_part(integer(), integer(), atom()) -> [binary()].
 values_part(NumColumns, Offset, ParamStyle) ->
-    [<<"(">>]
-    ++ join(placeholders(NumColumns, Offset, ParamStyle), <<",">>)
-    ++ [<<")">>].
+    [<<"(">>,
+     join(placeholders(NumColumns, Offset, ParamStyle), <<",">>),
+     <<")">>].
 
 %% @doc Generate columns parts of query
 %% (Just joins them with comma).
@@ -343,11 +343,11 @@ where_subs([Where|WhereList], ParamStyle, ParamPosOffset, WherePartsAcc, ValuesA
 ensure_safe(Value) when is_binary(Value) ->
     {match, _} = re:run(Value, ?SAFE_VALUE_RE), 
     Value;
-ensure_safe([H|T]) when is_integer(H) ->
+ensure_safe([Char|_]=Str) when is_integer(Char) ->
     %% string
-    ensure_safe(list_to_binary([H|T]));
+    ensure_safe(list_to_binary(Str));
 ensure_safe(Value) when is_atom(Value) ->
-    ensure_safe(atom_to_list(Value));
+    ensure_safe(list_to_binary(atom_to_list(Value)));
 ensure_safe([H]) -> 
     [ensure_safe(H)];
 ensure_safe([H|T]) ->
