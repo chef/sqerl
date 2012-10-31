@@ -221,11 +221,9 @@ adhoc_select(Columns, Table, Where, Clauses) ->
 %% {ok, 2}
 %%
 -define(SQERL_DEFAULT_BATCH_SIZE, 100).
+%% Backend DBs limit what we can name a statement.
+%% No upper case, no $...
 -define(SQERL_ADHOC_INSERT_STMT_ATOM, '__adhoc_insert').
-
-%% TODO: What if some inserts in a batch fail? Error out or continue?
-%% TODO: Transactionality? Retries?
-%% TODO: parallel inserts?
 
 adhoc_insert(Table, Rows) ->
     adhoc_insert(Table, Rows, ?SQERL_DEFAULT_BATCH_SIZE).
@@ -235,52 +233,77 @@ adhoc_insert(Table, Rows, BatchSize) ->
     {Columns, RowsValues} = extract_insert_data(Rows),
     adhoc_insert(Table, Columns, RowsValues, BatchSize).
 
+adhoc_insert(_Table, _Columns, [], _BatchSize) ->
+    %% empty list of rows means nothing to do
+    {ok, 0};
 adhoc_insert(Table, Columns, RowsValues, BatchSize) when BatchSize > 0 ->
     NumRows = length(RowsValues),
-    bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize).
+    %% Avoid the case where NumRows < BatchSize
+    EffectiveBatchSize = erlang:min(NumRows, BatchSize),
+    bulk_insert(Table, Columns, RowsValues, NumRows, EffectiveBatchSize).
 
-bulk_insert(_Table, _Columns, _RowsValues, 0, _BatchSize) ->
-    %% 0 rows means we're done!
-    {ok, 0};
-bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows < BatchSize ->
-    %% Do just one bulk insert since we have less than BatchSize rows
-    SQL = sqerl_adhoc:insert(Table, Columns, NumRows, param_style()),
-    %% Need to flatten list of row data (list of lists)
-    %% to a flat list of parameters to the query
-    Parameters = lists:flatten(RowsValues),
-    execute(SQL, Parameters);
+%% @doc Bulk insert rows. Returns {ok, InsertedCount}.
 bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= BatchSize ->
-    %% We have at least one batch, so we'll prepare an insert statement
-    %% for batch size. Then adhoc_prepared_insert will iterate over batches.
+    Inserter = make_batch_inserter(Table, Columns, RowsValues, NumRows, BatchSize),
+    with_db(Inserter).
+
+%% @doc Returns a function to call via with_db/1.
+%% Function prepares an insert statement, inserts all the batches and 
+%% remaining rows, unprepares the statement, and returns 
+%% {ok, InsertedCount}.
+%% We need to use this approach because preparing, inserting,
+%% unpreparing must all be done against the same DB connection.
+make_batch_inserter(Table, Columns, RowsValues, NumRows, BatchSize) ->
     SQL = sqerl_adhoc:insert(Table, Columns, BatchSize, param_style()),
-    PrepInsertUnprepare = fun(Cn) ->
+    fun(Cn) ->
         ok = sqerl_client:prepare(Cn, ?SQERL_ADHOC_INSERT_STMT_ATOM, SQL),
         try
-            adhoc_prepared_insert(Cn, RowsValues, NumRows, BatchSize)
+            insert_batches(Cn, ?SQERL_ADHOC_INSERT_STMT_ATOM,
+                           Table, Columns, RowsValues, NumRows, BatchSize)
         after
             sqerl_client:unprepare(Cn, ?SQERL_ADHOC_INSERT_STMT_ATOM)
         end
-    end,
-    {ok, Count, RemainingRowsValues} = with_db(PrepInsertUnprepare),
-    %% We've taken care of full batches. We could have some remaining rows
-    %% that didn't add up to a full batch. We'll do one insert for them.
-    RemainingNumRows = NumRows - Count,
-    {ok, RemainingCount} = bulk_insert(Table, Columns, RemainingRowsValues, RemainingNumRows, BatchSize),
-    {ok, Count + RemainingCount}.
+    end.
 
 %% @doc Insert data with insert statement already prepared
-adhoc_prepared_insert(Cn, RowsValues, NumRows, BatchSize) ->
-    adhoc_prepared_insert(Cn, RowsValues, NumRows, BatchSize, 0).
+insert_batches(Cn, StmtName, Table, Columns, RowsValues, NumRows, BatchSize) ->
+    insert_batches(Cn, StmtName, Table, Columns, RowsValues, NumRows, BatchSize, 0).
 
-adhoc_prepared_insert(Cn, RowsValues, NumRows, BatchSize, CountSoFar) when NumRows >= BatchSize ->
+%% @doc Tail-recursive function iterates over batches and inserts them.
+%% Also inserts the remaining rows (if any) in one shot.
+%% Returns {ok, InsertedCount}
+insert_batches(Cn, StmtName, Table, Columns, RowsValues, NumRows, BatchSize, CountSoFar)
+        when NumRows >= BatchSize ->
     {RowsValuesToInsert, Rest} = lists:split(BatchSize, RowsValues),
+    {ok, Count} = insert_oneshot(Cn, StmtName, RowsValuesToInsert),
+    insert_batches(Cn, StmtName, Table, Columns, Rest, NumRows - Count, BatchSize, CountSoFar + Count);
+insert_batches(Cn, _StmtName, Table, Columns, RowsValues, _NumRows, _BatchSize, CountSoFar) ->
+    %% We have fewer rows than fit in a batch, so we'll do a one-shot insert for those.
+    {ok, InsertCount} = adhoc_insert_oneshot(Cn, Table, Columns, RowsValues),
+    {ok, CountSoFar + InsertCount}.
+
+%% @doc Insert all given rows in one shot.
+%% Creates one SQL statement to insert all the rows at once,
+%% then executes.
+%% Returns {ok, InsertedCount}
+adhoc_insert_oneshot(_Cn, _Table, _Columns, []) ->
+    %% 0 rows means nothing to do!
+    {ok, 0};
+adhoc_insert_oneshot(Cn, Table, Columns, RowsValues) ->
+    SQL = sqerl_adhoc:insert(Table, Columns, length(RowsValues), param_style()),
+    insert_oneshot(Cn, SQL, RowsValues).
+
+%% @doc Insert all rows at once using given 
+%% prepared statement or SQL.
+%% Returns {ok, InsertCount}
+insert_oneshot(_Cn, _StmtOrSQL, []) ->
+    %% 0 rows means nothing to do!
+    {ok, 0};
+insert_oneshot(Cn, StmtOrSQL, RowsValues) ->
     %% Need to flatten list of row data (list of lists)
     %% to a flat list of parameters to the query
-    Parameters = lists:flatten(RowsValuesToInsert),
-    {ok, Count} = sqerl_client:execute(Cn, ?SQERL_ADHOC_INSERT_STMT_ATOM, Parameters),
-    adhoc_prepared_insert(Cn, Rest, NumRows - Count, BatchSize, CountSoFar + Count);
-adhoc_prepared_insert(_Cn, RowsValues, NumRows, BatchSize, CountSoFar) when NumRows < BatchSize ->
-    {ok, CountSoFar, RowsValues}.
+    Parameters = lists:flatten(RowsValues),
+    sqerl_client:execute(Cn, StmtOrSQL, Parameters).
 
 %% @doc Extract insert data from Rows (list of proplists).
 %% Assumes all rows have the same format.
@@ -293,9 +316,10 @@ adhoc_prepared_insert(_Cn, RowsValues, NumRows, BatchSize, CountSoFar) when NumR
 %% {[<<"id">>,<<"name">>],[[1,<<"Joe">>],[2,<<"Jeff">>]]}
 %%
 -spec extract_insert_data([[{binary(), any()}]]) -> {[binary()], [[any()]]}.
+extract_insert_data([]) ->
+    {[], []};
 extract_insert_data(Rows) ->
-    FirstRow = lists:nth(1, Rows),
-    Columns = [C || {C, _V} <- FirstRow],
+    Columns = [C || {C, _V} <- hd(Rows)],
     RowsValues = [[V || {_C, V} <- Row] || Row <- Rows],
     {Columns, RowsValues}.
 
