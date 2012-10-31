@@ -29,13 +29,41 @@
 
 %% sqerl_client callbacks
 -export([init/1,
+         prepare/3,
+         unprepare/3,
          execute/3,
-         is_connected/1]).
+         is_connected/1,
+         sql_parameter_style/0]).
 
 -record(state, {cn,
                 ctrans :: dict() | undefined }).
 
 -define(PING_QUERY, <<"SELECT 'pong' as ping LIMIT 1">>).
+
+%% See sqerl_adhoc:placeholder
+-spec sql_parameter_style() -> qmark.
+sql_parameter_style() -> qmark.
+
+%% @doc Prepare a statement
+%%
+-spec prepare(atom(), binary(), term()) -> {ok, term()}.
+prepare(Name, SQL, #state{cn=_Cn}=State) ->
+    ok = emysql:prepare(Name, SQL),
+    {ok, State}.
+
+%% @doc Unprepare a previously prepared statement
+%% Protocol between sqerl_client and db-specific modules
+%% uses 3 parameters (QueryOrName, Args, State) for all
+%% calls for simplicity. For an unprepare call, there are
+%% no arguments, so the second parameter of the function
+%% is unused.
+-spec unprepare(atom(), [], term()) -> {ok, term()}.
+unprepare(_Name, _Args, #state{cn=_Cn}=State) ->
+    %% unsupported by emysql.
+    %% but emysql can re-prepare statements,
+    %% so as long as we re-use statements
+    %% it should be ok.
+    {ok, State}.
 
 %% @doc execute query or prepared statement.
 %% Emysql has a common interface for both queries and prepared statements.

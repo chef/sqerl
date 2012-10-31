@@ -48,7 +48,10 @@
          start_link/1,
          execute/2,
          execute/3,
-         close/1]).
+         close/1,
+         prepare/3,
+         unprepare/2,
+         sql_parameter_style/0]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -69,6 +72,25 @@
     {sqerl_results(), State :: term()}.
 -callback is_connected(State :: term()) ->
     {true, State :: term()} | false.
+-callback sql_parameter_style() ->
+    atom().
+-callback prepare(StatementName :: atom(), SQL :: sqerl_sql(), State :: term()) ->
+    {ok, State :: term()}.
+-callback unprepare(StatementName :: atom(), _, State :: term()) ->
+    {ok, State :: term()}.
+
+%% @doc Prepare a statement
+%%
+-spec prepare(pid(), atom(), binary()) -> ok | {error, any()}.
+prepare(Cn, Name, SQL) when is_pid(Cn), is_atom(Name), is_binary(SQL) ->
+    gen_server:call(Cn, {prepare, Name, SQL}, infinity).
+
+%% @doc Unprepare a previously prepared statement
+-spec unprepare(pid(), atom()) -> ok | {error, any()}.
+unprepare(Cn, Name) when is_pid(Cn), is_atom(Name) ->
+    %% downstream code standardizes on {Call, StmtNameOrSQL, Args}
+    %% for simplicity so here we just set Args to none
+    gen_server:call(Cn, {unprepare, Name, none}, infinity).
 
 %% @doc Execute SQL or prepared statement with no parameters.
 %% See execute/3 for return values.
@@ -93,12 +115,9 @@ start_link(DbType) ->
     gen_server:start_link(?MODULE, [DbType], []).
 
 init([]) ->
-    init(ev(db_type));
+    init(dbtype());
 init(DbType) ->
-    CallbackMod = case DbType of
-                      pgsql -> sqerl_pgsql_client;
-                      mysql -> sqerl_mysql_client
-                  end,
+    CallbackMod = drivermod(DbType),
     IdleCheck = ev(idle_check, 1000),
     Config = [{host, ev(db_host)},
               {port, ev(db_port)},
@@ -165,6 +184,42 @@ read_statements(L = [{Label, SQL}|_T]) when is_atom(Label) andalso is_binary(SQL
 read_statements(Path) when is_list(Path) ->
     {ok, Statements} = file:consult(Path),
     Statements.
+
+
+%% @doc Returns SQL parameter style atom, e.g. qmark, dollarn.
+%% Note on approach: here we rely on sqerl config in
+%% application environment to retrieve db type and from there
+%% call the appropriate driver module.
+%% It would be better to not be tied to how sqerl is
+%% configured and instead retrieve that from state somewhere.
+%% However, retrieving that from state implies making a call
+%% to a process somewhere which comes with its set of
+%% implications, contention being a potential issue.
+%%-spec sql_parameter_style() -> atom().
+sql_parameter_style() ->
+    Mod = drivermod(),
+    Mod:sql_parameter_style().
+
+%% @doc Returns DB driver module atom according to environment.
+%%-spec drivermod() -> atom().
+drivermod() -> 
+    drivermod(dbtype()).
+
+%% @doc Returns DB driver module atom for given DB type atom 
+%% (e.g. pgsql, mysql).
+%%-spec drivermod(atom()) -> atom().
+drivermod(DBType) ->
+    case DBType of
+        pgsql -> sqerl_pgsql_client;
+        mysql -> sqerl_mysql_client;
+        Other -> Msg = {unsupported_db_type, sqerl, Other},
+                 error_logger:error_report(Msg),
+                 error(Msg)
+    end.
+
+%% @doc Returns DB type atom (e.g. pgsql, mysql) from environment.
+-spec dbtype() -> atom().
+dbtype() -> ev(db_type).
 
 %% Short for "environment value", just provides some sugar for grabbing config values
 ev(Key) ->
