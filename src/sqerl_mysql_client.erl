@@ -120,6 +120,9 @@ init(Config) ->
             false -> undefined
         end,
     %% Need this hokey pool record to create a database connection
+    %% Note: we use encoding=latin1 to force Emysql to not do any encoding.
+    %% We would normally use utf8 but it causes Emysql to barf on binary
+    %% data (e.g. gzipped).
     PoolDescriptor = #pool{host=Host, port=Port, user=User, password=Pass,
                            database=Db, encoding=latin1},
     case catch emysql_conn:open_connection(PoolDescriptor) of
