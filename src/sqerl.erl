@@ -126,13 +126,14 @@ execute_statement(StmtName, StmtArgs, XformName, XformArgs) ->
             Other
     end.
 
-%% @doc Execute query or statement with no parameters
+%% @doc Execute query or statement with no parameters.
 %% See execute/2 for return info.
 -spec execute(sqerl_query()) -> sqerl_results().
 execute(QueryOrStatement) ->
     execute(QueryOrStatement, []).
 
 %% @doc Execute query or statement with parameters.
+%% ```
 %% Returns:
 %% - {ok, Result}
 %% - {error, ErrorInfo}
@@ -141,10 +142,11 @@ execute(QueryOrStatement) ->
 %% - Rows
 %% - Count
 %%
-%% Row is a proplist, e.g. [{<<"id">>, 1}, {<<"name">>, <<"John">>}]
+%% Row is a proplist-like array, e.g. [{<<"id">>, 1}, {<<"name">>, <<"John">>}]
 %%
 %% Note that both a simple query and a prepared statement can take
 %% parameters.
+%% '''
 %%
 -spec execute(sqerl_query(), [] | [term()]) -> sqerl_results().
 execute(QueryOrStatement, Parameters) ->
@@ -152,9 +154,8 @@ execute(QueryOrStatement, Parameters) ->
     with_db(F).
 
 
-%% @doc Execute an adhoc query: adhoc_select(Columns, Table, Where)
-%% or adhoc_select(Columns, Table, Where, Clauses)
-%%
+%% @doc Execute an adhoc select query.
+%% ```
 %% Returns:
 %% - {ok, Rows}
 %% - {error, ErrorInfo}
@@ -173,6 +174,16 @@ execute(QueryOrStatement, Parameters) ->
 %%
 %% adhoc_select/4 takes an additional Clauses argument which
 %% is a list of additional clauses for the query.
+%% '''
+-spec adhoc_select([binary() | string()], binary() | string(), atom() | tuple()) -> sqerl_results().
+adhoc_select(Columns, Table, Where) ->
+    adhoc_select(Columns, Table, Where, []).
+
+%% @doc Execute an adhoc select query with additional clauses.
+%% ```
+%% Group By Clause
+%% ---------------
+%% Form: {groupby, Fields}
 %%
 %% Order By Clause
 %% ---------------
@@ -181,58 +192,64 @@ execute(QueryOrStatement, Parameters) ->
 %% Limit/Offset Clause
 %% --------------------
 %% Form: {limit, Limit} | {limit, {Limit, offset, Offset}}
-%%
+%% '''
 %% See itest:adhoc_select_complex/0 for an example of a complex query
 %% that uses several clauses.
-%%
-%% -spec adhoc_select([binary() | string()], binary() | string(), sql_clause()) -> sql_result().
-adhoc_select(Columns, Table, Where) ->
-    adhoc_select(Columns, Table, Where, []).
-
-%% -spec adhoc_select([binary() | string()], binary() | string(), sql_clause(), [] | [sql_clause]) -> sql_result().
+-spec adhoc_select([binary() | string()], binary() | string(), atom() | tuple(), [] | [atom() | tuple()]) -> sqerl_results().
 adhoc_select(Columns, Table, Where, Clauses) ->
     {SQL, Values} = sqerl_adhoc:select(Columns, Table, 
                       [{where, Where}|Clauses], param_style()),
     execute(SQL, Values).
 
-%% @doc Insert records.
+
+-define(SQERL_DEFAULT_BATCH_SIZE, 100).
+%% Backend DBs limit what we can name a statement.
+%% No upper case, no $...
+-define(SQERL_ADHOC_INSERT_STMT_ATOM, '__adhoc_insert').
+
+%% @doc Insert Rows into Table with default batch size.
+%% @see adhoc_insert/3.
+adhoc_insert(Table, Rows) ->
+    adhoc_insert(Table, Rows, ?SQERL_DEFAULT_BATCH_SIZE).
+
+%% @doc Insert Rows into Table with given batch size.
 %%
-%% Prepares a statement and call it repeatedly.
-%% Inserts ?BULK_SIZE records at a time until
-%% there are fewer records and it inserts
-%% the rest at one time.
+%% Reformats input data to {Columns, RowsValues} and
+%% calls adhoc_insert/4.
+%% ```
+%% - Rows: list of proplists (such as returned by a select) e.g.
+%% [
+%%     [{<<"id">>, 1},{<<"first_name">>, <<"Kevin">>}],
+%%     [{<<"id">>, 2},{<<"first_name">>, <<"Mark">>}]
+%%   ]
+%% '''
+%% Returns {ok, InsertCount}
 %%
-%% - Columns, RowsValues
-%%   e.g. {[<<"first_name">>, <<"last_name">>],
-%%         [[<<"Joe">>, <<"Blow">>],
-%%          [<<"John">>, <<"Doe">>]]}
+%% @see adhoc_insert/4.
+adhoc_insert(Table, Rows, BatchSize) ->
+    %% reformat Rows to desired format
+    {Columns, RowsValues} = extract_insert_data(Rows),
+    adhoc_insert(Table, Columns, RowsValues, BatchSize).
+
+%% @doc Insert records defined by {Columns, RowsValues}
+%% into Table using given BatchSize.
+%% ```
+%% - Columns, RowsValues e.g.
+%%   {[<<"first_name">>, <<"last_name">>],
+%%      [
+%%        [<<"Joe">>, <<"Blow">>],
+%%        [<<"John">>, <<"Doe">>]
+%%      ]}
 %%
-%% - Rows: list of proplists (such as returned by a select)
-%%   e.g. [
-%%         [{<<"id">>, 1},{<<"first_name">>, <<"Kevin">>}],
-%%         [{<<"id">>, 2},{<<"first_name">>, <<"Mark">>}]
-%%        ]
-%% Returns {ok, Count}
+%% Returns {ok, InsertedCount}.
 %%
 %% 1> adhoc_insert(<<"users">>,
 %%        {[<<"first_name">>, <<"last_name">>],
 %%         [[<<"Joe">>, <<"Blow">>],
 %%          [<<"John">>, <<"Doe">>]]}).
 %% {ok, 2}
+%% '''
 %%
--define(SQERL_DEFAULT_BATCH_SIZE, 100).
-%% Backend DBs limit what we can name a statement.
-%% No upper case, no $...
--define(SQERL_ADHOC_INSERT_STMT_ATOM, '__adhoc_insert').
-
-adhoc_insert(Table, Rows) ->
-    adhoc_insert(Table, Rows, ?SQERL_DEFAULT_BATCH_SIZE).
-
-adhoc_insert(Table, Rows, BatchSize) ->
-    %% reformat Rows to desired format
-    {Columns, RowsValues} = extract_insert_data(Rows),
-    adhoc_insert(Table, Columns, RowsValues, BatchSize).
-
 adhoc_insert(_Table, _Columns, [], _BatchSize) ->
     %% empty list of rows means nothing to do
     {ok, 0};
@@ -248,11 +265,14 @@ bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= Batc
     with_db(Inserter).
 
 %% @doc Returns a function to call via with_db/1.
+%%
 %% Function prepares an insert statement, inserts all the batches and 
 %% remaining rows, unprepares the statement, and returns 
 %% {ok, InsertedCount}.
+%%
 %% We need to use this approach because preparing, inserting,
 %% unpreparing must all be done against the same DB connection.
+%%
 make_batch_inserter(Table, Columns, RowsValues, NumRows, BatchSize) ->
     SQL = sqerl_adhoc:insert(Table, Columns, BatchSize, param_style()),
     fun(Cn) ->
@@ -265,13 +285,13 @@ make_batch_inserter(Table, Columns, RowsValues, NumRows, BatchSize) ->
         end
     end.
 
-%% @doc Insert data with insert statement already prepared
+%% @doc Insert data with insert statement already prepared.
 insert_batches(Cn, StmtName, Table, Columns, RowsValues, NumRows, BatchSize) ->
     insert_batches(Cn, StmtName, Table, Columns, RowsValues, NumRows, BatchSize, 0).
 
 %% @doc Tail-recursive function iterates over batches and inserts them.
 %% Also inserts the remaining rows (if any) in one shot.
-%% Returns {ok, InsertedCount}
+%% Returns {ok, InsertedCount}.
 insert_batches(Cn, StmtName, Table, Columns, RowsValues, NumRows, BatchSize, CountSoFar)
         when NumRows >= BatchSize ->
     {RowsValuesToInsert, Rest} = lists:split(BatchSize, RowsValues),
@@ -285,7 +305,7 @@ insert_batches(Cn, _StmtName, Table, Columns, RowsValues, _NumRows, _BatchSize, 
 %% @doc Insert all given rows in one shot.
 %% Creates one SQL statement to insert all the rows at once,
 %% then executes.
-%% Returns {ok, InsertedCount}
+%% Returns {ok, InsertedCount}.
 adhoc_insert_oneshot(_Cn, _Table, _Columns, []) ->
     %% 0 rows means nothing to do!
     {ok, 0};
@@ -295,7 +315,7 @@ adhoc_insert_oneshot(Cn, Table, Columns, RowsValues) ->
 
 %% @doc Insert all rows at once using given 
 %% prepared statement or SQL.
-%% Returns {ok, InsertCount}
+%% Returns {ok, InsertCount}.
 insert_oneshot(_Cn, _StmtOrSQL, []) ->
     %% 0 rows means nothing to do!
     {ok, 0};
@@ -305,17 +325,20 @@ insert_oneshot(Cn, StmtOrSQL, RowsValues) ->
     Parameters = lists:flatten(RowsValues),
     sqerl_client:execute(Cn, StmtOrSQL, Parameters).
 
-%% @doc Extract insert data from Rows (list of proplists).
+%% @doc Extract insert data from Rows.
+%%
 %% Assumes all rows have the same format.
 %% Returns {Columns, RowsValues}.
 %%
+%% ```
 %% 1> extract_insert_data([
 %%                         [{<<"id">>, 1}, {<<"name">>, <<"Joe">>}],
 %%                         [{<<"id">>, 2}, {<<"name">>, <<"Jeff">>}],
 %%                        ]).
 %% {[<<"id">>,<<"name">>],[[1,<<"Joe">>],[2,<<"Jeff">>]]}
+%% '''
 %%
--spec extract_insert_data([[{binary(), any()}]]) -> {[binary()], [[any()]]}.
+-spec extract_insert_data(sqerl_rows()) -> {[binary()], [[term()]]}.
 extract_insert_data([]) ->
     {[], []};
 extract_insert_data(Rows) ->
@@ -336,7 +359,7 @@ adhoc_delete(Table, Where) ->
 %% The following illustrates how we could also implement adhoc update
 %% if ever desired.
 %%
-%% @doc Adhoc update.
+%% %@doc Adhoc update.
 %% Updates records matching Where specifications with
 %% fields and values in given Row.
 %% Uses the same Where specifications as adhoc_select/3.

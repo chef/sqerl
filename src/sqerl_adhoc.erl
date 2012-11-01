@@ -1,7 +1,7 @@
 %% -*- erlang-indent-level: 4;indent-tabs-mode: nil; fill-column: 92-*-
 %% ex: ts=4 sw=4 et
 %% @author Jean-Philippe Langlois <jpl@opscode.com>
-%% @doc SQL generation library
+%% @doc SQL generation library.
 %% Copyright 2011-2012 Opscode, Inc. All Rights Reserved.
 %%
 %% This file is provided to you under the Apache License,
@@ -44,6 +44,7 @@
 %%
 %% Note: Validates that parameters are safe.
 %%
+%% ```
 %% Clauses = clause list
 %% Clause = Where|Order By|Limit
 %%
@@ -91,8 +92,8 @@
 %%
 %% ParamStyle is qmark (?, ?, ... for e.g. mysql) 
 %% or dollarn ($1, $2, etc. for e.g. pgsql)
-%%
-%%-spec select([sql_word()], sql_word(), [] | [sql_clause()], atom()) -> {binary(), list()}.
+%% '''
+-spec select([sql_word()], sql_word(), [] | [sql_clause()], atom()) -> {binary(), list()}.
 select(Columns, Table, Clauses, ParamStyle) ->
     [SafeColumns, SafeTable] = ensure_safe([Columns, Table]),
     {WhereSQL, Values} = where_sql(proplists:get_value(where, Clauses), ParamStyle),
@@ -153,14 +154,17 @@ limit_sql({Limit, offset, Offset}) when is_integer(Limit), is_integer(Offset) ->
     OffsetBin = list_to_binary(integer_to_list(Offset)),
     <<" LIMIT ", LimitBin/binary, " OFFSET ", OffsetBin/binary>>.
 
-%% @doc Generate UPDATE statement
+%% @doc Generate UPDATE statement.
+%%
 %% Update is given under the form of a Row (proplist).
 %% Uses the same Where specifications as select/4 except for "all" which is 
 %% not supported.
 %%
+%% ```
 %% 1> update(<<"users">>, [{<<"last_name">>, <<"Toto">>}], {<<"id">>, equals, 1}, qmark).
 %% {<<"UPDATE users SET last_name = ? WHERE id = ?">>, [<<"Toto">>, 1]}
-%%
+%% '''
+%%%
 -spec update(sql_word(), sqerl_row(), sql_clause(), atom()) -> {binary(), list()}.
 update(Table, Row, Where, ParamStyle) ->
     SafeTable = ensure_safe(Table),
@@ -191,12 +195,15 @@ set_parts([{Field, Value}|T], ParamStyle, ParamPosOffset, PartsAcc, ValuesAcc) -
     set_parts(T, ParamStyle, ParamPosOffset + 1, [Parts|PartsAcc], [Value|ValuesAcc]).
 
 
-%% @doc Generate DELETE statement
+%% @doc Generate DELETE statement.
+%%
 %% Uses the same Where specifications as select/4.
 %% See select/4 for details about the "Where" parameter.
 %%
+%% ```
 %% 1> delete(<<"users">>, {<<"id">>, equals, 1}, qmark).
 %% {<<"DELETE FROM users WHERE id = ?">>, [1]}
+%% '''
 %%
 -spec delete(sql_word(), sql_clause(), atom()) -> {binary(), [any()]}.
 delete(Table, Where, ParamStyle) ->
@@ -211,10 +218,12 @@ delete(Table, Where, ParamStyle) ->
 
 %% @doc Generate INSERT statement for N rows.
 %%
+%% ```
 %% 1> insert(<<"users">>, [<<"id">>, <<"name">>], 3, qmark).
 %% <<"INSERT INTO users (name) VALUES (?,?),(?,?),(?,?)">>
+%% '''
 %%
-%%-spec insert(sql_word(), [sql_word()], integer(), atom()) -> binary().
+-spec insert(sql_word(), [sql_word()], integer(), atom()) -> binary().
 insert(Table, Columns, NumRows, ParamStyle) when
     NumRows > 0,
     length(Columns) > 0 ->
@@ -230,11 +239,12 @@ insert(Table, Columns, NumRows, ParamStyle) when
     list_to_binary(lists:flatten(Query)).
 
 %% @doc Generate values parts of insert query
-%%-spec values_parts(integer(), integer(), atom()) -> [binary()].
+-spec values_parts(non_neg_integer(), non_neg_integer(), atom()) -> [binary()].
 values_parts(NumColumns, NumRows, ParamStyle) ->
     values_parts(NumColumns, NumRows, ParamStyle, 0).
 
 %% @doc Generate values parts with parameter placeholders offset.
+%%
 %% Offset is useful for parameter placeholder styles that use numbers
 %% e.g. dollarn for e.g. postgresql.
 -spec values_parts(integer(), integer(), atom(), integer()) -> [binary()].
@@ -250,15 +260,21 @@ values_part(NumColumns, Offset, ParamStyle) ->
      join(placeholders(NumColumns, Offset, ParamStyle), <<",">>),
      <<")">>].
 
-%% @doc Generate columns parts of query
+%% @doc Generate columns parts of query.
+%%
 %% (Just joins them with comma).
 %% Assumes input has been validated for safety.
+%%
 column_parts(Columns) -> join(Columns, <<",">>).
 
 %% @doc Generate "WHERE" parts of query.
+%%
 %% Returns {SQL, Values}
-%% SQL is a list of binaries
+%%
+%% SQL is a list of binaries.
+%%
 %% See select/4 for more details on supported forms.
+%%
 where_parts(Where, ParamStyle) ->
     where_parts(Where, ParamStyle, 0).
 
@@ -285,7 +301,7 @@ where_parts({'and', WhereList}, ParamStyle, ParamPosOffset) ->
 where_parts({'or', WhereList}, ParamStyle, ParamPosOffset) ->
     where_logic(<<"OR">>, WhereList, ParamStyle, ParamPosOffset).
 
-%% @doc Generate where part for a unary operator
+%% @doc Generate where part for a unary operator.
 %% e.g. NOT (...)
 where_unary(Op, Where, ParamStyle, ParamPosOffset) ->
     {WhereSub, Values} = where_parts(Where, ParamStyle, ParamPosOffset),
@@ -361,6 +377,7 @@ ensure_safe([H|T]) ->
 %% @doc Generates a list of placeholders with the
 %% given parameter style.
 %%
+%% ```
 %% 1> placeholders(3, qmark).
 %% [<<"?">>,<<"?">>,<<"?">>]
 %%
@@ -371,6 +388,7 @@ ensure_safe([H|T]) ->
 %%
 %% 1> placeholders(3, 4, dollarn).
 %% [<<"$5">>,<<"$6">>,<<"$7">>]
+%% '''
 %%
 -spec placeholders(integer(), integer(), atom()) -> [binary()].
 placeholders(NumValues, Offset, Style) when NumValues > 0 ->
@@ -391,9 +409,9 @@ placeholder(Pos, dollarn) ->
 
 %% @doc Join elements of list with Sep
 %%
-%% 1> join([1,2,3], 0).
-%% [1,0,2,0,3]
-
+%% ```1> join([1,2,3], 0).
+%% [1,0,2,0,3]'''
+%%
 join([], _Sep) -> [];
 join(L, Sep) -> join(L, Sep, []).
 

@@ -65,7 +65,7 @@
 %% - {ok, {Count, Rows}}
 %% - {error, ErrorInfo}
 %%
-%% Row:  proplist e.g. [{<<"id">>, 1}, {<<"name">>, <<"Toto">>}]
+%% Row:  proplist e.g. `[{<<"id">>, 1}, {<<"name">>, <<"Toto">>}]'
 %%
 -spec execute(StatementOrQuery :: sqerl_query(), 
               Parameters :: [any()],
