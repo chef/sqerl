@@ -174,6 +174,31 @@ basic_test_() ->
       {<<"Adhoc insert rows">>,
        fun adhoc_insert_rows/0},
 
+      {<<"Insert/select gzip data">>,
+        {setup,
+         fun() ->
+                 Text = <<"data to compress with gzip">>,
+                 GzipData = zlib:gzip(Text),
+                 Row = [{last_name, <<"gzip">>}, {datablob, GzipData}],
+                 {ok, Count} = sqerl:adhoc_insert(users, [Row]),
+                 ?assertEqual(1, Count),
+                 Text
+         end,
+         fun(_) ->
+                 {ok, Count} = sqerl:adhoc_delete(users, {last_name, equals, <<"gzip">>}),
+                 ?assertEqual(1, Count)
+         end,
+         fun(Text) ->
+                 fun() ->
+                         {ok, ReturnedRows} = sqerl:adhoc_select([last_name, datablob],
+                                                                 users,
+                                                                 {last_name, equals, <<"gzip">>}),
+                         ?assertEqual(1, length(ReturnedRows)),
+                         [[{_, _}, {<<"datablob">>, QueriedGzipData}]] = ReturnedRows,
+                         ?assertEqual(Text, zlib:gunzip(QueriedGzipData))
+                 end
+         end}},
+
       {<<"Tolerates bounced server">>,
        {timeout, 10,
         fun bounced_server/0}},
