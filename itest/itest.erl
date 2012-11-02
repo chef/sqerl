@@ -175,7 +175,10 @@ basic_test_() ->
        fun adhoc_insert_rows/0},
 
       {<<"Insert/select gzip data">>,
-        fun gzip_insert_select/0},
+        {setup,
+         fun gzip_test_setup/0,
+         fun gzip_test_cleanup/1,
+         fun gzip_select/0}},
 
       {<<"Tolerates bounced server">>,
        {timeout, 10,
@@ -600,22 +603,22 @@ adhoc_insert_rows() ->
 %%
 %% Gzip handling tests
 %%
-gzip_insert_select() ->
-    Table = <<"users">>,
-    TextData = <<"data to compress with gzip">>,
-    GzipData = zlib:gzip(TextData),
-    Rows = [[{<<"last_name">>, <<"gzip">>}, {<<"datablob">>, GzipData}]],
-    {ok, InsertCount} = sqerl:adhoc_insert(Table, Rows),
-    ?assertEqual(1, InsertCount),
-    % verify we can query what we just inserted
-    Where = {<<"last_name">>, equals, <<"gzip">>},
-    {ok, ReturnedRows} = sqerl:adhoc_select([<<"last_name">>, <<"datablob">>], Table, Where),
-    % clean up before asserts in case they fail...
-    {ok, DeleteCount} = sqerl:adhoc_delete(Table, Where),
-    % now verify...
-    ?assertEqual(1, length(ReturnedRows)),
-    ?assertEqual(ReturnedRows, Rows),
-    [[{_, _}, {<<"datablob">>, QueriedGzipData}]] = ReturnedRows,
-    ?assertEqual(TextData, zlib:gunzip(QueriedGzipData)),
-    ?assertEqual(1, DeleteCount).
+-define(TEXT_TO_GZIP, <<"data to compress with gzip">>).
 
+gzip_test_setup() ->
+    GzipData = zlib:gzip(?TEXT_TO_GZIP),
+    Row = [{last_name, <<"gzip">>}, {datablob, GzipData}],
+    {ok, InsertCount} = sqerl:adhoc_insert(users, [Row]),
+    ?assertEqual(1, InsertCount).
+
+gzip_select() ->
+    {ok, ReturnedRows} = sqerl:adhoc_select([last_name, datablob],
+                                            users,
+                                            {last_name, equals, <<"gzip">>}),
+    ?assertEqual(1, length(ReturnedRows)),
+    [[{_, _}, {<<"datablob">>, QueriedGzipData}]] = ReturnedRows,
+    ?assertEqual(?TEXT_TO_GZIP, zlib:gunzip(QueriedGzipData)).
+
+gzip_test_cleanup(_) ->
+    {ok, DeleteCount} = sqerl:adhoc_delete(users, {last_name, equals, <<"gzip">>}),
+    ?assertEqual(1, DeleteCount).
