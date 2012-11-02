@@ -174,6 +174,12 @@ basic_test_() ->
       {<<"Adhoc insert rows">>,
        fun adhoc_insert_rows/0},
 
+      {<<"Insert/select gzip data">>,
+        {setup,
+         fun gzip_test_setup/0,
+         fun gzip_test_cleanup/1,
+         fun gzip_select/0}},
+
       {<<"Tolerates bounced server">>,
        {timeout, 10,
         fun bounced_server/0}},
@@ -593,3 +599,26 @@ adhoc_insert_rows() ->
     ?assertEqual(length(Rows), InsertCount),
     ?assertEqual(Rows, ReturnedRows),
     ?assertEqual(length(Rows), DeleteCount).
+
+%%
+%% Gzip handling tests
+%%
+-define(TEXT_TO_GZIP, <<"data to compress with gzip">>).
+
+gzip_test_setup() ->
+    GzipData = zlib:gzip(?TEXT_TO_GZIP),
+    Row = [{last_name, <<"gzip">>}, {datablob, GzipData}],
+    {ok, InsertCount} = sqerl:adhoc_insert(users, [Row]),
+    ?assertEqual(1, InsertCount).
+
+gzip_select() ->
+    {ok, ReturnedRows} = sqerl:adhoc_select([last_name, datablob],
+                                            users,
+                                            {last_name, equals, <<"gzip">>}),
+    ?assertEqual(1, length(ReturnedRows)),
+    [[{_, _}, {<<"datablob">>, QueriedGzipData}]] = ReturnedRows,
+    ?assertEqual(?TEXT_TO_GZIP, zlib:gunzip(QueriedGzipData)).
+
+gzip_test_cleanup(_) ->
+    {ok, DeleteCount} = sqerl:adhoc_delete(users, {last_name, equals, <<"gzip">>}),
+    ?assertEqual(1, DeleteCount).
