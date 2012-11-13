@@ -26,6 +26,8 @@
 -include_lib("sqerl.hrl").
 -include_lib("epgsql/include/pgsql.hrl").
 
+-include_lib("eunit/include/eunit.hrl").
+
 %% sqerl_client callbacks
 -export([init/1,
          prepare/3,
@@ -196,9 +198,11 @@ load_statement(Connection, Name, SQL, Dict) ->
     case prepare_statement(Connection, Name, SQL) of
         {ok, {Name, P}} ->
             {ok, dict:store(Name, P, Dict)};
-        {error, {error, error, _ErrorCode, Msg, Position}} ->
+        {error, {error, error, _ErrorCode, Msg, Position} = Error} ->
+            error_logger:error_msg("Error preparing statement ~s ~p~n",[Name, Error]),
             {error, {syntax, {Msg, Position}}};
         {error, Error} ->
+            error_logger:error_msg("Error preparing statement ~s ~p~n",[Name, Error]),
             %% TODO: Discover what errors can flow out of this, and write tests.
             {error, Error}
     end.

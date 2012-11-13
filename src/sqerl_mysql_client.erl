@@ -146,6 +146,7 @@ load_statements([{Name, SQL}|T]) ->
         ok ->
             load_statements(T);
         Error ->
+            error_logger:error_msg("Error preparing statement ~s ~p~n",[Name, Error]),
             Error
     end.
 
