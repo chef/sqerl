@@ -26,8 +26,6 @@
 -include_lib("sqerl.hrl").
 -include_lib("epgsql/include/pgsql.hrl").
 
--include_lib("eunit/include/eunit.hrl").
-
 %% sqerl_client callbacks
 -export([init/1,
          prepare/3,
