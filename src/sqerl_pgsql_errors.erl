@@ -24,7 +24,7 @@
 
 %% Error codes taken from http://www.postgresql.org/docs/9.1/static/errcodes-appendix.html
 
--spec translate(binary() | term()) -> {error, atom()} | term().
+-spec translate({error, binary()} | term()) -> {error, atom()} | term().
 translate({error, Code}) when is_binary(Code) ->
     {error, {Code, translate_code(Code)}};
 translate(Error) ->
