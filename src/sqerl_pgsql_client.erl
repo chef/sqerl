@@ -173,6 +173,10 @@ init(Config) ->
             {ok, #state{cn=Connection, statements=Prepared, ctrans=CTrans}};
         {error, {syntax, Msg}} ->
             {stop, {syntax, Msg}};
+        {error, _} = Error ->
+            Error1 = sqerl_pgsql_errors:translate(Error),
+            error_logger:error_msg("Unable to start database connection: ~p~n", [Error1]),
+            Error1;
         X ->
             error_logger:error_report(X),
             {stop, X}
