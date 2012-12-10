@@ -72,12 +72,7 @@ unprepare(_Name, _Args, #state{cn=_Cn}=State) ->
               State :: #state{}) -> {sqerl_results(), #state{}}.
 execute(NameOrQuery, Args, #state{cn=Cn}=State) ->
     TArgs = input_transforms(Args, State),
-    case catch emysql_conn:execute(Cn, NameOrQuery, TArgs) of
-        %% Socket was unexpectedly closed by server
-        {'EXIT', {_, closed}} ->
-            {{error, closed}, State};
-        {'EXIT', Error} ->
-            {Error, State};
+    try  emysql_conn:execute(Cn, NameOrQuery, TArgs) of
         #result_packet{}=Result ->
             process_result_packet(Result, State);
         #ok_packet{affected_rows=Count} ->
@@ -97,6 +92,12 @@ execute(NameOrQuery, Args, #state{cn=Cn}=State) ->
         %% don't foresee this as being a problem.
         [#result_packet{}=Result, #ok_packet{}] ->
             process_result_packet(Result, State)
+    catch
+        exit:{_, closed} ->
+            %% Socket was unexpectedly closed by server
+            {{error, closed}, State};
+        _:Error ->
+            exit(Error)
     end.
 
 is_connected(#state{cn=Cn}=State) ->

@@ -75,7 +75,6 @@ with_db(Call, Retries) ->
             case Call(Cn) of
                 {error, closed} ->
                     sqerl_client:close(Cn),
-                    checkin(Cn),
                     with_db(Call, Retries - 1);
                 Result ->
                     checkin(Cn),
