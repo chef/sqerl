@@ -123,6 +123,10 @@ basic_test_() ->
       {<<"Execute simple query with parameters">>,
        fun select_simple_with_parameters/0},
 
+      {<<"Handles timeout correctly">>,
+        {timeout, 30,
+        fun select_timeout/0}},
+
       {<<"Adhoc select All">>,
        fun adhoc_select_all/0},
       {<<"Adhoc select equals int">>,
@@ -232,7 +236,7 @@ basic_test_() ->
                  case get_db_type() of
                      mysql ->
                          ?assertException(exit,
-                                          {{{case_clause, [_Result1,_Result2,_OKPacket]}, _}, _},
+                                          {{{try_clause, [_Result1,_Result2,_OKPacket]}, _}, _},
                                           sqerl:select(test_the_multi_sp, []));
                      Type ->
                          ?debugFmt("Skipping stored procedure test for non-MySQL database ~p~n", [Type])
@@ -618,3 +622,14 @@ adhoc_insert_rows() ->
     ?assertEqual(length(Rows), InsertCount),
     ?assertEqual(Rows, ReturnedRows),
     ?assertEqual(length(Rows), DeleteCount).
+
+select_timeout() ->
+    case get_db_type() of
+      mysql ->
+        SQL = "select sleep(30)",
+        ?assertException(exit, {{failed_to_recv_packet_header,timeout}, _}, sqerl:execute(SQL));
+      pgsql ->
+        SQL = <<"select pg_sleep(30)">>,
+        Result = sqerl:execute(SQL),
+        ?assertEqual({error, timeout}, Result)
+    end.
