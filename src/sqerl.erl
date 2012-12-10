@@ -74,8 +74,10 @@ with_db(Call, Retries) ->
             %% process). So a crash here will not leak a connection.
             case Call(Cn) of
                 {error, closed} ->
+                    %% Closing the connection will cause the process
+                    %% to shutdown. pooler will get notified and
+                    %% remove the connection from the pool.
                     sqerl_client:close(Cn),
-                    checkin(Cn),
                     with_db(Call, Retries - 1);
                 Result ->
                     checkin(Cn),
