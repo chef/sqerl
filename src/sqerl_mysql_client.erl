@@ -97,7 +97,7 @@ execute(NameOrQuery, Args, #state{cn=Cn}=State) ->
         exit:{_, closed} ->
             {{error, closed}, State};
         Type:Reason ->
-            error_logger:error_msg("sqerl_mysql_client:execute(~p, ~p): ~s:~s~n", [NameOrQuery, Args, Type, Reason]),
+            error_logger:error_msg("sqerl_mysql_client:execute(~p, ~p): ~p~n", [NameOrQuery, Args, {Type, Reason}]),
             exit(Reason)
     end.
 
