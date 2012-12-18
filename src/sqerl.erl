@@ -402,7 +402,7 @@ parse_error(mysql, Error) ->
 
 parse_error(pgsql, {error,               % error from sqerl
                     {error,              % error record marker from epgsql
-                     error,              % Severity
+                     _Severity,          % Severity
                      Code, Message, _Extra}}) ->
     do_parse_error({Code, Message}, ?PGSQL_ERROR_CODES).
 
