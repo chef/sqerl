@@ -411,7 +411,7 @@ do_parse_error({Code, Message}, CodeList) ->
         {_, ErrorType} ->
             {ErrorType, Message};
         false ->
-            {error, Message}
+            {error, {Code, Message}}
     end.
 
 
