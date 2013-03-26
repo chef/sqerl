@@ -48,8 +48,6 @@
 
 %% See http://dev.mysql.com/doc/refman/5.0/en/error-messages-server.html
 -define(MYSQL_ERROR_CODES, [{1062, conflict}, {1451, foreign_key}, {1452, foreign_key}]).
-%% See http://www.postgresql.org/docs/current/static/errcodes-appendix.html
--define(PGSQL_ERROR_CODES, [{<<"23505">>, conflict}, {<<"23503">>, foreign_key}]).
 
 checkout() ->
     pooler:take_member("sqerl").
@@ -404,14 +402,14 @@ parse_error(pgsql, {error,               % error from sqerl
                     {error,              % error record marker from epgsql
                      _Severity,          % Severity
                      Code, Message, _Extra}}) ->
-    do_parse_error({Code, Message}, ?PGSQL_ERROR_CODES).
+    %% This is just awkward, but, well, don't want to change the existing code too much
+    {error, {Code, Translated}} = sqerl_pgsql_errors:translate({error, Code}),
+    {error, {Translated, Message}}.
 
 do_parse_error({Code, Message}, CodeList) ->
     case lists:keyfind(Code, 1, CodeList) of
         {_, ErrorType} ->
             {ErrorType, Message};
         false ->
-            {error, {Code, Message}}
+            {error, Message}
     end.
-
-
