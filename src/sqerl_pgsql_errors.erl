@@ -99,10 +99,8 @@ translate_code(<<"2200T">>) -> invalid_xml_processing_instruction;
 translate_code(<<"23000">>) -> integrity_constraint_violation;
 translate_code(<<"23001">>) -> restrict_violation;
 translate_code(<<"23502">>) -> not_null_violation;
-%% The next two codes are the only ones that sqerl actually used before in regular
-%% usage (i.e., other than at startup), so we return atoms that match previous behavior
-translate_code(<<"23503">>) -> foreign_key;   %% internally foreign_key_violation;
-translate_code(<<"23505">>) -> conflict;      %% internally unique_violation;
+translate_code(<<"23503">>) -> foreign_key_violation;
+translate_code(<<"23505">>) -> unique_violation;
 translate_code(<<"23514">>) -> check_violation;
 translate_code(<<"23P01">>) -> exclusion_violation;
 translate_code(<<"24000">>) -> invalid_cursor_state;
