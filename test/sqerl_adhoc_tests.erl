@@ -26,12 +26,12 @@
 %%
 select_undefined_test() ->
     Expected = {<<"SELECT * FROM users">>, []},
-    Generated = sqerl_adhoc:select([<<"*">>], <<"users">>, [], qmark),
+    Generated = sqerl_adhoc:select([<<"*">>], <<"users">>, [], dollarn),
     ?assertEqual(Expected, Generated).
 
 select_all_test() ->
     Expected = {<<"SELECT * FROM users">>, []},
-    Generated = sqerl_adhoc:select([<<"*">>], <<"users">>, [{where, all}], qmark),
+    Generated = sqerl_adhoc:select([<<"*">>], <<"users">>, [{where, all}], dollarn),
     ?assertEqual(Expected, Generated).
 
 select_equals_test() ->
@@ -53,16 +53,8 @@ select_lte_test() ->
     select_op_test(lte, <<"<=">>).
 
 select_op_test(OpAtom, OpString) ->
-    Expected = {<<"SELECT * FROM users WHERE id ", OpString/binary, " ?">>, [1]},
-    Generated = sqerl_adhoc:select([<<"*">>], <<"users">>, [{where, {<<"id">>, OpAtom, 1}}], qmark),
-    ?assertEqual(Expected, Generated).
-
-select_in_qmark_test() -> 
-    Values = [1, 2, 3, 4],
-    Expected = {<<"SELECT Field1,Field2 FROM Table1 WHERE Field IN (?,?,?,?)">>, Values},
-    Generated = sqerl_adhoc:select([<<"Field1">>, <<"Field2">>], 
-                                    <<"Table1">>, 
-                                    [{where, {<<"Field">>, in, Values}}], qmark),
+    Expected = {<<"SELECT * FROM users WHERE id ", OpString/binary, " $1">>, [1]},
+    Generated = sqerl_adhoc:select([<<"*">>], <<"users">>, [{where, {<<"id">>, OpAtom, 1}}], dollarn),
     ?assertEqual(Expected, Generated).
 
 select_in_dollarn_test() ->
@@ -75,18 +67,18 @@ select_in_dollarn_test() ->
 
 select_in_star_test() ->
     Values = [<<"1">>, <<"2">>, <<"3">>, <<"4">>],
-    Expected = {<<"SELECT * FROM Table1 WHERE Field IN (?,?,?,?)">>, Values},
+    Expected = {<<"SELECT * FROM Table1 WHERE Field IN ($1,$2,$3,$4)">>, Values},
     Generated = sqerl_adhoc:select([<<"*">>], 
                                     <<"Table1">>, 
-                                    [{where, {<<"Field">>, in, Values}}], qmark),
+                                    [{where, {<<"Field">>, in, Values}}], dollarn),
     ?assertEqual(Expected, Generated).
 
 select_notin_test() ->
     Values = [<<"1">>, <<"2">>, <<"3">>, <<"4">>],
-    Expected = {<<"SELECT * FROM Table1 WHERE Field NOT IN (?,?,?,?)">>, Values},
+    Expected = {<<"SELECT * FROM Table1 WHERE Field NOT IN ($1,$2,$3,$4)">>, Values},
     Generated = sqerl_adhoc:select([<<"*">>], 
                                     <<"Table1">>, 
-                                    [{where, {<<"Field">>, notin, Values}}], qmark),
+                                    [{where, {<<"Field">>, notin, Values}}], dollarn),
     ?assertEqual(Expected, Generated).
 
 select_and_test() ->
@@ -114,8 +106,8 @@ select_not_test() ->
     Value1 = <<"V">>,
     Where1 = {<<"Field1">>, equals, Value1},
     Where = {'not', Where1},
-    Expected = {<<"SELECT id FROM t WHERE NOT (Field1 = ?)">>, [Value1]},
-    Actual = sqerl_adhoc:select([<<"id">>], <<"t">>, [{where, Where}], qmark),
+    Expected = {<<"SELECT id FROM t WHERE NOT (Field1 = $1)">>, [Value1]},
+    Actual = sqerl_adhoc:select([<<"id">>], <<"t">>, [{where, Where}], dollarn),
     ?assertEqual(Expected, Actual).
 
 select_complex_test() ->
@@ -240,8 +232,8 @@ limit_offset_test() ->
 %%
 delete_test() ->
     Values = [<<"A">>, <<"B">>, <<"C">>],
-    Expected = {<<"DELETE FROM users WHERE name IN (?,?,?)">>, Values},
-    Actual = sqerl_adhoc:delete(<<"users">>, {<<"name">>, in, Values}, qmark),
+    Expected = {<<"DELETE FROM users WHERE name IN ($1,$2,$3)">>, Values},
+    Actual = sqerl_adhoc:delete(<<"users">>, {<<"name">>, in, Values}, dollarn),
     ?assertEqual(Expected, Actual).
 
 %% update tests
@@ -264,8 +256,8 @@ insert_single_row_test() ->
     ?assertEqual(Expected, Actual).
 
 insert_qmark_test() ->
-    Actual = sqerl_adhoc:insert(<<"users">>, [<<"id">>, <<"name">>], 3, qmark),
-    Expected = <<"INSERT INTO users ( id,name ) VALUES (?,?),(?,?),(?,?)">>,
+    Actual = sqerl_adhoc:insert(<<"users">>, [<<"id">>, <<"name">>], 3, dollarn),
+    Expected = <<"INSERT INTO users ( id,name ) VALUES ($1,$2),($3,$4),($5,$6)">>,
     ?assertEqual(Expected, Actual).
 
 
@@ -325,12 +317,6 @@ ensure_safe_bad_values_sets_test() ->
 
 %% placeholders tests
 %%
-placeholders_qmark_test() ->
-    ?assertEqual([<<"?">>, <<"?">>, <<"?">>],
-                 sqerl_adhoc:placeholders(3, 0, qmark)),
-    ?assertEqual([<<"?">>, <<"?">>, <<"?">>, <<"?">>, <<"?">>],
-                 sqerl_adhoc:placeholders(5, 0, qmark)).
-
 placeholders_dollarn_test() ->
     ?assertEqual([<<"$1">>, <<"$2">>, <<"$3">>],
                  sqerl_adhoc:placeholders(3, 0, dollarn)),
@@ -338,17 +324,11 @@ placeholders_dollarn_test() ->
                  sqerl_adhoc:placeholders(6, 0, dollarn)).
 
 placeholders_le0_test() ->
-    ?assertException(error, function_clause, sqerl_adhoc:placeholders(0, 0, qmark)),
-    ?assertException(error, function_clause, sqerl_adhoc:placeholders(-2, 0, qmark)).
+    ?assertException(error, function_clause, sqerl_adhoc:placeholders(0, 0, dollarn)),
+    ?assertException(error, function_clause, sqerl_adhoc:placeholders(-2, 0, dollarn)).
 
 placeholders_offset_test() ->
     ?assertEqual([<<"$5">>, <<"$6">>, <<"$7">>], sqerl_adhoc:placeholders(3, 4, dollarn)).
-
-placeholder_qmark_test() ->
-    %% For qmark style, it should always be a qmark
-    ?assertEqual(<<"?">>, sqerl_adhoc:placeholder(1, qmark)),
-    ?assertEqual(<<"?">>, sqerl_adhoc:placeholder(2, qmark)),
-    ?assertEqual(<<"?">>, sqerl_adhoc:placeholder(120, qmark)).
 
 placeholder_dollarn_test() ->
     %% For dollarn style it should be "$n"

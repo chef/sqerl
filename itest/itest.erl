@@ -58,14 +58,8 @@ setup_env() ->
     %% {prepared_statements, statements(Type)},
     %% {prepared_statements, "itest/statements_pgsql.conf"},
     ok = application:set_env(sqerl, prepared_statements, {?MODULE, statements, [Type]}),
-    ColumnTransforms = case Type of
-                           pgsql ->
-                               [{<<"created">>,
-                                 fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}];
-                           mysql ->
-                               [{<<"active">>,
-                                 fun sqerl_transformers:convert_integer_to_boolean/1}]
-                       end,
+    ColumnTransforms = [{<<"created">>,
+                         fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}];
     ok = application:set_env(sqerl, column_transforms, ColumnTransforms),
     PoolConfig = [{name, "sqerl"},
                   {max_count, ?MAX_POOL_COUNT},
