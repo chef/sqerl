@@ -27,7 +27,6 @@
   {applications, [kernel,
                   stdlib,
                   crypto,
-                  emysql,
                   epgsql]},
   {included_applications, [pooler]},
   {mod, {sqerl_app, []}}

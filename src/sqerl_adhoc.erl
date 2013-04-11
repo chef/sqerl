@@ -56,27 +56,27 @@
 %% Where = all|undefined
 %% Does not generate a WHERE clause. Matches all records in table.
 %%
-%% 1> select([<<"*">>], <<"users">>, [], qmark).
+%% 1> select([<<"*">>], <<"users">>, [], dollarn).
 %% {<<"SELECT * FROM users">>, []}
 %%
 %% Where = {Field, equals|nequals|gt|gte|lt|lte, Value}
-%% Generates SELECT ... WHERE Field =|!=|>|>=|<|<= ?
+%% Generates SELECT ... WHERE Field =|!=|>|>=|<|<= $1
 %%
-%% 1> select([<<"name">>], <<"users">>, [{where, {<<"id">>, equals, 1}}], qmark).
-%% {<<"SELECT name FROM users WHERE id = ?">>, [1]}
+%% 1> select([<<"name">>], <<"users">>, [{where, {<<"id">>, equals, 1}}], dollarn).
+%% {<<"SELECT name FROM users WHERE id = $1">>, [1]}
 %%
 %% Where = {Field, in|notin, Values}
 %% Generates SELECT ... IN|NOT IN SQL with parameter strings (not values),
 %% which can be prepared and executed.
 %%
-%% 1> select([<<"name">>], <<"users">>, [{where, {<<"id">>, in, [1,2,3]}}], qmark).
-%% {<<"SELECT name FROM users WHERE id IN (?, ?, ?)">>, [1,2,3]}
+%% 1> select([<<"name">>], <<"users">>, [{where, {<<"id">>, in, [1,2,3]}}], dollarn).
+%% {<<"SELECT name FROM users WHERE id IN ($1, $2, $3)">>, [1,2,3]}
 %%
 %% Where = {'and'|'or', WhereList}
 %% Composes WhereList with AND or OR
 %%
 %% 1> select([<<"id">>], <<"t">>, [{where, {'or', [{<<"id">>, lt, 5}, {<<"id">>, gt, 10}]}}]).
-%% {<<"SELECT id FROM t WHERE (id < ? OR id > ?)">>, [5,10]}
+%% {<<"SELECT id FROM t WHERE (id < $1 OR id > $2)">>, [5,10]}
 %%
 %% Group By Clause
 %% ---------------
@@ -90,8 +90,7 @@
 %% --------------------
 %% Form: {limit, Limit} | {limit, {Limit, offset, Offset}}
 %%
-%% ParamStyle is qmark (?, ?, ... for e.g. mysql) 
-%% or dollarn ($1, $2, etc. for e.g. pgsql)
+%% ParamStyle is dollarn ($1, $2, etc. for e.g. pgsql)
 %% '''
 -spec select([sql_word()], sql_word(), [] | [sql_clause()], atom()) -> {binary(), list()}.
 select(Columns, Table, Clauses, ParamStyle) ->
@@ -110,7 +109,7 @@ select(Columns, Table, Clauses, ParamStyle) ->
     {SQL, Values}.
 
 %% Returns {SQL, Values}
-%% SQL is clause of SQL query, e.g. <<"WHERE F = ?">>.
+%% SQL is clause of SQL query, e.g. <<"WHERE F = $1">>.
 %% Returns empty binary if no where clause is needed.
 where_sql(undefined, _ParamStyle) ->
     {<<"">>, []};
@@ -157,12 +156,12 @@ limit_sql({Limit, offset, Offset}) when is_integer(Limit), is_integer(Offset) ->
 %% @doc Generate UPDATE statement.
 %%
 %% Update is given under the form of a Row (proplist).
-%% Uses the same Where specifications as select/4 except for "all" which is 
+%% Uses the same Where specifications as select/4 except for "all" which is
 %% not supported.
 %%
 %% ```
-%% 1> update(<<"users">>, [{<<"last_name">>, <<"Toto">>}], {<<"id">>, equals, 1}, qmark).
-%% {<<"UPDATE users SET last_name = ? WHERE id = ?">>, [<<"Toto">>, 1]}
+%% 1> update(<<"users">>, [{<<"last_name">>, <<"Toto">>}], {<<"id">>, equals, 1}, dollarn).
+%% {<<"UPDATE users SET last_name = $1 WHERE id = $2">>, [<<"Toto">>, 1]}
 %% '''
 %%%
 -spec update(sql_word(), sqerl_row(), sql_clause(), atom()) -> {binary(), list()}.
@@ -201,8 +200,8 @@ set_parts([{Field, Value}|T], ParamStyle, ParamPosOffset, PartsAcc, ValuesAcc) -
 %% See select/4 for details about the "Where" parameter.
 %%
 %% ```
-%% 1> delete(<<"users">>, {<<"id">>, equals, 1}, qmark).
-%% {<<"DELETE FROM users WHERE id = ?">>, [1]}
+%% 1> delete(<<"users">>, {<<"id">>, equals, 1}, dollarn).
+%% {<<"DELETE FROM users WHERE id = $1">>, [1]}
 %% '''
 %%
 -spec delete(sql_word(), sql_clause(), atom()) -> {binary(), [any()]}.
@@ -219,8 +218,8 @@ delete(Table, Where, ParamStyle) ->
 %% @doc Generate INSERT statement for N rows.
 %%
 %% ```
-%% 1> insert(<<"users">>, [<<"id">>, <<"name">>], 3, qmark).
-%% <<"INSERT INTO users (name) VALUES (?,?),(?,?),(?,?)">>
+%% 1> insert(<<"users">>, [<<"id">>, <<"name">>], 3, dollarn).
+%% <<"INSERT INTO users (name) VALUES ($1,$2),($3,$4),($5,$6)">>
 %% '''
 %%
 -spec insert(sql_word(), [sql_word()], integer(), atom()) -> binary().
@@ -378,9 +377,6 @@ ensure_safe([H|T]) ->
 %% given parameter style.
 %%
 %% ```
-%% 1> placeholders(3, qmark).
-%% [<<"?">>,<<"?">>,<<"?">>]
-%%
 %% 1> placeholders(3, dollarn).
 %% [<<"$1">>,<<"$2">>,<<"$3">>]
 %%
@@ -396,9 +392,7 @@ placeholders(NumValues, Offset, Style) when NumValues > 0 ->
 
 %% @doc Returns a parameter string for the given style
 %% at position N in the statement.
--spec placeholder(integer(), qmark | dollarn) -> binary().
-placeholder(_Pos, qmark) ->
-    <<"?">>;
+-spec placeholder(integer(), dollarn) -> binary().
 placeholder(Pos, dollarn) ->
     list_to_binary([<<"$">>, integer_to_list(Pos)]).
 

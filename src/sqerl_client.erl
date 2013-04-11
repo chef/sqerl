@@ -205,19 +205,17 @@ sql_parameter_style() ->
 drivermod() -> 
     drivermod(dbtype()).
 
-%% @doc Returns DB driver module atom for given DB type atom 
-%% (e.g. pgsql, mysql).
+%% @doc Returns DB driver module atom for given DB type atom
+%% (e.g. pgsql).
 %%-spec drivermod(atom()) -> atom().
-drivermod(DBType) ->
-    case DBType of
-        pgsql -> sqerl_pgsql_client;
-        mysql -> sqerl_mysql_client;
-        Other -> Msg = {unsupported_db_type, sqerl, Other},
-                 error_logger:error_report(Msg),
-                 error(Msg)
-    end.
+drivermod(pgsql) ->
+    sqerl_pgsql_client;
+drivermod(Other) ->
+    Msg = {unsupported_db_type, sqerl, Other},
+    error_logger:error_report(Msg),
+    error(Msg).
 
-%% @doc Returns DB type atom (e.g. pgsql, mysql) from environment.
+%% @doc Returns DB type atom (e.g. pgsql) from environment.
 -spec dbtype() -> atom().
 dbtype() -> ev(db_type).
 
