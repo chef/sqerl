@@ -125,8 +125,7 @@ init(DbType) ->
               {pass, ev(db_pass)},
               {db, ev(db_name)},
               {idle_check, IdleCheck},
-              {prepared_statements, read_statements(ev(prepared_statements))},
-              {column_transforms, ev(column_transforms)}],
+              {prepared_statements, read_statements(ev(prepared_statements))}],
     case CallbackMod:init(Config) of
         {ok, CallbackState} ->
             Timeout = IdleCheck,
