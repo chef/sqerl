@@ -53,7 +53,7 @@ checkout() ->
     pooler:take_member(sqerl).
 
 checkin(Connection) ->
-    pooler:return_member(Connection).
+    pooler:return_member(sqerl, Connection).
 
 with_db(Call) ->
     with_db(Call, ?MAX_RETRIES).
