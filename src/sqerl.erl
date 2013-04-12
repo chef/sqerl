@@ -50,7 +50,7 @@
 -define(PGSQL_ERROR_CODES, [{<<"23505">>, conflict}, {<<"23503">>, foreign_key}]).
 
 checkout() ->
-    pooler:take_member("sqerl").
+    pooler:take_member(sqerl).
 
 checkin(Connection) ->
     pooler:return_member(Connection).
@@ -65,7 +65,7 @@ with_db(Call, Retries) ->
         error_no_members ->
             {error, no_connections};
         error_no_pool ->
-            {error, {no_pool, "sqerl"}};
+            {error, {no_pool, sqerl}};
         Cn when is_pid(Cn) ->
             %% We don't need a try/catch around Call(Cn) because pooler links both the
             %% connection and the process that has the connection checked out (this
