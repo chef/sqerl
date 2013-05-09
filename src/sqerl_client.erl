@@ -119,13 +119,16 @@ init([]) ->
 init(DbType) ->
     CallbackMod = drivermod(DbType),
     IdleCheck = ev(idle_check, 1000),
+
+    Statements = read_statements_from_config(),
+
     Config = [{host, ev(db_host)},
               {port, ev(db_port)},
               {user, ev(db_user)},
               {pass, ev(db_pass)},
               {db, ev(db_name)},
               {idle_check, IdleCheck},
-              {prepared_statements, read_statements(ev(prepared_statements))},
+              {prepared_statements, Statements},
               {column_transforms, ev(column_transforms)}],
     case CallbackMod:init(Config) of
         {ok, CallbackState} ->
@@ -234,4 +237,15 @@ ev(Key, Default) ->
     case application:get_env(sqerl, Key) of
         undefined -> Default;
         {ok, V} -> V
+    end.
+
+read_statements_from_config() ->
+    StatementSource = ev(prepared_statements),
+    try
+        read_statements(StatementSource)
+    catch
+        error:Reason ->
+            Msg = {incorrect_application_config, sqerl, {prepared_statements, Reason, erlang:get_stacktrace()}},
+            error_logger:error_report(Msg),
+            error(Msg)
     end.
