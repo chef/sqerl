@@ -52,10 +52,10 @@
 -define(PGSQL_ERROR_CODES, [{<<"23505">>, conflict}, {<<"23503">>, foreign_key}]).
 
 checkout() ->
-    pooler:take_member("sqerl").
+    pooler:take_member(sqerl).
 
 checkin(Connection) ->
-    pooler:return_member(Connection).
+    pooler:return_member(sqerl, Connection).
 
 with_db(Call) ->
     with_db(Call, ?MAX_RETRIES).
