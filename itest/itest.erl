@@ -30,6 +30,7 @@
                 ["Mark", "Anderson", 42, <<"2011-10-02 16:47:46">>, true],
                 ["Chris", "Maier", 0, <<"2011-10-03 16:47:46">>, true],
                 ["Elvis", "Presley", 16, <<"2011-10-04 16:47:46">>, false]]).
+-define(POOL_NAME, sqerl).
 -define(MAX_POOL_COUNT, 3).
 
 -compile([export_all]).
@@ -67,7 +68,7 @@ setup_env() ->
                                  fun sqerl_transformers:convert_integer_to_boolean/1}]
                        end,
     ok = application:set_env(sqerl, column_transforms, ColumnTransforms),
-    PoolConfig = [{name, "sqerl"},
+    PoolConfig = [{name, ?POOL_NAME},
                   {max_count, ?MAX_POOL_COUNT},
                   {init_count, 1},
                   {start_mfa, {sqerl_client, start_link, []}}],
@@ -165,10 +166,10 @@ basic_test_() ->
        fun adhoc_select_limit/0},
       {<<"Adhoc select offset">>,
        fun adhoc_select_offset/0},
-      
+
       %%{<<"Adhoc update">>,
       %% fun adhoc_update/0},
-      
+
       {<<"Adhoc insert">>,
        fun adhoc_insert/0},
       {<<"Adhoc insert many users">>,
@@ -246,9 +247,9 @@ basic_test_() ->
      ]}.
 
 kill_pool(1) ->
-    pooler:take_member();
+    pooler:take_member(?POOL_NAME);
 kill_pool(X) ->
-    pooler:take_member(),
+    pooler:take_member(?POOL_NAME),
     kill_pool(X - 1).
 
 pool_overflow() ->
