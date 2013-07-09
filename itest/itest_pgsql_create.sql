@@ -32,3 +32,24 @@ CREATE TABLE nodes (
 
 GRANT ALL PRIVILEGES ON TABLE nodes TO itest;
 
+CREATE OR REPLACE FUNCTION insert_users(varchar[],
+    varchar[],
+    int[],
+    varchar[],
+    boolean[])
+RETURNS VOID AS
+$$
+DECLARE
+    i INT4;
+BEGIN
+    FOR i IN SELECT generate_subscripts( $1, 1 )
+    LOOP
+        INSERT INTO users
+            (first_name, last_name, high_score, created, active)
+        VALUES
+            ($1[i], $2[i], $3[i], cast($4[i] AS TIMESTAMP), $5[i]);
+    END LOOP;
+END;
+$$
+LANGUAGE plpgsql;
+
