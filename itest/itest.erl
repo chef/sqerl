@@ -648,7 +648,10 @@ array_test_() ->
       {<<"Insert arrays with statements">>,
        fun insert_direct_array/0},
       {<<"Insert arrays with prepared statements">>,
-       fun insert_array/0}
+       fun insert_array/0},
+      {<<"Insert array of UUIDs">>,
+       fun insert_uuidarray/0}
+
      ]}.
 
 insert_direct_array() ->
@@ -664,11 +667,23 @@ insert_array() ->
     Expected = {ok, [[{<<"insert_users">>, <<>>}]]},
     ?assertMatch(Expected, sqerl:execute(new_users, Data)),
 
+    %% cleanup
     Ok = lists:duplicate(4, {ok, 1}),
     ?assertMatch(Ok, [sqerl:statement(delete_user_by_lname, [LName]) ||
             [_, LName, _, _, _] <- ?NAMES]).
 
-    %% cleanup.
+insert_uuidarray() ->
+    Data = [ [<<"46f16152-6366-4abd-8110-dbd9756bde91">>,
+              <<"733ef125-e115-41e2-a2fb-4fe7fdd84f92">>,
+              <<"52b49b92-0308-46c1-bc15-c657a044f0e3">>] ],
+    Expected = {ok, [[{<<"insert_ids">>, <<>>}]]},
+    ?assertMatch(Expected, sqerl:execute(new_ids, Data)),
+
+    ExpectedData = [[{<<"id">>, <<"46f16152-6366-4abd-8110-dbd9756bde91">>}],
+                    [{<<"id">>, <<"733ef125-e115-41e2-a2fb-4fe7fdd84f92">>}],
+                    [{<<"id">>, <<"52b49b92-0308-46c1-bc15-c657a044f0e3">>}]],
+    ?assertMatch({ok, ExpectedData}, sqerl:execute(<<"SELECT * from uuids">>, [])).
+
 
 to_columns(Rows) ->
     to_columns(Rows, [], [], [], [], []).

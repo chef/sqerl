@@ -53,3 +53,24 @@ END;
 $$
 LANGUAGE plpgsql;
 
+CREATE TABLE uuids (
+       id uuid UNIQUE NOT NULL
+);
+
+GRANT ALL PRIVILEGES ON TABLE uuids TO itest;
+
+CREATE OR REPLACE FUNCTION insert_ids(uuid[])
+RETURNS VOID AS
+$$
+DECLARE
+    i INT4;
+BEGIN
+    FOR i IN SELECT generate_subscripts( $1, 1 )
+    LOOP
+        INSERT INTO uuids (id) VALUES ($1[i]);
+    END LOOP;
+END;
+$$
+LANGUAGE plpgsql;
+
+
