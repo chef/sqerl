@@ -17,7 +17,7 @@
 
 -module(itest).
 
--exports([setup_env/0, basic_test_/0,
+-exports([setup_env/0, basic_test_/0, array_test_/0,
           statements/1]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -244,6 +244,7 @@ basic_test_() ->
                  end
          end}]
       }
+
      ]}.
 
 kill_pool(1) ->
@@ -634,3 +635,61 @@ select_timeout() ->
         Result = sqerl:execute(SQL),
         ?assertEqual({error, timeout}, Result)
     end.
+
+array_test_() ->
+    setup_env(),
+    Status = application:start(sqerl),
+    %% sqerl should start or already be running for each test
+    ?assert(lists:member(Status, [ok, {error, {already_started, sqerl}}])),
+    {foreach,
+     fun() -> error_logger:tty(true) end,
+     fun(_) -> error_logger:tty(true) end,
+     [
+      {<<"Insert arrays with statements">>,
+       fun insert_direct_array/0},
+      {<<"Insert arrays with prepared statements">>,
+       fun insert_array/0},
+      {<<"Insert array of UUIDs">>,
+       fun insert_uuidarray/0}
+
+     ]}.
+
+insert_direct_array() ->
+    Stmt = <<"SELECT insert_users(ARRAY['Kevin'], ARRAY['Bacon'], ARRAY[999], ARRAY['2011-10-01 16:47:46'], ARRAY[true])">>,
+    Expected = {ok, [[{<<"insert_users">>,<<>>}]]},
+    Got = sqerl:execute(Stmt),
+    ?assertMatch(Expected, Got),
+    %% Cleanup
+    ?assertMatch({ok, 1}, sqerl:statement(delete_user_by_lname, [<<"Bacon">>])).
+
+insert_array() ->
+    Data = to_columns(?NAMES),
+    Expected = {ok, [[{<<"insert_users">>, <<>>}]]},
+    ?assertMatch(Expected, sqerl:execute(new_users, Data)),
+
+    %% cleanup
+    Ok = lists:duplicate(4, {ok, 1}),
+    ?assertMatch(Ok, [sqerl:statement(delete_user_by_lname, [LName]) ||
+            [_, LName, _, _, _] <- ?NAMES]).
+
+insert_uuidarray() ->
+    Data = [ [<<"46f16152-6366-4abd-8110-dbd9756bde91">>,
+              <<"733ef125-e115-41e2-a2fb-4fe7fdd84f92">>,
+              <<"52b49b92-0308-46c1-bc15-c657a044f0e3">>] ],
+    Expected = {ok, [[{<<"insert_ids">>, <<>>}]]},
+    ?assertMatch(Expected, sqerl:execute(new_ids, Data)),
+
+    ExpectedData = [[{<<"id">>, <<"46f16152-6366-4abd-8110-dbd9756bde91">>}],
+                    [{<<"id">>, <<"733ef125-e115-41e2-a2fb-4fe7fdd84f92">>}],
+                    [{<<"id">>, <<"52b49b92-0308-46c1-bc15-c657a044f0e3">>}]],
+    ?assertMatch({ok, ExpectedData}, sqerl:execute(<<"SELECT * from uuids">>, [])).
+
+
+to_columns(Rows) ->
+    to_columns(Rows, [], [], [], [], []).
+
+to_columns([], Col1, Col2, Col3, Col4, Col5) ->
+    [Col1, Col2, Col3, Col4, Col5];
+to_columns([[C1, C2, C3, C4, C5] | Rest], Col1, Col2, Col3, Col4, Col5) ->
+    to_columns(Rest, [list_to_binary(C1)|Col1], [list_to_binary(C2) | Col2], [C3 | Col3],
+               [C4 | Col4], [C5 | Col5]).
