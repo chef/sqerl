@@ -127,6 +127,7 @@ init(DbType) ->
               {user, ev(db_user)},
               {pass, ev(db_pass)},
               {db, ev(db_name)},
+              {timeout, ev(db_timeout, 5000)},
               {idle_check, IdleCheck},
               {prepared_statements, Statements},
               {column_transforms, ev(column_transforms)}],
