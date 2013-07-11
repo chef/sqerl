@@ -153,9 +153,10 @@ init(Config) ->
     {port, Port} = lists:keyfind(port, 1, Config),
     {user, User} = lists:keyfind(user, 1, Config),
     {pass, Pass} = lists:keyfind(pass, 1, Config),
+    {timeout, Timeout} = lists:keyfind(timeout, 1, Config),
     {db, Db} = lists:keyfind(db, 1, Config),
     {prepared_statements, Statements} = lists:keyfind(prepared_statements, 1, Config),
-    Opts = [{database, Db}, {port, Port}],
+    Opts = [{database, Db}, {port, Port}, {timeout, Timeout}],
     CTrans =
         case lists:keyfind(column_transforms, 1, Config) of
             {column_transforms, CT} -> CT;
