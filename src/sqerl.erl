@@ -411,7 +411,8 @@ do_parse_error({Code, Message}, CodeList) ->
         {_, ErrorType} ->
             {ErrorType, Message};
         false ->
-            {error, Message}
+            %% People of the Future!
+            %% For Postgres, sqerl_pgsql_errors:translate_code is available
+            %% turning Postgres codes to human-readable tuples
+            {error, {Code, Message}}
     end.
-
-
