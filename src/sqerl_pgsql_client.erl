@@ -39,6 +39,11 @@
 -endif.
 
 -record(state,  {cn,
+                 %% The statements dict is the backing store of meta data for prepared
+                 %% queries on this connection. It maps named queries (atoms) to either a
+                 %% `#prepared_statement{}' record or the SQL needed to create the prepared
+                 %% query as a binary. The dict should only be manipulated via `pqc_*'
+                 %% functions.
                  statements = dict:new() :: dict(),
                  ctrans :: dict() | undefined }).
 
@@ -67,9 +72,9 @@
 %%
 %% Row:  proplist e.g. `[{<<"id">>, 1}, {<<"name">>, <<"Toto">>}]'
 %%
--spec execute(StatementOrQuery :: sqerl_query(), 
+-spec execute(StatementOrQuery :: sqerl_query(),
               Parameters :: [any()],
-              State :: #state{}) -> 
+              State :: #state{}) ->
                   {sqerl_results(), #state{}}.
 execute(SQL, Parameters, #state{cn=Cn}=State) when is_binary(SQL) ->
     TParameters = input_transforms(Parameters),
@@ -84,11 +89,12 @@ execute(SQL, Parameters, #state{cn=Cn}=State) when is_binary(SQL) ->
             {{error, Error}, State}
     end;
 %% Prepared statement execution
-execute(StatementName,
-        Parameters, 
-        #state{cn=Cn, statements=Statements, ctrans=CTrans}=State) 
-    when is_atom(StatementName) ->
-    PrepStmt = dict:fetch(StatementName, Statements),
+execute(StatementName, Parameters, #state{cn = Cn, statements = Statements} = State)
+  when is_atom(StatementName) ->
+    execute_prepared(pqc_fetch(StatementName, Statements, Cn), Parameters, State).
+
+execute_prepared({#prepared_statement{} = PrepStmt, Statements}, Parameters,
+                 #state{cn = Cn, ctrans = CTrans} = State) ->
     Stmt = PrepStmt#prepared_statement.stmt,
     TParameters = input_transforms(Parameters, PrepStmt, State),
     ok = pgsql:bind(Cn, Stmt, TParameters),
@@ -111,10 +117,14 @@ execute(StatementName,
             pgsql:sync(Cn),
             {error, X}
         end,
-    {Result, State}.
+    {Result, State#state{statements = Statements}};
+execute_prepared(Error, _Parameters, _State) ->
+    %% There was an error preparing the query or the named query was not found.
+    Error.
+
 
 %% @doc Prepare a new statement.
--spec prepare(atom(), sqerl_sql(), #state{}) -> {ok, #state{}}.
+-spec prepare(atom(), binary(), #state{}) -> {ok, #state{}}.
 prepare(Name, SQL, #state{cn=Cn, statements=Statements}=State) ->
     {ok, UpdatedStatements} = load_statement(Cn, Name, SQL, Statements),
     UpdatedState = State#state{statements=UpdatedStatements},
@@ -169,8 +179,9 @@ init(Config) ->
             %% Link to pid so if this process dies we clean up
             %% the socket
             erlang:link(Connection),
+            %% TODO: this is suspect, I don't think we want to be a system process
             erlang:process_flag(trap_exit, true),
-            {ok, Prepared} = load_statements(Connection, Statements, dict:new()),
+            {ok, Prepared} = load_statements(Statements),
             {ok, #state{cn=Connection, statements=Prepared, ctrans=CTrans}};
         {error, {syntax, Msg}} ->
             {stop, {syntax, Msg}};
@@ -185,30 +196,79 @@ init(Config) ->
 
 %% Internal functions
 
--spec load_statements(connection(), [tuple()], dict()) -> {ok, dict()} |  {error, any()}.
-load_statements(_Connection, [], Dict) ->
-    {ok, Dict};
-load_statements(Connection, [{Name, SQL}|T], Dict) when is_atom(Name) ->
-    case load_statement(Connection, Name, SQL, Dict) of
-        {ok, UpdatedDict} -> load_statements(Connection, T, UpdatedDict);
-        {error, Error} -> {error, Error}
-    end.
+%% @doc Load prepared queries. Note that this function does not prepare the queries on the
+%% connection. Instead, the query names and corresponding SQL are stored in the client's
+%% state to be prepared on-demand when `execute' is called.
+-spec load_statements([{atom(), binary()}]) -> {ok, dict()}.
+load_statements(Statements) ->
+    AddFun = fun({Name, SQL}, Dict) when is_atom(Name), is_binary(SQL) ->
+                     pqc_add(Name, SQL, Dict);
+                (Entry, _) ->
+                     erlang:error({invalid_statement, Entry})
+             end,
+    {ok, lists:foldl(AddFun, dict:new(), Statements)}.
 
-%% @doc Load a statement: prepare and store in statement state dict.
-%% Returns {ok, UpdatedDict} or {error, ErrorInfo}
--spec load_statement(connection(), atom(), sqerl_sql(), dict()) -> {ok, dict()} | {error, term()}.
+%% @doc Load a statement. Adds the statement to client state. The statement will be prepared
+%% on the connection on-demand when execute is called. If a query with the same `Name' is in
+%% the query cache and has been previously prepared, it will be unloaded; this function
+%% overwrites queries of same name only taking care to make sure that previously prepared
+%% queries are unloaded from the connection.
+-spec load_statement(connection(), atom(), sqerl_sql(), dict()) -> {ok, dict()}.
 load_statement(Connection, Name, SQL, Dict) ->
-    case prepare_statement(Connection, Name, SQL) of
-        {ok, {Name, P}} ->
-            {ok, dict:store(Name, P, Dict)};
-        {error, {error, error, _ErrorCode, Msg, Position} = Error} ->
-            error_logger:error_msg("Error preparing statement ~s ~p~n",[Name, Error]),
-            {error, {syntax, {Msg, Position}}};
-        {error, Error} ->
-            error_logger:error_msg("Error preparing statement ~s ~p~n",[Name, Error]),
-            %% TODO: Discover what errors can flow out of this, and write tests.
-            {error, Error}
-    end.
+    %% prevent leak of previously prepared query with same name
+    Dict1 = case dict:find(Name, Dict) of
+                error ->
+                    Dict;
+                {ok, #prepared_statement{}} ->
+                    {ok, CleanDict} = unload_statement(Connection, Name, Dict),
+                    CleanDict;
+                _SQL ->
+                    %% if we just have previous SQL here, we can safely ignore and overwrite it
+                    Dict
+            end,
+    {ok, pqc_add(Name, SQL, Dict1)}.
+
+%% PQC - Prepared Query Cache
+
+%% @doc Add a named query to the cache blindly overwritting any existing entries.
+-spec pqc_add(atom(), binary(), dict()) -> dict().
+pqc_add(Name, Query, Cache) ->
+    dict:store(Name, Query, Cache).
+
+%% @doc Remove the named query from the cache (no cleanup of query prepared on the
+%% connection will occur).
+-spec pqc_remove(atom(), dict()) -> dict().
+pqc_remove(Name, Cache) ->
+    dict:erase(Name, Cache).
+
+%% @doc Obtain a prepared query to execute against. If the query has already been prepared
+%% on the connection, its record is returned. Otherwise, the cached SQL statement associated
+%% with `Name' is prepared on the connection (this is the on-demand part) and the prepared
+%% query record is cached.
+%%
+%% There are three possibilities: 1. Prepared query is in cache ready to go 2. Prepared
+%% query is in raw SQL form, needs to be prepared before it's ready to use 3. We don't know
+%% about such a query For case #2, we have to talk to the db and errors may result.
+%%
+%% NB: Take care to update client state with the returned `dict()' value as it may contain a
+%% newly cached entry.
+-spec pqc_fetch(atom(), dict(), connection()) -> {#prepared_statement{}, dict()} |
+                                                 {error, _}.
+pqc_fetch(Name, Cache, Con) ->
+    pqc_fetch_internal(Name, dict:find(Name, Cache), Cache, Con).
+
+pqc_fetch_internal(_Name, error, _Cache, _Con) ->
+    {error, query_not_found};
+pqc_fetch_internal(Name, {ok, SQL}, Cache, Con) when is_binary(SQL) ->
+    %% prepare it, store it, return it
+    case prepare_statement(Con, Name, SQL) of
+        {ok, {Name, #prepared_statement{} = P}} ->
+            {P, dict:store(Name, P, Cache)};
+        Error ->
+            Error
+    end;
+pqc_fetch_internal(_Name, {ok, #prepared_statement{} = P}, Cache, _Con) ->
+    {P, Cache}.
 
 %% @doc Prepare a statement on the connection. Does not manage
 %% state.
@@ -238,8 +298,7 @@ prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
 -spec unload_statement(connection(), atom(), dict()) -> {ok, dict()}.
 unload_statement(Connection, Name, Dict) ->
         unprepare_statement(Connection, Name),
-        UpdatedDict = dict:erase(Name, Dict),
-        {ok, UpdatedDict}.
+        {ok, pqc_remove(Name, Dict)}.
 
 %% @doc Call DB to unprepare a previously prepared statement.
 -spec unprepare_statement(connection(), atom()) -> ok.
@@ -325,4 +384,3 @@ input_transforms(Parameters) ->
 -spec transform(any()) -> any().
 transform({datetime, X}) -> X;
 transform(X) -> X.
-
