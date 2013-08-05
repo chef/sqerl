@@ -4,4 +4,4 @@ ebin/*
 *~
 *.beam
 logfile
-
+sqerl.plt
