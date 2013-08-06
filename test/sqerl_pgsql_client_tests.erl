@@ -42,3 +42,65 @@ extract_column_names_test() ->
     Output = sqerl_pgsql_client:extract_column_names({Type, Columns}),
     ?assertEqual(ExpectedOutput, Output).
 
+prepared_query_cache_test_() ->
+    [
+     {"pqc_fetch query_not_found",
+      fun() ->
+              Ans = sqerl_pgsql_client:pqc_fetch(no_query, dict:new(), self()),
+              ?assertEqual({error, query_not_found}, Ans)
+      end},
+
+     {"pqc_remove",
+      fun() ->
+              Cache = dict:new(),
+              Cache1 = sqerl_pgsql_client:pqc_add(my_query, <<"SELECT 1">>, Cache),
+              Cache2 = sqerl_pgsql_client:pqc_remove(my_query, Cache1),
+              %% verify removing something not found is ok
+              Cache3 = sqerl_pgsql_client:pqc_remove(my_query, Cache2),
+              Ans = sqerl_pgsql_client:pqc_fetch(my_query, Cache3, self()),
+              ?assertEqual({error, query_not_found}, Ans)
+      end},
+
+     {"pqc_fetch",
+      fun() ->
+              Cache0 = dict:new(),
+              MyQuery = <<"SELECT 1">>,
+              Cache1 = sqerl_pgsql_client:pqc_add(my_query, MyQuery, Cache0),
+
+              %% First call should cause a statement to be prepared on the connection
+              {P, Cache2} = sqerl_pgsql_client:pqc_fetch(my_query, Cache1, stub_pid,
+                                                         fun stub_prepare_statement/3),
+              ?assertEqual({stub_prep_q, MyQuery}, P),
+              %% Calling pqc_fetch again for the same query, should just pull from the
+              %% cache. By passing crash_pid, we ensure that the test only passes if
+              %% stub_prepare_statement is not called.
+              {P2, _} = sqerl_pgsql_client:pqc_fetch(my_query, Cache2, crash_pid,
+                                                     fun stub_prepare_statement/3),
+              ?assertEqual(P, P2),
+
+              %% Finally, we test that adding the same query again, resets the cache. Note
+              %% that cleaning up prepared queries is currently handled outside of pqc_add.
+              NewQuery = <<"SELECT 2">>,
+              Cache3 = sqerl_pgsql_client:pqc_add(my_query, NewQuery, Cache2),
+              {P3, _} = sqerl_pgsql_client:pqc_fetch(my_query, Cache3, stub_pid,
+                                                     fun stub_prepare_statement/3),
+              ?assertEqual({stub_prep_q, NewQuery}, P3)
+      end},
+
+     {"pqc_fetch bad query syntax",
+      fun() ->
+              Cache0 = dict:new(),
+              MyQuery = <<"DO ERROR">>,
+              Cache1 = sqerl_pgsql_client:pqc_add(my_query, MyQuery, Cache0),
+              Ans = sqerl_pgsql_client:pqc_fetch(my_query, Cache1, stub_pid,
+                                                 fun stub_prepare_statement/3),
+              ?assertEqual({error, stub_error}, Ans)
+      end}
+    ].
+
+stub_prepare_statement(stub_pid, _Name, <<"DO ERROR">>) ->
+    {error, stub_error};
+stub_prepare_statement(stub_pid, _Name, Query) ->
+    {ok, {stub_prep_q, Query}};
+stub_prepare_statement(_, _, _) ->
+    error(unexpect_stub_call).
