@@ -1,6 +1,6 @@
 # sqerl #
 
-This is the repository for sqerl, a database layer originally written for chef for interfacing with mysql and postgres.
+This is the repository for sqerl, a database layer originally written for chef for interfacing with postgres.
 
 Chef is a system integration framework written in erlang and ruby and designed to bring the benefits of configuration management to your entire infrastructure.
 
