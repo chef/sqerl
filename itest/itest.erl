@@ -35,20 +35,14 @@
 
 -compile([export_all]).
 
-get_db_type() ->
-    {ok, [[Type]]} = init:get_argument(db_type),
-    list_to_atom(Type).
-
 read_db_config() ->
-    Type = get_db_type(),
-    Path = filename:join([filename:dirname(code:which(?MODULE)), atom_to_list(Type) ++ ".config"]),
+    Path = filename:join([filename:dirname(code:which(?MODULE)), "pgsql" ++ ".config"]),
     {ok, Config} = file:consult(Path),
     Config.
 
 setup_env() ->
-    Type = get_db_type(),
     Info = read_db_config(),
-    ok = application:set_env(sqerl, db_type, Type),
+    ok = application:set_env(sqerl, db_driver_mod, sqerl_pgsql_client),
     ok = application:set_env(sqerl, db_host, ?GET_ARG(host, Info)),
     ok = application:set_env(sqerl, db_port, ?GET_ARG(port, Info)),
     ok = application:set_env(sqerl, db_user, "itest"),
@@ -56,17 +50,11 @@ setup_env() ->
     ok = application:set_env(sqerl, db_name, ?GET_ARG(db, Info)),
     ok = application:set_env(sqerl, idle_check, 10000),
     %% we could also call it like this:
-    %% {prepared_statements, statements(Type)},
+    %% {prepared_statements, statements()},
     %% {prepared_statements, "itest/statements_pgsql.conf"},
-    ok = application:set_env(sqerl, prepared_statements, {?MODULE, statements, [Type]}),
-    ColumnTransforms = case Type of
-                           pgsql ->
-                               [{<<"created">>,
-                                 fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}];
-                           mysql ->
-                               [{<<"active">>,
-                                 fun sqerl_transformers:convert_integer_to_boolean/1}]
-                       end,
+    ok = application:set_env(sqerl, prepared_statements, {?MODULE, statements, []}),
+    ColumnTransforms = [{<<"created">>,
+                         fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}],
     ok = application:set_env(sqerl, column_transforms, ColumnTransforms),
     PoolConfig = [{name, ?POOL_NAME},
                   {max_count, ?MAX_POOL_COUNT},
@@ -74,15 +62,11 @@ setup_env() ->
                   {start_mfa, {sqerl_client, start_link, []}}],
     ok = application:set_env(pooler, pools, [PoolConfig]),
     application:start(crypto),
-    application:start(emysql),
     application:start(public_key),
     application:start(ssl),
     application:start(epgsql).
 
-statements(mysql) ->
-    {ok, Statements} = file:consult("itest/statements_mysql.conf"),
-    Statements;
-statements(pgsql) ->
+statements() ->
     {ok, Statements} = file:consult("itest/statements_pgsql.conf"),
     Statements.
 
@@ -204,47 +188,8 @@ basic_test_() ->
                  end
          end}},
 
-      {<<"Tolerates bounced server">>,
-       {timeout, 10,
-        fun bounced_server/0}},
-
       {<<"Delete operation">>,
-       fun delete_data/0},
-      {"Resultset-returning Stored Procedure",
-       fun() ->
-               case get_db_type() of
-                   mysql ->
-                       %% It won't actually return anything; this is just to
-                       %% make sure that we're properly handling the insanity
-                       %% of MySQL returning multiple results from a stored
-                       %% procedure call.
-                       %%
-                       %% Basically, the fact that it doesn't crash is test
-                       %% enough :)
-                       {ok, Actual} = sqerl:select(test_the_sp, []),
-                       ?assertEqual(none, Actual);
-                   Type ->
-                       ?debugFmt("Skipping stored procedure test for non-MySQL database ~p~n", [Type])
-               end
-       end},
-      {foreach,
-       fun() ->
-               %% Don't want to have the error message muddy up the test output
-               error_logger:tty(false) end,
-       fun(_) -> error_logger:tty(true) end,
-       [{"Does NOT handle SPs that return more than one result packet",
-         fun() ->
-                 case get_db_type() of
-                     mysql ->
-                         ?assertException(exit,
-                                          {{{try_clause, [_Result1,_Result2,_OKPacket]}, _}, _},
-                                          sqerl:select(test_the_multi_sp, []));
-                     Type ->
-                         ?debugFmt("Skipping stored procedure test for non-MySQL database ~p~n", [Type])
-                 end
-         end}]
-      }
-
+       fun delete_data/0}
      ]}.
 
 kill_pool(1) ->
@@ -291,17 +236,6 @@ delete_data() ->
     Expected = lists:duplicate(4, {ok, 1}),
     ?assertMatch(Expected, [sqerl:statement(delete_user_by_lname, [LName]) ||
                                [_, LName, _, _, _] <- ?NAMES]).
-
-bounced_server() ->
-    case get_db_type() of
-        mysql ->
-            os:cmd("mysql.server stop"),
-            os:cmd("mysql.server start"),
-            {ok, Result} = sqerl:select(find_user_by_lname, ["Smith"], first),
-            ?assertMatch(<<"Smith">>, proplists:get_value(<<"last_name">>, Result));
-        Type ->
-            ?debugFmt("Skipping bounced server test for ~p~n", [Type])
-    end.
 
 update_datablob() ->
     ?assertMatch({ok, 1},
@@ -360,10 +294,7 @@ select_simple() ->
     ?assertEqual(4, NumUsers).
 
 select_simple_with_parameters() ->
-    Sql = case get_db_type() of
-        mysql -> <<"select id from users where last_name = ?">>;
-        pgsql -> <<"select id from users where last_name = $1">>
-    end,
+    Sql = <<"select id from users where last_name = $1">>,
     {ok, Rows} = sqerl:execute(Sql, ["Smith"]),
     ExpectedRows = [[{<<"id">>,1}]],
     ?assertEqual(ExpectedRows, Rows).
@@ -626,15 +557,9 @@ adhoc_insert_rows() ->
     ?assertEqual(length(Rows), DeleteCount).
 
 select_timeout() ->
-    case get_db_type() of
-      mysql ->
-        SQL = "select sleep(30)",
-        ?assertException(exit, {{failed_to_recv_packet_header,timeout}, _}, sqerl:execute(SQL));
-      pgsql ->
-        SQL = <<"select pg_sleep(30)">>,
-        Result = sqerl:execute(SQL),
-        ?assertEqual({error, timeout}, Result)
-    end.
+    SQL = <<"select pg_sleep(30)">>,
+    Result = sqerl:execute(SQL),
+    ?assertEqual({error, timeout}, Result).
 
 array_test_() ->
     setup_env(),
