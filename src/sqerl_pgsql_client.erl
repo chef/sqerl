@@ -255,20 +255,32 @@ pqc_remove(Name, Cache) ->
 -spec pqc_fetch(atom(), dict(), connection()) -> {#prepared_statement{}, dict()} |
                                                  {error, _}.
 pqc_fetch(Name, Cache, Con) ->
-    pqc_fetch_internal(Name, dict:find(Name, Cache), Cache, Con).
+    pqc_fetch(Name, Cache, Con, fun prepare_statement/3).
 
-pqc_fetch_internal(_Name, error, _Cache, _Con) ->
+%% this version makes testing the cache functionality much easier
+pqc_fetch(Name, Cache, Con, PrepareFun) ->
+    pqc_fetch_internal(Name, dict:find(Name, Cache), Cache, Con, PrepareFun).
+
+-spec pqc_fetch_internal(Name, Found, Cache, Con, PrepareFun) -> Result when
+      Name :: atom(),
+      Found :: {ok, binary() | PrepQ},
+      Cache :: dict(),
+      Con :: connection(),
+      PrepareFun :: fun((Con, Name, binary()) -> {ok, {Name, PrepQ}} | {error, term()}),
+      Result :: {PrepQ, dict()} | {error, term()},
+      PrepQ :: term().
+pqc_fetch_internal(_Name, error, _Cache, _Con, _PrepareFun) ->
     {error, query_not_found};
-pqc_fetch_internal(Name, {ok, SQL}, Cache, Con) when is_binary(SQL) ->
+pqc_fetch_internal(Name, {ok, SQL}, Cache, Con, PrepareFun) when is_binary(SQL) ->
     %% prepare it, store it, return it
-    case prepare_statement(Con, Name, SQL) of
-        {ok, {Name, #prepared_statement{} = P}} ->
+    case PrepareFun(Con, Name, SQL) of
+        {ok, {Name, P}} ->
             {P, dict:store(Name, P, Cache)};
         Error ->
             Error
     end;
-pqc_fetch_internal(_Name, {ok, #prepared_statement{} = P}, Cache, _Con) ->
-    {P, Cache}.
+pqc_fetch_internal(_Name, {ok, PrepQ}, Cache, _Con, _PrepareFun) ->
+    {PrepQ, Cache}.
 
 %% @doc Prepare a statement on the connection. Does not manage
 %% state.
