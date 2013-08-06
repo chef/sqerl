@@ -5,7 +5,7 @@ DIALYZER_OPTS = -Wunderspecs
 # List dependencies that should be included in a cached dialyzer PLT file.
 # DIALYZER_DEPS = deps/app1/ebin \
 #                 deps/app2/ebin
-DIALYZER_DEPS = deps/epgsql/ebin deps/pooler/ebin deps/emysql/ebin
+DIALYZER_DEPS = deps/epgsql/ebin deps/pooler/ebin
 
 DEPS_PLT = sqerl.plt
 
@@ -82,8 +82,7 @@ endif
 doc:
 	@rebar doc skip_deps=true
 
-## Set the environment variable $DB_TYPE to either mysql or pgsql
-## to run the correct integration tests.
+DB_TYPE ?= pgsql
 -include itest/$(DB_TYPE)_conf.mk
 
 itest_create:

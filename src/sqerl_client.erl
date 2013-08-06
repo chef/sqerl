@@ -115,9 +115,8 @@ start_link(DbType) ->
     gen_server:start_link(?MODULE, [DbType], []).
 
 init([]) ->
-    init(dbtype());
-init(DbType) ->
-    CallbackMod = drivermod(DbType),
+    init(drivermod());
+init(CallbackMod) ->
     IdleCheck = ev(idle_check, 1000),
 
     Statements = read_statements_from_config(),
@@ -204,26 +203,39 @@ sql_parameter_style() ->
     Mod = drivermod(),
     Mod:sql_parameter_style().
 
-%% @doc Returns DB driver module atom according to environment.
-%%-spec drivermod() -> atom().
+%% @doc Returns DB driver module atom based on application config. First checks the key
+%% `db_driver_mod'. If this is undefined, checks for the deprecated `db_type' and
+%% translates.
+-spec drivermod() -> atom().
 drivermod() ->
-    drivermod(dbtype()).
-
-%% @doc Returns DB driver module atom for given DB type atom
-%% (e.g. pgsql, mysql).
-%%-spec drivermod(atom()) -> atom().
-drivermod(DBType) ->
-    case DBType of
-        pgsql -> sqerl_pgsql_client;
-        mysql -> sqerl_mysql_client;
-        Other -> Msg = {unsupported_db_type, sqerl, Other},
-                 error_logger:error_report(Msg),
-                 error(Msg)
+    case ev(db_driver_mod, undefined) of
+        undefined ->
+            error_logger:warning_msg("Missing config {sqerl, db_driver_mod}. "
+                                     "Falling back to deprecated {sqerl, db_type} value"),
+            case ev(db_type, undefined) of
+                undefined ->
+                    Msg = {missing_application_config, sqerl, db_driver_mod},
+                    error_logger:error_report(Msg),
+                    error(Msg);
+                pgsql ->
+                    %% default pgsql driver mod
+                    error_logger:warning_report({deprecated_application_config,
+                                                 sqerl,
+                                                 db_type,
+                                                 "use db_driver_mod instead"}),
+                    sqerl_pgsql_client;
+                BadType ->
+                    Msg = {unsupported_db_type, sqerl, BadType},
+                    error_logger:error_report(Msg),
+                    error(Msg)
+            end;
+        DriverMod when is_atom(DriverMod) ->
+            DriverMod;
+        Error ->
+            Msg = {invalid_application_config, sqerl, db_driver_mod, Error},
+            error_logger:error_report(Msg),
+            error(Msg)
     end.
-
-%% @doc Returns DB type atom (e.g. pgsql, mysql) from environment.
--spec dbtype() -> atom().
-dbtype() -> ev(db_type).
 
 %% Short for "environment value", just provides some sugar for grabbing config values
 ev(Key) ->
