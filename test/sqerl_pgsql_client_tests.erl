@@ -100,7 +100,7 @@ prepared_query_cache_test_() ->
 
 stub_prepare_statement(stub_pid, _Name, <<"DO ERROR">>) ->
     {error, stub_error};
-stub_prepare_statement(stub_pid, Name, Query) ->
-    {ok, {Name, {stub_prep_q, Query}}};
+stub_prepare_statement(stub_pid, _Name, Query) ->
+    {ok, {stub_prep_q, Query}};
 stub_prepare_statement(_, _, _) ->
     error(unexpect_stub_call).

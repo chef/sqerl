@@ -266,7 +266,7 @@ pqc_fetch(Name, Cache, Con, PrepareFun) ->
       Found :: {ok, binary() | PrepQ},
       Cache :: dict(),
       Con :: connection(),
-      PrepareFun :: fun((Con, Name, binary()) -> {ok, {Name, PrepQ}} | {error, term()}),
+      PrepareFun :: fun((Con, Name, binary()) -> {ok, PrepQ} | {error, term()}),
       Result :: {PrepQ, dict()} | {error, term()},
       PrepQ :: term().
 pqc_fetch_internal(_Name, error, _Cache, _Con, _PrepareFun) ->
@@ -274,7 +274,7 @@ pqc_fetch_internal(_Name, error, _Cache, _Con, _PrepareFun) ->
 pqc_fetch_internal(Name, {ok, SQL}, Cache, Con, PrepareFun) when is_binary(SQL) ->
     %% prepare it, store it, return it
     case PrepareFun(Con, Name, SQL) of
-        {ok, {Name, P}} ->
+        {ok, P} ->
             {P, dict:store(Name, P, Cache)};
         Error ->
             Error
@@ -285,7 +285,7 @@ pqc_fetch_internal(_Name, {ok, PrepQ}, Cache, _Con, _PrepareFun) ->
 %% @doc Prepare a statement on the connection. Does not manage
 %% state.
 -spec prepare_statement(connection(), atom(), sqerl_sql()) ->
-    {ok, {StatementName :: atom(), #prepared_statement{}}} | {error, term()}.
+    {ok, #prepared_statement{}} | {error, term()}.
 prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
     case pgsql:parse(Connection, atom_to_list(Name), SQL, []) of
         {ok, Statement} ->
@@ -296,7 +296,7 @@ prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
               input_types = DataTypes,
               output_fields = ColumnData,
               stmt = Statement},
-            {ok, {Name, P}};
+            {ok, P};
         {error, {error, error, _ErrorCode, Msg, Position}} ->
             {error, {syntax, {Msg, Position}}};
         Error ->
