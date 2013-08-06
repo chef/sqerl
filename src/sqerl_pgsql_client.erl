@@ -179,8 +179,6 @@ init(Config) ->
             %% Link to pid so if this process dies we clean up
             %% the socket
             erlang:link(Connection),
-            %% TODO: this is suspect, I don't think we want to be a system process
-            erlang:process_flag(trap_exit, true),
             {ok, Prepared} = load_statements(Statements),
             {ok, #state{cn=Connection, statements=Prepared, ctrans=CTrans}};
         {error, {syntax, Msg}} ->
