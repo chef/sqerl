@@ -206,10 +206,10 @@ sql_parameter_style() ->
 
 %% @doc Returns DB driver module atom according to environment.
 %%-spec drivermod() -> atom().
-drivermod() -> 
+drivermod() ->
     drivermod(dbtype()).
 
-%% @doc Returns DB driver module atom for given DB type atom 
+%% @doc Returns DB driver module atom for given DB type atom
 %% (e.g. pgsql, mysql).
 %%-spec drivermod(atom()) -> atom().
 drivermod(DBType) ->
