@@ -18,7 +18,6 @@
 %% under the License.
 %%
 
-
 {application, sqerl,
  [
   {description, "Simple database abstraction layer"},
@@ -27,7 +26,6 @@
   {applications, [kernel,
                   stdlib,
                   crypto,
-                  epgsql]},
-  {included_applications, [pooler]},
-  {mod, {sqerl_app, []}}
+                  epgsql,
+                  pooler]}
  ]}.
