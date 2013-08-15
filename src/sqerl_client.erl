@@ -210,13 +210,9 @@ sql_parameter_style() ->
 drivermod() ->
     case ev(db_driver_mod, undefined) of
         undefined ->
-            error_logger:warning_msg("Missing config {sqerl, db_driver_mod}. "
-                                     "Falling back to deprecated {sqerl, db_type} value"),
             case ev(db_type, undefined) of
                 undefined ->
-                    Msg = {missing_application_config, sqerl, db_driver_mod},
-                    error_logger:error_report(Msg),
-                    error(Msg);
+                    sqerl_pgsql_client;
                 pgsql ->
                     %% default pgsql driver mod
                     error_logger:warning_report({deprecated_application_config,
