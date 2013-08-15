@@ -221,17 +221,24 @@ drivermod() ->
                                                  "use db_driver_mod instead"}),
                     sqerl_pgsql_client;
                 BadType ->
-                    Msg = {unsupported_db_type, sqerl, BadType},
-                    error_logger:error_report(Msg),
-                    error(Msg)
+                    log_and_error({unsupported_db_type, sqerl, BadType})
             end;
         DriverMod when is_atom(DriverMod) ->
-            DriverMod;
+            case code:which(DriverMod) of
+                non_existing ->
+                    log_and_error({does_not_exist, sqerl, db_driver_mod, DriverMod});
+                _  ->
+                    DriverMod
+            end;
         Error ->
-            Msg = {invalid_application_config, sqerl, db_driver_mod, Error},
-            error_logger:error_report(Msg),
-            error(Msg)
+            log_and_error({invalid_application_config, sqerl, db_driver_mod, Error})
     end.
+
+%% Helper function to report and error
+
+log_and_error(Msg) ->
+    error_logger:error_report(Msg),
+    error(Msg).
 
 %% Short for "environment value", just provides some sugar for grabbing config values
 ev(Key) ->
