@@ -25,21 +25,21 @@
 
 -behaviour(gen_server).
 
--define(LOG_STATEMENT(Name, Args), case application:get_env(sqerl, log_statements) of
-                                       undefined ->
+-define(LOG_STATEMENT(Name, Args), case envy:get(sqerl, log_statements, ok, boolean) of
+                                       ok ->
                                            ok;
-                                       {ok, false} ->
+                                       false ->
                                            ok;
-                                       {ok, true} ->
+                                       true ->
                                            error_logger:info_msg("(~p) Executing statement ~p with args ~p~n", [self(), Name, Args])
                                    end).
 
--define(LOG_RESULT(Result), case application:get_env(sqerl, log_statements) of
-                                undefined ->
+-define(LOG_RESULT(Result), case envy:get(sqerl, log_statements, ok, boolean) of
+                                ok ->
                                     ok;
-                                {ok, false} ->
+                                false ->
                                     ok;
-                                {ok, true} ->
+                                true ->
                                     error_logger:info_msg("(~p) Result: ~p~n", [self(), Result])
                             end).
 
@@ -117,19 +117,19 @@ start_link(DbType) ->
 init([]) ->
     init(drivermod());
 init(CallbackMod) ->
-    IdleCheck = ev(idle_check, 1000),
+    IdleCheck = envy:get(sqerl,idle_check, 1000, non_neg_integer),
 
     Statements = read_statements_from_config(),
 
-    Config = [{host, ev(db_host)},
-              {port, ev(db_port)},
-              {user, ev(db_user)},
-              {pass, ev(db_pass)},
-              {db, ev(db_name)},
-              {timeout, ev(db_timeout, 5000)},
+    Config = [{host, envy:get(sqerl, db_host, string)},
+              {port, envy:get(sqerl, db_port, pos_integer)},
+              {user, envy:get(sqerl, db_user, string)},
+              {pass, envy:get(sqerl, db_pass, string)},
+              {db, envy:get(sqerl, db_name, string)},
+              {timeout, envy:get(sqerl,db_timeout, 5000, pos_integer)},
               {idle_check, IdleCheck},
               {prepared_statements, Statements},
-              {column_transforms, ev(column_transforms)}],
+              {column_transforms, envy:get(sqerl, column_transforms, list)}],
     case CallbackMod:init(Config) of
         {ok, CallbackState} ->
             Timeout = IdleCheck,
@@ -208,11 +208,9 @@ sql_parameter_style() ->
 %% translates.
 -spec drivermod() -> atom().
 drivermod() ->
-    case ev(db_driver_mod, undefined) of
+    case envy:get(sqerl, db_driver_mod, undefined, atom) of
         undefined ->
-            case ev(db_type, undefined) of
-                undefined ->
-                    sqerl_pgsql_client;
+            case envy:get(sqerl, db_type, sqerl_pgsql_client, atom) of
                 pgsql ->
                     %% default pgsql driver mod
                     error_logger:warning_report({deprecated_application_config,
@@ -240,23 +238,8 @@ log_and_error(Msg) ->
     error_logger:error_report(Msg),
     error(Msg).
 
-%% Short for "environment value", just provides some sugar for grabbing config values
-ev(Key) ->
-    case application:get_env(sqerl, Key) of
-        {ok, V} -> V;
-        undefined ->
-            Msg = {missing_application_config, sqerl, Key},
-            error_logger:error_report(Msg),
-            error(Msg)
-    end.
-ev(Key, Default) ->
-    case application:get_env(sqerl, Key) of
-        undefined -> Default;
-        {ok, V} -> V
-    end.
-
 read_statements_from_config() ->
-    StatementSource = ev(prepared_statements),
+    StatementSource = envy:get(sqerl, prepared_statements, any),
     try
         read_statements(StatementSource)
     catch
