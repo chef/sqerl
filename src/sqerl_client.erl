@@ -218,7 +218,7 @@ drivermod() ->
                                                  db_type,
                                                  "use db_driver_mod instead"}),
                     sqerl_pgsql_client;
-                BadType ->
+                BadType when BadType /= sqerl_pgsql_client->
                     log_and_error({unsupported_db_type, sqerl, BadType})
             end;
         DriverMod when is_atom(DriverMod) ->
