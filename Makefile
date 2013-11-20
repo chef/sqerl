@@ -5,7 +5,7 @@ DIALYZER_OPTS = -Wunderspecs
 # List dependencies that should be included in a cached dialyzer PLT file.
 # DIALYZER_DEPS = deps/app1/ebin \
 #                 deps/app2/ebin
-DIALYZER_DEPS = deps/epgsql/ebin deps/pooler/ebin
+DIALYZER_DEPS = deps/epgsql/ebin deps/pooler/ebin deps/envy/ebin
 
 DEPS_PLT = sqerl.plt
 
