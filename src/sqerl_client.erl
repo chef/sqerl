@@ -61,6 +61,10 @@
          terminate/2,
          code_change/3]).
 
+-ifdef(TEST).
+-compile([export_all]).
+-endif.
+
 -record(state, {cb_mod,
                 cb_state,
                 timeout}).
@@ -121,7 +125,7 @@ init(CallbackMod) ->
 
     Statements = read_statements_from_config(),
 
-    Config = [{host, envy:get(sqerl, db_host, string)},
+    Config = [{host, parse_host(envy:get(sqerl, db_host, string))},
               {port, envy:get(sqerl, db_port, pos_integer)},
               {user, envy:get(sqerl, db_user, string)},
               {pass, envy:get(sqerl, db_pass, string)},
@@ -138,6 +142,30 @@ init(CallbackMod) ->
         Error ->
             {stop, Error}
     end.
+
+parse_host(Host) ->
+    case envy:get(sqerl, enable_ipv6, false, boolean) of
+        true ->
+            %% With enable_ipv6, we try the Host as an ipv6 host first and fallback to ipv4
+            %% if we get a lookup error.
+            handle_get_addr6(inet:getaddr(Host, inet6), Host);
+        false ->
+            handle_get_addr4(inet:getaddr(Host, inet), Host)
+    end.
+
+%% Return ipv6 address, but fallback to ipv4 parse/lookup on nxdomain error.
+handle_get_addr6({error, nxdomain}, Host) ->
+    handle_get_addr4(inet:getaddr(Host, inet), Host);
+handle_get_addr6({ok, IP6}, _) ->
+    IP6;
+handle_get_addr6(Error, Host) ->
+    erlang:error({bad_host, {Host, Error}}).
+
+%% Return ipv4 address or raise error.
+handle_get_addr4({ok, IP4}, _) ->
+    IP4;
+handle_get_addr4(Error, Host) ->
+    erlang:error({bad_host, {Host, Error}}).
 
 handle_call({Call, QueryOrStatementName, Args}, From, State) ->
     exec_driver({Call, QueryOrStatementName, Args}, From, State);
