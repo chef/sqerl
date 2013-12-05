@@ -120,7 +120,7 @@ execute_statement(StmtName, StmtArgs, XformName, XformArgs) ->
         {ok, Results} ->
             Xformer = erlang:apply(sqerl_transformers, XformName, XformArgs),
             Xformer(Results);
-        Other -> 
+        Other ->
             Other
     end.
 
@@ -195,7 +195,7 @@ adhoc_select(Columns, Table, Where) ->
 %% that uses several clauses.
 -spec adhoc_select([binary() | string()], binary() | string(), atom() | tuple(), [] | [atom() | tuple()]) -> sqerl_results().
 adhoc_select(Columns, Table, Where, Clauses) ->
-    {SQL, Values} = sqerl_adhoc:select(Columns, Table, 
+    {SQL, Values} = sqerl_adhoc:select(Columns, Table,
                       [{where, Where}|Clauses], param_style()),
     execute(SQL, Values).
 
@@ -264,8 +264,8 @@ bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= Batc
 
 %% @doc Returns a function to call via with_db/1.
 %%
-%% Function prepares an insert statement, inserts all the batches and 
-%% remaining rows, unprepares the statement, and returns 
+%% Function prepares an insert statement, inserts all the batches and
+%% remaining rows, unprepares the statement, and returns
 %% {ok, InsertedCount}.
 %%
 %% We need to use this approach because preparing, inserting,
@@ -311,7 +311,7 @@ adhoc_insert_oneshot(Cn, Table, Columns, RowsValues) ->
     SQL = sqerl_adhoc:insert(Table, Columns, length(RowsValues), param_style()),
     insert_oneshot(Cn, SQL, RowsValues).
 
-%% @doc Insert all rows at once using given 
+%% @doc Insert all rows at once using given
 %% prepared statement or SQL.
 %% Returns {ok, InsertCount}.
 insert_oneshot(_Cn, _StmtOrSQL, []) ->
@@ -387,11 +387,11 @@ parse_error(Reason) ->
 
 -spec parse_error(pgsql,
                   'no_connections' |
-                  {'error', {'error', _, _, _, _}}) -> {'conflict', _} |
-                                                       {'error', 'no_connections' | {_ , _}} |
-                                                       {'foreign_key', _}.
+                  {'error', {'error', _, _, _, _}}) -> sqerl_error().
 parse_error(_DbType, no_connections) ->
     {error, no_connections};
+parse_error(_DbType, {error, Reason} = Error) when is_atom(Reason) ->
+    Error;
 parse_error(pgsql, {error,               % error from sqerl
                     {error,              % error record marker from epgsql
                      _Severity,          % Severity
