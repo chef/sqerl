@@ -109,8 +109,11 @@ basic_test_() ->
       {<<"Execute simple query with parameters">>,
        fun select_simple_with_parameters/0},
 
-      {<<"Handles timeout correctly">>,
-        {timeout, 30,
+      {<<"Handles timeout on execute correctly">>,
+       {timeout, 30,
+         fun execute_timeout/0}},
+      {<<"Handles timeout on select correctly">>,
+       {timeout, 30,
         fun select_timeout/0}},
 
       {<<"Adhoc select All">>,
@@ -557,9 +560,13 @@ adhoc_insert_rows() ->
     ?assertEqual(Rows, ReturnedRows),
     ?assertEqual(length(Rows), DeleteCount).
 
-select_timeout() ->
+execute_timeout() ->
     SQL = <<"select pg_sleep(30)">>,
     Result = sqerl:execute(SQL),
+    ?assertEqual({error, timeout}, Result).
+
+select_timeout() ->
+    Result = sqerl:select(select_sleep, []),
     ?assertEqual({error, timeout}, Result).
 
 array_test_() ->
