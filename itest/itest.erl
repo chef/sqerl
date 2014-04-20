@@ -61,11 +61,8 @@ setup_env() ->
                   {init_count, 1},
                   {start_mfa, {sqerl_client, start_link, []}}],
     ok = application:set_env(pooler, pools, [PoolConfig]),
-    application:start(crypto),
-    application:start(public_key),
-    application:start(ssl),
-    application:start(pooler),
-    application:start(epgsql).
+    Apps = [crypto, asn1, public_key, ssl, epgsql, pooler],
+    [ application:start(A) || A <- Apps ].
 
 statements() ->
     {ok, Statements} = file:consult("itest/statements_pgsql.conf"),
