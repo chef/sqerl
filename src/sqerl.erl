@@ -95,6 +95,8 @@ select(StmtName, StmtArgs, XformName, XformArgs) ->
             {ok, none};
         {ok, Results} ->
             {ok, Results};
+        {ok, Count, Results} ->
+            {ok, Count, Results};
         {error, Reason} ->
             parse_error(Reason)
     end.
@@ -111,6 +113,8 @@ statement(StmtName, StmtArgs, XformName, XformArgs) ->
             {ok, none};
         {ok, N} when is_number(N) ->
             {ok, N};
+        {ok, N, Rows} when is_number(N) ->
+            {ok, N, Rows};
         {error, Reason} ->
             parse_error(Reason)
     end.
@@ -120,6 +124,11 @@ execute_statement(StmtName, StmtArgs, XformName, XformArgs) ->
         {ok, Results} ->
             Xformer = erlang:apply(sqerl_transformers, XformName, XformArgs),
             Xformer(Results);
+        {ok, Count, Results} ->
+            %% we'll get here for an INSERT ... RETURNING query
+            Xformer = erlang:apply(sqerl_transformers, XformName, XformArgs),
+            {ok, XResult} = Xformer(Results),
+            {ok, Count, XResult};
         Other ->
             Other
     end.

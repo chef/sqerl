@@ -110,6 +110,11 @@ execute_prepared({#prepared_statement{} = PrepStmt, Statements}, Parameters,
             Rows = unpack_rows(PrepStmt, RowData),
             TRows = sqerl_transformers:by_column_name(Rows, CTrans),
             {ok, TRows};
+        {ok, Count, RowData} when is_list(RowData), is_integer(Count) ->
+            pgsql:sync(Cn),
+            Rows = unpack_rows(PrepStmt, RowData),
+            TRows = sqerl_transformers:by_column_name(Rows, CTrans),
+            {ok, Count, TRows};
         Other ->
             pgsql:sync(Cn),
             {error, Other}

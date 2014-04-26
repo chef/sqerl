@@ -27,5 +27,7 @@
 -type sqerl_rows() :: [sqerl_row()].
 -type sqerl_sql() :: string() | binary().
 -type sqerl_query() :: atom() | sqerl_sql().
--type sqerl_results() :: {ok, integer() | sqerl_rows()} | {error, atom() | tuple()}.
+-type sqerl_results() :: {ok, integer() | sqerl_rows()} |
+                         {ok, integer(), sqerl_rows()} |
+                         {error, atom() | tuple()}.
 
