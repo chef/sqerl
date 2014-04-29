@@ -5,3 +5,5 @@ ebin/*
 *.beam
 logfile
 sqerl.plt
+deps.plt
+.concrete/

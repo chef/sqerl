@@ -61,11 +61,8 @@ setup_env() ->
                   {init_count, 1},
                   {start_mfa, {sqerl_client, start_link, []}}],
     ok = application:set_env(pooler, pools, [PoolConfig]),
-    application:start(crypto),
-    application:start(public_key),
-    application:start(ssl),
-    application:start(pooler),
-    application:start(epgsql).
+    Apps = [crypto, asn1, public_key, ssl, epgsql, pooler],
+    [ application:start(A) || A <- Apps ].
 
 statements() ->
     {ok, Statements} = file:consult("itest/statements_pgsql.conf"),
@@ -84,6 +81,8 @@ basic_test_() ->
        fun pool_overflow/0},
       {<<"Insert operations">>,
        fun insert_data/0},
+      {"insert returning",
+       fun insert_returning/0},
       {<<"Select operations">>,
        fun select_data/0},
       {<<"Select w/record xform operations">>,
@@ -212,7 +211,13 @@ pool_overflow() ->
 
 insert_data() ->
     Expected = lists:duplicate(4, {ok, 1}),
-    ?assertMatch(Expected, [sqerl:statement(new_user, Name) || Name <- ?NAMES]).
+    ?assertEqual(Expected, [sqerl:statement(new_user, Name) || Name <- ?NAMES]).
+
+insert_returning() ->
+    UserData = ["Free", "Ride", 0, <<"2014-10-03 16:47:46">>, true],
+    {ok, 1, [Data]} = sqerl:select(new_user_returning, UserData),
+    ?assert(is_integer(proplists:get_value(<<"id">>, Data))),
+    ?assertEqual(<<"Free">>, proplists:get_value(<<"first_name">>, Data)).
 
 select_data() ->
     {ok, User} = sqerl:select(find_user_by_lname, ["Smith"], first),
@@ -295,7 +300,7 @@ select_simple() ->
     Sql = <<"select count(*) as num_users from users">>,
     {ok, Rows} = sqerl:execute(Sql),
     [[{<<"num_users">>, NumUsers}]] = Rows,
-    ?assertEqual(4, NumUsers).
+    ?assertEqual(5, NumUsers).
 
 select_simple_with_parameters() ->
     Sql = <<"select id from users where last_name = $1">>,
@@ -308,7 +313,7 @@ select_simple_with_parameters() ->
 %% Tests for adhoc SQL
 %%
 adhoc_select_all() ->
-    ExpectedNumRows = length(?NAMES),
+    ExpectedNumRows = length(?NAMES) + 1,
     {ok, Rows} = sqerl:adhoc_select([<<"*">>], <<"users">>, all),
     ?assertEqual(ExpectedNumRows, length(Rows)).
 
@@ -339,7 +344,7 @@ adhoc_select_equals_str() ->
 adhoc_select_nequals_str() ->
     {ok, Rows} = sqerl:adhoc_select([<<"id">>], <<"users">>,
                                     {<<"last_name">>, nequals, <<"Smith">>}),
-    ExpectedRows = [[{<<"id">>,2}],[{<<"id">>,3}],[{<<"id">>,4}]],
+    ExpectedRows = [[{<<"id">>,2}],[{<<"id">>,3}],[{<<"id">>,4}], [{<<"id">>,5}]],
     ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
 
 adhoc_select_nequals_int() ->
@@ -348,7 +353,8 @@ adhoc_select_nequals_int() ->
     ExpectedRows = [
                     [{<<"last_name">>,<<"Presley">>}],
                     [{<<"last_name">>,<<"Anderson">>}],
-                    [{<<"last_name">>,<<"Maier">>}]
+                    [{<<"last_name">>,<<"Maier">>}],
+                    [{<<"last_name">>,<<"Ride">>}]
                    ],
     ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
 
@@ -360,7 +366,8 @@ adhoc_select_not() ->
     ExpectedRows = [
                     [{<<"id">>, 2}],
                     [{<<"id">>, 3}],
-                    [{<<"id">>, 4}]
+                    [{<<"id">>, 4}],
+                    [{<<"id">>, 5}]
                    ],
     ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
 
@@ -409,7 +416,8 @@ adhoc_select_and() ->
     ExpectedRows = [
                     [{<<"id">>, 2}],
                     [{<<"id">>, 3}],
-                    [{<<"id">>, 4}]
+                    [{<<"id">>, 4}],
+                    [{<<"id">>, 5}]
                    ],
     ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
 
@@ -423,7 +431,8 @@ adhoc_select_or() ->
     ExpectedRows = [
                     [{<<"id">>, 2}],
                     [{<<"id">>, 3}],
-                    [{<<"id">>, 4}]
+                    [{<<"id">>, 4}],
+                    [{<<"id">>, 5}]
                    ],
     ?assertEqual(lists:sort(ExpectedRows), lists:sort(Rows)).
 
@@ -469,7 +478,8 @@ adhoc_select_order_by() ->
                     [{<<"id">>, 1}],
                     [{<<"id">>, 2}],
                     [{<<"id">>, 3}],
-                    [{<<"id">>, 4}]
+                    [{<<"id">>, 4}],
+                    [{<<"id">>, 5}]
                    ],
     ?assertEqual(ExpectedRows, Rows).
 
