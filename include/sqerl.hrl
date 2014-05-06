@@ -30,3 +30,9 @@
 -type sqerl_results() :: {ok, integer() | sqerl_rows()} |
                          {ok, integer(), sqerl_rows()} |
                          {error, atom() | tuple()}.
+
+-ifdef(namespaced_types).
+-type sqerl_dict() :: dict:dict().
+-else.
+-type sqerl_dict() :: dict().
+-endif.
