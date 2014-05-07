@@ -38,7 +38,7 @@
 -callback '#new-'(atom()) ->
     db_rec().
 
--callback '#fromlist-'(atom(), db_rec()) ->
+-callback '#fromlist-'([{atom(), _}], db_rec()) ->
     db_rec().
 
 -callback '#info-'(atom()) ->
@@ -176,12 +176,12 @@ statements_for(RecName) ->
     Prefix = join_atoms([RecName, '_']),
     [ {join_atoms([Prefix, Key]), as_bin(Query)}
       || {Key, Query} <- proplist_merge(Customs, Defaults) ].
-    
+
 proplist_merge(L1, L2) ->
     SL1 = lists:keysort(1, L1),
     SL2 = lists:keysort(1, L2),
     lists:keymerge(1, SL1, SL2).
-    
+
 default_queries(RecName) ->
     [  {fetch_by_id,   gen_fetch_by(RecName, id)}
      , {fetch_by_name, gen_fetch_by(RecName, name)}
@@ -191,7 +191,7 @@ default_queries(RecName) ->
      , {fetch_page,    gen_fetch_page(RecName, name)}
      , {update,        gen_update(RecName, id)}
     ].
-    
+
 join_atoms(Atoms) ->
     Bins = [ erlang:atom_to_binary(A, utf8) || A <- Atoms ],
     erlang:binary_to_atom(iolist_to_binary(Bins), utf8).
@@ -234,7 +234,7 @@ gen_insert(RecName) ->
     Table = table_name(RecName),
     ["INSERT INTO ", Table, "(", InsertFieldsSQL,
      ") VALUES (", Params, ") RETURNING ", AllFieldsSQL].
-    
+
 gen_fetch_page(RecName, OrderBy) ->
     AllFields = map_to_str(all_fields(RecName)),
     FieldsSQL = string:join(AllFields, ", "),
@@ -243,7 +243,7 @@ gen_fetch_page(RecName, OrderBy) ->
     ["SELECT ", FieldsSQL, " FROM ", Table,
      " WHERE ", OrderByStr, " > $1 ORDER BY ", OrderByStr,
      " LIMIT $2"].
-    
+
 gen_fetch_all(RecName, OrderBy) ->
     AllFields = map_to_str(all_fields(RecName)),
     FieldsSQL = string:join(AllFields, ", "),
@@ -251,7 +251,7 @@ gen_fetch_all(RecName, OrderBy) ->
     Table = table_name(RecName),
     ["SELECT ", FieldsSQL, " FROM ", Table,
      " ORDER BY ", OrderByStr].
-    
+
 gen_fetch_by(RecName, By) ->
     AllFields = map_to_str(all_fields(RecName)),
     FieldsSQL = string:join(AllFields, ", "),
