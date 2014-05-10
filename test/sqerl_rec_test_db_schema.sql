@@ -5,7 +5,7 @@ CREATE TABLE kitchens (
   name TEXT NOT NULL UNIQUE
 );
 
-CREATE TABLE cooks(
+CREATE TABLE cookers(
   id BIGSERIAL PRIMARY KEY,
   kitchen_id BIGINT NOT NULL REFERENCES kitchens(id) ON DELETE CASCADE,
   name TEXT NOT NULL,

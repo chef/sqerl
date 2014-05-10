@@ -64,7 +64,9 @@
          qfetch/3,
          update/1,
          statements/1,
-         statements_for/1
+         statements_for/1,
+         gen_fetch/2,
+         gen_delete/2
         ]).
 
 -ifdef(TEST).
@@ -251,26 +253,26 @@ statements_for(RecName) ->
                    false ->
                        []
                end,
-    Customs = [ Q || {_Name, _SQL} = Q <- RawStatements ],
+    Customs = [ Q || {Name, _SQL} = Q <- RawStatements, is_atom(Name) ],
     Prefix = join_atoms([RecName, '_']),
     [ {join_atoms([Prefix, Key]), as_bin(Query)}
       || {Key, Query} <- proplist_merge(Customs, Defaults) ].
-    
+
 proplist_merge(L1, L2) ->
     SL1 = lists:keysort(1, L1),
     SL2 = lists:keysort(1, L2),
     lists:keymerge(1, SL1, SL2).
-    
+
 default_queries(RecName) ->
-    [  {fetch_by_id,   gen_fetch_by(RecName, id)}
-     , {fetch_by_name, gen_fetch_by(RecName, name)}
+    [  {fetch_by_id,   gen_fetch(RecName, id)}
+     , {fetch_by_name, gen_fetch(RecName, name)}
      , {delete_by_id,  gen_delete(RecName, id)}
      , {insert,        gen_insert(RecName)}
      , {fetch_all,     gen_fetch_all(RecName, name)}
      , {fetch_page,    gen_fetch_page(RecName, name)}
      , {update,        gen_update(RecName, id)}
     ].
-    
+
 join_atoms(Atoms) ->
     Bins = [ erlang:atom_to_binary(A, utf8) || A <- Atoms ],
     erlang:binary_to_atom(iolist_to_binary(Bins), utf8).
@@ -312,7 +314,7 @@ gen_insert(RecName) ->
     Table = table_name(RecName),
     ["INSERT INTO ", Table, "(", InsertFieldsSQL,
      ") VALUES (", Params, ") RETURNING ", AllFieldsSQL].
-    
+
 gen_fetch_page(RecName, OrderBy) ->
     AllFields = map_to_str(all_fields(RecName)),
     FieldsSQL = string:join(AllFields, ", "),
@@ -321,7 +323,7 @@ gen_fetch_page(RecName, OrderBy) ->
     ["SELECT ", FieldsSQL, " FROM ", Table,
      " WHERE ", OrderByStr, " > $1 ORDER BY ", OrderByStr,
      " LIMIT $2"].
-    
+
 gen_fetch_all(RecName, OrderBy) ->
     AllFields = map_to_str(all_fields(RecName)),
     FieldsSQL = string:join(AllFields, ", "),
@@ -329,14 +331,31 @@ gen_fetch_all(RecName, OrderBy) ->
     Table = table_name(RecName),
     ["SELECT ", FieldsSQL, " FROM ", Table,
      " ORDER BY ", OrderByStr].
-    
-gen_fetch_by(RecName, By) ->
+
+gen_fetch(RecName, By) when is_atom(By) ->
     AllFields = map_to_str(all_fields(RecName)),
     FieldsSQL = string:join(AllFields, ", "),
     ByStr = to_str(By),
     Table = table_name(RecName),
     ["SELECT ", FieldsSQL, " FROM ", Table,
-     " WHERE ", ByStr, " = $1"].
+     " WHERE ", ByStr, " = $1"];
+gen_fetch(RecName, ByList) when is_list(ByList) ->
+    AllFields = map_to_str(all_fields(RecName)),
+    FieldsSQL = string:join(AllFields, ", "),
+    WhereItems = zip_params(ByList, " = "),
+    WhereClause = string:join(WhereItems, " AND "),
+    Table = table_name(RecName),
+    ["SELECT ", FieldsSQL, " FROM ", Table,
+     " WHERE ", WhereClause].
+
+zip_params(Prefixes, Sep) ->
+    Params = str_seq("$", 1, length(Prefixes)),
+    [ to_str(Prefix) ++ Sep ++ Param
+      || {Prefix, Param} <- lists:zip(Prefixes, Params) ].
+
+str_seq(Prefix, Start, End) ->
+    [ Prefix ++ erlang:integer_to_list(I)
+      || I <- lists:seq(Start, End) ].
 
 map_to_str(L) ->
     [ to_str(Elt) || Elt <- L ].

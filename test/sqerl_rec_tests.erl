@@ -52,6 +52,7 @@ kitchen_test_() ->
     {setup,
      fun() ->
              sqerl_test_helper:setup_db()
+             %% , application:set_env(sqerl, log_statements, true)
              , error_logger:tty(false)
      end,
      fun(_) ->
@@ -123,6 +124,33 @@ kitchen_test_() ->
        end}
      ]}.
 
+cook_test_() ->
+    {setup,
+     fun() ->
+             sqerl_test_helper:setup_db()
+             %% , application:set_env(sqerl, log_statements, true)
+             , error_logger:tty(false)
+     end,
+     fun(_) ->
+             pooler:rm_pool(sqerl),
+             Apps = [pooler, epgsql, sqerl, epgsql],
+             [ application:stop(A) || A <- Apps ]
+     end,
+     [
+      {"insert, qfetch by multiple cooks",
+       fun() ->
+               {K0, _KName0} = make_kitchen(<<"basket">>),
+               [K1] = sqerl_rec:insert(K0),
+               KitchenId = kitchen:'#get-'(id, K1),
+               {C0, CName0} = make_cook(<<"grace">>, KitchenId,
+                                          <<"grace">>, <<"hopper">>),
+               [C1] = sqerl_rec:insert(C0),
+               [C2] = sqerl_rec:qfetch(cook, fetch_by_name_kitchen_id,
+                                       [CName0, KitchenId]),
+               ?assertEqual(C1, C2)
+       end}
+     ]}.
+
 int_to_0bin(I) ->
     erlang:iolist_to_binary(io_lib:format("~5.10.0B", [I])).
 
@@ -130,13 +158,28 @@ make_kitchen(Prefix) ->
     Name = make_name(Prefix),
     K = kitchen:'#fromlist-kitchen'([{name, Name}]),
     {K, Name}.
+
+make_cook(Prefix, KitchenId, First, Last) ->
+    Name = make_name(Prefix),
+    Email = iolist_to_binary([First, "@", Last, ".com"]),
+    SSH = <<"NONE">>,
+    AuthToken = base64:encode(crypto:rand_bytes(10)),
+    C = cook:'#fromlist-cook'([{name, Name},
+                               {kitchen_id, KitchenId},
+                               {email, Email},
+                               {auth_token, AuthToken},
+                               {ssh_pub_key, SSH},
+                               {first_name, First},
+                               {last_name, Last}
+                              ]),
+    {C, Name}.
     
 validate_kitchen(Name, K) ->
     ?assert(kitchen:'#is_record-'(kitchen, K)),
-    ?assertEqual(Name, kitchen:'#get-kitchen'(name, K)),
-    ?assert(erlang:is_integer(kitchen:'#get-kitchen'(id, K))).
+    ?assertEqual(Name, kitchen:'#get-'(name, K)),
+    ?assert(erlang:is_integer(kitchen:'#get-'(id, K))).
 
-gen_fetch_by_test_() ->
+gen_fetch_test_() ->
     Tests = [
              {{kitchen, name},
               ["SELECT ",
@@ -150,7 +193,19 @@ gen_fetch_by_test_() ->
                " FROM ", "kitchens",
                " WHERE ", "id", " = $1"]}
             ],
-    [ ?_assertEqual(E, sqerl_rec:gen_fetch_by(Rec, By))
+    [ ?_assertEqual(E, sqerl_rec:gen_fetch(Rec, By))
+      || {{Rec, By}, E} <- Tests ].
+
+gen_fetch_multiple_test_() ->
+    Tests = [
+             {{cook, [name, kitchen_id]},
+              ["SELECT ",
+               "id, kitchen_id, name, auth_token, auth_token_bday, "
+               "ssh_pub_key, first_name, last_name, email",
+               " FROM ", "cookers",
+               " WHERE ", "name = $1 AND kitchen_id = $2"]}
+             ],
+    [ ?_assertEqual(E, sqerl_rec:gen_fetch(Rec, By))
       || {{Rec, By}, E} <- Tests ].
 
 gen_delete_test() ->
