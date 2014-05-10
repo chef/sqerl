@@ -12,6 +12,7 @@
          fetch_page/3,
          first_page/0,
          insert/1,
+         qfetch/3,
          update/1,
          statements/1,
          statements_for/1
@@ -57,44 +58,36 @@
 -callback '#statements'() ->
     [default | {atom(), iolist()}].
 
--spec fetch(atom(), atom(), any()) -> [db_rec()] | {error, _}.
-fetch(RecName, By, Val) ->
-    Query = join_atoms([RecName, '_', fetch_by, '_', By]),
-    case sqerl:select(Query, [Val]) of
+%% @doc Fetch using prepared query `Query' returning a list of records
+%% `[#RecName{}]'. The `Vals' list is the list of parameters for the
+%% prepared query. If the prepared query does not take parameters, use
+%% `[]'.
+-spec qfetch(atom(), atom(), [any()]) -> [db_rec()] | {error, _}.
+qfetch(RecName, Query, Vals) ->
+    case sqerl:select(Query, Vals) of
         {ok, none} ->
             [];
         %% match on single row result
         {ok, Rows} ->
             rows_to_recs(Rows, RecName);
-        {error, _Why} = E ->
-            E;
-        Why ->
-            {error, Why}
+        Error ->
+            ensure_error(Error)
     end.
+
+-spec fetch(atom(), atom(), any()) -> [db_rec()] | {error, _}.
+fetch(RecName, By, Val) ->
+    Query = join_atoms([RecName, '_', fetch_by, '_', By]),
+    qfetch(RecName, Query, [Val]).
 
 -spec fetch_all(atom()) -> [db_rec()] | {error, _}.
 fetch_all(RecName) ->
     Query = join_atoms([RecName, '_', fetch_all]),
-    case sqerl:select(Query, []) of
-        {ok, none} ->
-            [];
-        {ok, Rows} ->
-            rows_to_recs(Rows, RecName);
-        E ->
-            E
-    end.
+    qfetch(RecName, Query, []).
 
 -spec fetch_page(atom(), string(), integer()) -> [db_rec()] | {error, _}.
 fetch_page(RecName, StartName, Limit) ->
     Query = join_atoms([RecName, '_', fetch_page]),
-    case sqerl:select(Query, [StartName, Limit]) of
-        {ok, none} ->
-            [];
-        {ok, Rows} ->
-            rows_to_recs(Rows, RecName);
-        E ->
-            E
-    end.
+    qfetch(RecName, Query, [StartName, Limit]).
 
 first_page() ->
     %% ascii value that sorts less or equal to any valid name.
@@ -109,8 +102,8 @@ insert(Rec) ->
     case sqerl:select(Query, Values) of
         {ok, 1, Rows} ->
             rows_to_recs(Rows, RecName);
-        E ->
-            E
+        Error ->
+            ensure_error(Error)
     end.
 
 -spec update(db_rec()) -> ok | {error, _}.
@@ -123,8 +116,8 @@ update(Rec) ->
     case sqerl:select(Query, Values ++ [Id]) of
         {ok, 1} ->
             ok;
-        E ->
-            E
+        Error ->
+            ensure_error(Error)
     end.
 
 -spec delete(db_rec(), atom()) -> ok | {error, _}.
@@ -135,8 +128,8 @@ delete(Rec, By) ->
     case sqerl:select(Query, [Id]) of
         {ok, _} ->
             ok;
-        E ->
-            E
+        Error ->
+            ensure_error(Error)
     end.
 
 rec_to_vlist(Rec, Fields) ->
@@ -313,3 +306,8 @@ do_pluralize("y" ++ Rest) ->
     lists:reverse("sei" ++ Rest);
 do_pluralize(S) ->
     lists:reverse("s" ++ S).
+
+ensure_error({error, _} = E) ->
+    E;
+ensure_error(E) ->
+    {error, E}.
