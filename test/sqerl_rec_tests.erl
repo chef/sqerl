@@ -114,6 +114,12 @@ kitchen_test_() ->
                K_11_20 = sqerl_rec:fetch_page(kitchen, Next , 10),
                PageNames = [ kitchen:'#get-'(name, K) || K <- (K_1_10 ++ K_11_20) ],
                ?assertEqual(ExpectNames, PageNames)
+       end},
+      {"bad query returns error",
+       fun() ->
+               Error = sqerl:select(kitchen_bad_query, []),
+               Msg = <<"relation \"not_a_table\" does not exist">>,
+               ?assertMatch({error, {syntax, {Msg, _}}}, Error)
        end}
      ]}.
 
