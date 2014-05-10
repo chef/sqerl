@@ -1,0 +1,5 @@
+%% encoding: UTF-8
+{application,sqerl}.
+{packages,[]}.
+{modules,[sqerl,sqerl_adhoc,sqerl_client,sqerl_pgsql_client,
+          sqerl_pgsql_errors,sqerl_rec,sqerl_transformers]}.
