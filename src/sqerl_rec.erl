@@ -113,7 +113,8 @@
 %% `[]'.
 -spec qfetch(atom(), atom(), [any()]) -> [db_rec()] | {error, _}.
 qfetch(RecName, Query, Vals) ->
-    case sqerl:select(Query, Vals) of
+    RealQ = join_atoms([RecName, '_', Query]),
+    case sqerl:select(RealQ, Vals) of
         {ok, none} ->
             [];
         {ok, Rows} ->
@@ -129,7 +130,7 @@ qfetch(RecName, Query, Vals) ->
 %% even though a common use is to fetch a single row.
 -spec fetch(atom(), atom(), any()) -> [db_rec()] | {error, _}.
 fetch(RecName, By, Val) ->
-    Query = join_atoms([RecName, '_', fetch_by, '_', By]),
+    Query = join_atoms([fetch_by, '_', By]),
     qfetch(RecName, Query, [Val]).
 
 %% @doc Return all rows from the table associated with record module
@@ -137,8 +138,7 @@ fetch(RecName, By, Val) ->
 %% (which is assumed to exist).
 -spec fetch_all(atom()) -> [db_rec()] | {error, _}.
 fetch_all(RecName) ->
-    Query = join_atoms([RecName, '_', fetch_all]),
-    qfetch(RecName, Query, []).
+    qfetch(RecName, fetch_all, []).
 
 %% @doc Fetch rows from the table associated with record module
 %% `RecName' in a paginated fashion. The default generated query, like
@@ -149,8 +149,7 @@ fetch_all(RecName) ->
 %% as the value for `StartName' to fetch the "next" page.
 -spec fetch_page(atom(), string(), integer()) -> [db_rec()] | {error, _}.
 fetch_page(RecName, StartName, Limit) ->
-    Query = join_atoms([RecName, '_', fetch_page]),
-    qfetch(RecName, Query, [StartName, Limit]).
+    qfetch(RecName, fetch_page, [StartName, Limit]).
 
 %% @doc Return an ascii value, as a string, that sorts less or equal
 %% to any valid name.
