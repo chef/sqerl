@@ -66,7 +66,9 @@
          statements/1,
          statements_for/1,
          gen_fetch/2,
-         gen_delete/2
+         gen_delete/2,
+         gen_fetch_page/2,
+         gen_fetch_all/2
         ]).
 
 -ifdef(TEST).
@@ -106,8 +108,12 @@
 -callback '#update_fields'() ->
     [atom()].
 
+%% Like an iolist but only atoms
+-type atom_list() :: atom() | [atom() | atom_list()].
+-export_type([atom_list/0]).
+
 -callback '#statements'() ->
-    [default | {atom(), iolist()}].
+    [default | {atom_list(), iolist()}].
 
 %% @doc Fetch using prepared query `Query' returning a list of records
 %% `[#RecName{}]'. The `Vals' list is the list of parameters for the
@@ -232,13 +238,16 @@ bin_to_atom(B) ->
 
 %% @doc Given a list of module (and record) names implementing the
 %% `sqerl_rec' behaviour, return a proplist of prepared queries in the
-%% form of `[{QueryName, SQLBinary}]'. If the atom `'default'' is
-%% present in the list, then a default set of queries will be
-%% generated. These include: `fetch_by_id', `fetch_by_name',
-%% `delete_by_id', `insert', `fetch_all', `fetch_page', and
-%% `update'. The returned query names will have `Recname_'
-%% prepended. Custom queries override default queries of the same
-%% name.
+%% form of `[{QueryName, SQLBinary}]'.
+%%
+%% If the atom `default' is present in the list, then a default set of
+%% queries will be generated using the first field returned by
+%% ``RecName:'#info-'/1'' as a unique column for the WHERE clauses of
+%% UPDATE, DELETE, and SELECT of single rows. The default queries are:
+%% `fetch_by_FF', `delete_by_FF', `insert', and `update', where `FF'
+%% is the name of the First Field. The returned query names will have
+%% `RecName_' prepended. Custom queries override default queries of
+%% the same name.
 -spec statements([atom()]) -> [{atom(), binary()}].
 statements(RecList) ->
     lists:flatten([ statements_for(RecName) || RecName <- RecList ]).
@@ -253,8 +262,8 @@ statements_for(RecName) ->
                    false ->
                        []
                end,
-    Customs = [ Q || {Name, _SQL} = Q <- RawStatements, is_atom(Name) ],
-    Prefix = join_atoms([RecName, '_']),
+    Customs = [ Q || {_Name, _SQL} = Q <- RawStatements ],
+    Prefix = [RecName, '_'],
     [ {join_atoms([Prefix, Key]), as_bin(Query)}
       || {Key, Query} <- proplist_merge(Customs, Defaults) ].
 
@@ -264,17 +273,17 @@ proplist_merge(L1, L2) ->
     lists:keymerge(1, SL1, SL2).
 
 default_queries(RecName) ->
-    [  {fetch_by_id,   gen_fetch(RecName, id)}
-     , {fetch_by_name, gen_fetch(RecName, name)}
-     , {delete_by_id,  gen_delete(RecName, id)}
-     , {insert,        gen_insert(RecName)}
-     , {fetch_all,     gen_fetch_all(RecName, name)}
-     , {fetch_page,    gen_fetch_page(RecName, name)}
-     , {update,        gen_update(RecName, id)}
+    FirstField = first_field(RecName),
+    [
+       {insert,                     gen_insert(RecName)}
+     , {update,                     gen_update(RecName, FirstField)}
+     , {['delete_by_', FirstField], gen_delete(RecName, FirstField)}
+     , {['fetch_by_', FirstField],  gen_fetch(RecName, FirstField)}
+     , {['fetch_by_', FirstField],  gen_fetch(RecName, FirstField)}
     ].
 
-join_atoms(Atoms) ->
-    Bins = [ erlang:atom_to_binary(A, utf8) || A <- Atoms ],
+join_atoms(Atoms) when is_list(Atoms) ->
+    Bins = [ erlang:atom_to_binary(A, utf8) || A <- lists:flatten(Atoms) ],
     erlang:binary_to_atom(iolist_to_binary(Bins), utf8).
 
 as_bin(B) when is_binary(B) ->
@@ -368,6 +377,9 @@ to_str(A) when is_atom(A) ->
     erlang:atom_to_list(A);
 to_str(I) when is_integer(I) ->
     erlang:integer_to_list(I).
+
+first_field(RecName) ->
+    hd(all_fields(RecName)).
 
 all_fields(RecName) ->
     RecName:'#info-'(RecName).

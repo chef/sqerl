@@ -23,6 +23,9 @@
 
 '#statements'() ->
     [default,
+     {fetch_by_name, sqerl_rec:gen_fetch(kitchen, name)},
+     {fetch_all, sqerl_rec:gen_fetch_all(kitchen, name)},
+     {fetch_page, sqerl_rec:gen_fetch_page(kitchen, name)},
      {test_query,
       ["SELECT name FROM ",
        "kitchens ",
