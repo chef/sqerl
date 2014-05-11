@@ -90,7 +90,7 @@ db_rec() = tuple()
 ## Function Index ##
 
 
-<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#delete-2">delete/2</a></td><td>Delete the rows where the column identified by <code>By</code> matches
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#cquery-3">cquery/3</a></td><td>Execute query <code>Query</code> that returns a row count.</td></tr><tr><td valign="top"><a href="#delete-2">delete/2</a></td><td>Delete the rows where the column identified by <code>By</code> matches
 the value as found in <code>Rec</code>.</td></tr><tr><td valign="top"><a href="#fetch-3">fetch/3</a></td><td>Return a list of <code>RecName</code> records using single parameter
 prepared query <code>RecName_fetch_by_By</code> where <code>By</code> is a field and
 column name and <code>Val</code> is the value of the column to match for in a
@@ -108,13 +108,28 @@ form of <code>[{QueryName, SQLBinary}]</code>.</td></tr><tr><td valign="top"><a 
 
 ## Function Details ##
 
+<a name="cquery-3"></a>
+
+### cquery/3 ###
+
+
+<pre><code>
+cquery(RecName::atom(), Query::<a href="#type-atom_list">atom_list()</a>, Vals::[any()]) -&gt; {ok, integer()} | {error, term()}
+</code></pre>
+
+<br></br>
+
+
+Execute query `Query` that returns a row count. If the query
+returns results, e.g. an UPDATE ... RETURNING query, the result is
+ignored and only the count is returned. See also [`qfetch/3`](#qfetch-3).
 <a name="delete-2"></a>
 
 ### delete/2 ###
 
 
 <pre><code>
-delete(Rec::<a href="#type-db_rec">db_rec()</a>, By::atom()) -&gt; ok | {error, term()}
+delete(Rec::<a href="#type-db_rec">db_rec()</a>, By::atom()) -&gt; {ok, integer()} | {error, term()}
 </code></pre>
 
 <br></br>
@@ -308,7 +323,7 @@ fields of `Rec` passed as parameters to the query are determined by
 
 
 <pre><code>
-qfetch(RecName::atom(), Query::atom(), Vals::[any()]) -&gt; [<a href="#type-db_rec">db_rec()</a>] | {error, term()}
+qfetch(RecName::atom(), Query::<a href="#type-atom_list">atom_list()</a>, Vals::[any()]) -&gt; [<a href="#type-db_rec">db_rec()</a>] | {error, term()}
 </code></pre>
 
 <br></br>
@@ -317,7 +332,8 @@ qfetch(RecName::atom(), Query::atom(), Vals::[any()]) -&gt; [<a href="#type-db_r
 Fetch using prepared query `Query` returning a list of records
 `[#RecName{}]`. The `Vals` list is the list of parameters for the
 prepared query. If the prepared query does not take parameters, use
-`[]`.
+`[]`. Note that this can be used for INSERT and UPDATE queries if
+they use an appropriate RETURNING clause.
 <a name="statements-1"></a>
 
 ### statements/1 ###
@@ -363,7 +379,7 @@ statements_for(RecName::atom()) -&gt; [{atom(), binary()}]
 
 
 <pre><code>
-update(Rec::<a href="#type-db_rec">db_rec()</a>) -&gt; ok | {error, term()}
+update(Rec::<a href="#type-db_rec">db_rec()</a>) -&gt; [<a href="#type-db_rec">db_rec()</a>] | {error, term()}
 </code></pre>
 
 <br></br>
@@ -373,4 +389,8 @@ Update record `Rec`. Uses the prepared query with name
 `RecName_update`. Assumes an `id` field and corresponding column
 which is used to find the row to update. The fields from `Rec`
 passed as parameters to the query are determined by
-`RecName:`#update_fields/0'.
+`RecName:`#update_fields/0'. This function assumes the UPDATE query
+uses a RETURNING clause so that it can return a list of updated
+records (similar to [`insert/1`](#insert-1). This allows calling code to
+receive db generated values such as timestamps and sequence ids
+without making an additional round trip.
