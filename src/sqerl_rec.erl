@@ -298,11 +298,31 @@ gen_params(N) ->
     Params = [ "$" ++ erlang:integer_to_list(I) || I <- lists:seq(1, N) ],
     string:join(Params, ", ").
 
+%% @doc Return a SQL DELETE query appropriate for module `RecName'
+%% implementing the `sqerl_rec' behaviour. Example:
+%%
+%% ```
+%% SQL = gen_delete(user, id),
+%% SQL = ["DELETE FROM ","cookers"," WHERE ","id"," = $1"]
+%% '''
+-spec gen_delete(atom(), atom()) -> [string()].
 gen_delete(RecName, By) ->
     ByStr = to_str(By),
     Table = table_name(RecName),
     ["DELETE FROM ", Table, " WHERE ", ByStr, " = $1"].
 
+%% @doc Generate an UPDATE query. Uses ``RecName:'#update_fields'/0''
+%% to determine the fields to include for SET.
+%%
+%% Example:
+%% ```
+%% SQL = sqerl_rec:gen_update(cook, id),
+%% SQL = ["UPDATE ","cookers"," SET ",
+%%        "name = $1, auth_token = $2, ssh_pub_key = $3, "
+%%        "first_name = $4, last_name = $5, email = $6",
+%%        " WHERE ","id"," = ","$7"]
+%% '''
+-spec gen_update(atom(), atom()) -> [string()].
 gen_update(RecName, By) ->
     UpdateFields = RecName:'#update_fields'(),
     ByStr = to_str(By),
@@ -315,6 +335,19 @@ gen_update(RecName, By) ->
     ["UPDATE ", Table, " SET ", KeyVals,
      " WHERE ", ByStr, " = ", LastParam].
 
+%% @doc Generate an INSERT query for sqerl_rec behaviour
+%% `RecName'. Uses ``RecName:'#insert_fields'/0'' to determine the
+%% fields to insert. Generates an INSERT ... RETURNING query that
+%% returns a complete record.
+%%
+%% Example:
+%% ```
+%% SQL = sqerl_rec:gen_insert(kitchen),
+%% SQL = ["INSERT INTO ", "kitchens",
+%%        "(", "name", ") VALUES (", "$1",
+%%        ") RETURNING ", "id, name"]
+%% '''
+-spec gen_insert(atom()) -> [string()].
 gen_insert(RecName) ->
     InsertFields = map_to_str(RecName:'#insert_fields'()),
     InsertFieldsSQL = string:join(InsertFields, ", "),
@@ -324,6 +357,16 @@ gen_insert(RecName) ->
     ["INSERT INTO ", Table, "(", InsertFieldsSQL,
      ") VALUES (", Params, ") RETURNING ", AllFieldsSQL].
 
+%% @doc Generate a paginated fetch query.
+%%
+%% Example:
+%% ```
+%% SQL = sqerl_rec:gen_fetch_page(kitchen, name).
+%% SQL = ["SELECT ", "id, name", " FROM ", "kitchens",
+%%        " WHERE ","name",
+%%        " > $1 ORDER BY ","name"," LIMIT $2"]
+%% '''
+-spec gen_fetch_page(atom(), atom()) -> [string()].
 gen_fetch_page(RecName, OrderBy) ->
     AllFields = map_to_str(all_fields(RecName)),
     FieldsSQL = string:join(AllFields, ", "),
@@ -333,6 +376,15 @@ gen_fetch_page(RecName, OrderBy) ->
      " WHERE ", OrderByStr, " > $1 ORDER BY ", OrderByStr,
      " LIMIT $2"].
 
+%% @doc Generate a query to return all rows
+%%
+%% Example:
+%% ```
+%% SQL = sqerl_rec:gen_fetch_all(kitchen, name),
+%% SQL = ["SELECT ", "id, name", " FROM ", "kitchens",
+%%        " ORDER BY ", "name"]
+%% '''
+-spec gen_fetch_all(atom(), atom()) -> [string()].
 gen_fetch_all(RecName, OrderBy) ->
     AllFields = map_to_str(all_fields(RecName)),
     FieldsSQL = string:join(AllFields, ", "),
@@ -341,6 +393,22 @@ gen_fetch_all(RecName, OrderBy) ->
     ["SELECT ", FieldsSQL, " FROM ", Table,
      " ORDER BY ", OrderByStr].
 
+%% @doc Generate a SELECT query for `RecName' rows.
+%%
+%% Example:
+%% ```
+%% SQL1 = sqerl_rec:gen_fetch(kitchen, name).
+%% SQL1 = ["SELECT ", "id, name", " FROM ", "kitchens",
+%%         " WHERE ", "name", " = $1"]
+%%
+%% SQL2 = sqerl_rec:gen_fetch(cook, [kitchen_id, name]),
+%% SQL2 = ["SELECT ",
+%%         "id, kitchen_id, name, auth_token, auth_token_bday, "
+%%         "ssh_pub_key, first_name, last_name, email",
+%%         " FROM ", "cookers", " WHERE ",
+%%         "kitchen_id = $1 AND name = $2"]
+%% '''
+-spec gen_fetch(atom(), atom() | [atom()]) -> [string()].
 gen_fetch(RecName, By) when is_atom(By) ->
     AllFields = map_to_str(all_fields(RecName)),
     FieldsSQL = string:join(AllFields, ", "),
