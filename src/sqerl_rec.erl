@@ -64,7 +64,9 @@
          qfetch/3,
          update/1,
          statements/1,
-         statements_for/1
+         statements_for/1,
+         gen_fetch/2,
+         gen_delete/2
         ]).
 
 -ifdef(TEST).
@@ -113,7 +115,8 @@
 %% `[]'.
 -spec qfetch(atom(), atom(), [any()]) -> [db_rec()] | {error, _}.
 qfetch(RecName, Query, Vals) ->
-    case sqerl:select(Query, Vals) of
+    RealQ = join_atoms([RecName, '_', Query]),
+    case sqerl:select(RealQ, Vals) of
         {ok, none} ->
             [];
         {ok, Rows} ->
@@ -129,7 +132,7 @@ qfetch(RecName, Query, Vals) ->
 %% even though a common use is to fetch a single row.
 -spec fetch(atom(), atom(), any()) -> [db_rec()] | {error, _}.
 fetch(RecName, By, Val) ->
-    Query = join_atoms([RecName, '_', fetch_by, '_', By]),
+    Query = join_atoms([fetch_by, '_', By]),
     qfetch(RecName, Query, [Val]).
 
 %% @doc Return all rows from the table associated with record module
@@ -137,8 +140,7 @@ fetch(RecName, By, Val) ->
 %% (which is assumed to exist).
 -spec fetch_all(atom()) -> [db_rec()] | {error, _}.
 fetch_all(RecName) ->
-    Query = join_atoms([RecName, '_', fetch_all]),
-    qfetch(RecName, Query, []).
+    qfetch(RecName, fetch_all, []).
 
 %% @doc Fetch rows from the table associated with record module
 %% `RecName' in a paginated fashion. The default generated query, like
@@ -149,8 +151,7 @@ fetch_all(RecName) ->
 %% as the value for `StartName' to fetch the "next" page.
 -spec fetch_page(atom(), string(), integer()) -> [db_rec()] | {error, _}.
 fetch_page(RecName, StartName, Limit) ->
-    Query = join_atoms([RecName, '_', fetch_page]),
-    qfetch(RecName, Query, [StartName, Limit]).
+    qfetch(RecName, fetch_page, [StartName, Limit]).
 
 %% @doc Return an ascii value, as a string, that sorts less or equal
 %% to any valid name.
@@ -252,7 +253,7 @@ statements_for(RecName) ->
                    false ->
                        []
                end,
-    Customs = [ Q || {_Name, _SQL} = Q <- RawStatements ],
+    Customs = [ Q || {Name, _SQL} = Q <- RawStatements, is_atom(Name) ],
     Prefix = join_atoms([RecName, '_']),
     [ {join_atoms([Prefix, Key]), as_bin(Query)}
       || {Key, Query} <- proplist_merge(Customs, Defaults) ].
@@ -263,8 +264,8 @@ proplist_merge(L1, L2) ->
     lists:keymerge(1, SL1, SL2).
 
 default_queries(RecName) ->
-    [  {fetch_by_id,   gen_fetch_by(RecName, id)}
-     , {fetch_by_name, gen_fetch_by(RecName, name)}
+    [  {fetch_by_id,   gen_fetch(RecName, id)}
+     , {fetch_by_name, gen_fetch(RecName, name)}
      , {delete_by_id,  gen_delete(RecName, id)}
      , {insert,        gen_insert(RecName)}
      , {fetch_all,     gen_fetch_all(RecName, name)}
@@ -331,13 +332,30 @@ gen_fetch_all(RecName, OrderBy) ->
     ["SELECT ", FieldsSQL, " FROM ", Table,
      " ORDER BY ", OrderByStr].
 
-gen_fetch_by(RecName, By) ->
+gen_fetch(RecName, By) when is_atom(By) ->
     AllFields = map_to_str(all_fields(RecName)),
     FieldsSQL = string:join(AllFields, ", "),
     ByStr = to_str(By),
     Table = table_name(RecName),
     ["SELECT ", FieldsSQL, " FROM ", Table,
-     " WHERE ", ByStr, " = $1"].
+     " WHERE ", ByStr, " = $1"];
+gen_fetch(RecName, ByList) when is_list(ByList) ->
+    AllFields = map_to_str(all_fields(RecName)),
+    FieldsSQL = string:join(AllFields, ", "),
+    WhereItems = zip_params(ByList, " = "),
+    WhereClause = string:join(WhereItems, " AND "),
+    Table = table_name(RecName),
+    ["SELECT ", FieldsSQL, " FROM ", Table,
+     " WHERE ", WhereClause].
+
+zip_params(Prefixes, Sep) ->
+    Params = str_seq("$", 1, length(Prefixes)),
+    [ to_str(Prefix) ++ Sep ++ Param
+      || {Prefix, Param} <- lists:zip(Prefixes, Params) ].
+
+str_seq(Prefix, Start, End) ->
+    [ Prefix ++ erlang:integer_to_list(I)
+      || I <- lists:seq(Start, End) ].
 
 map_to_str(L) ->
     [ to_str(Elt) || Elt <- L ].

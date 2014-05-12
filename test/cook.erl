@@ -41,7 +41,9 @@
      email].
 
 '#statements'() ->
-    [default].
+    [default,
+     {fetch_by_name_kitchen_id,
+      sqerl_rec:gen_fetch(cook, [name, kitchen_id])}].
 
 '#table_name'() ->
     "cookers".
