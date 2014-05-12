@@ -26,7 +26,6 @@
          checkin/1,
          with_db/1,
          select/2,
-         select/3,
          select/4,
          statement/2,
          statement/3,
