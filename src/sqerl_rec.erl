@@ -66,7 +66,9 @@
          statements/1,
          statements_for/1,
          gen_fetch/2,
-         gen_delete/2
+         gen_delete/2,
+         gen_fetch_page/2,
+         gen_fetch_all/2
         ]).
 
 -ifdef(TEST).
@@ -106,8 +108,12 @@
 -callback '#update_fields'() ->
     [atom()].
 
+%% Like an iolist but only atoms
+-type atom_list() :: atom() | [atom() | atom_list()].
+-export_type([atom_list/0]).
+
 -callback '#statements'() ->
-    [default | {atom(), iolist()}].
+    [default | {atom_list(), iolist()}].
 
 %% @doc Fetch using prepared query `Query' returning a list of records
 %% `[#RecName{}]'. The `Vals' list is the list of parameters for the
@@ -232,13 +238,16 @@ bin_to_atom(B) ->
 
 %% @doc Given a list of module (and record) names implementing the
 %% `sqerl_rec' behaviour, return a proplist of prepared queries in the
-%% form of `[{QueryName, SQLBinary}]'. If the atom `'default'' is
-%% present in the list, then a default set of queries will be
-%% generated. These include: `fetch_by_id', `fetch_by_name',
-%% `delete_by_id', `insert', `fetch_all', `fetch_page', and
-%% `update'. The returned query names will have `Recname_'
-%% prepended. Custom queries override default queries of the same
-%% name.
+%% form of `[{QueryName, SQLBinary}]'.
+%%
+%% If the atom `default' is present in the list, then a default set of
+%% queries will be generated using the first field returned by
+%% ``RecName:'#info-'/1'' as a unique column for the WHERE clauses of
+%% UPDATE, DELETE, and SELECT of single rows. The default queries are:
+%% `fetch_by_FF', `delete_by_FF', `insert', and `update', where `FF'
+%% is the name of the First Field. The returned query names will have
+%% `RecName_' prepended. Custom queries override default queries of
+%% the same name.
 -spec statements([atom()]) -> [{atom(), binary()}].
 statements(RecList) ->
     lists:flatten([ statements_for(RecName) || RecName <- RecList ]).
@@ -253,8 +262,8 @@ statements_for(RecName) ->
                    false ->
                        []
                end,
-    Customs = [ Q || {Name, _SQL} = Q <- RawStatements, is_atom(Name) ],
-    Prefix = join_atoms([RecName, '_']),
+    Customs = [ Q || {_Name, _SQL} = Q <- RawStatements ],
+    Prefix = [RecName, '_'],
     [ {join_atoms([Prefix, Key]), as_bin(Query)}
       || {Key, Query} <- proplist_merge(Customs, Defaults) ].
 
@@ -264,17 +273,17 @@ proplist_merge(L1, L2) ->
     lists:keymerge(1, SL1, SL2).
 
 default_queries(RecName) ->
-    [  {fetch_by_id,   gen_fetch(RecName, id)}
-     , {fetch_by_name, gen_fetch(RecName, name)}
-     , {delete_by_id,  gen_delete(RecName, id)}
-     , {insert,        gen_insert(RecName)}
-     , {fetch_all,     gen_fetch_all(RecName, name)}
-     , {fetch_page,    gen_fetch_page(RecName, name)}
-     , {update,        gen_update(RecName, id)}
+    FirstField = first_field(RecName),
+    [
+       {insert,                     gen_insert(RecName)}
+     , {update,                     gen_update(RecName, FirstField)}
+     , {['delete_by_', FirstField], gen_delete(RecName, FirstField)}
+     , {['fetch_by_', FirstField],  gen_fetch(RecName, FirstField)}
+     , {['fetch_by_', FirstField],  gen_fetch(RecName, FirstField)}
     ].
 
-join_atoms(Atoms) ->
-    Bins = [ erlang:atom_to_binary(A, utf8) || A <- Atoms ],
+join_atoms(Atoms) when is_list(Atoms) ->
+    Bins = [ erlang:atom_to_binary(A, utf8) || A <- lists:flatten(Atoms) ],
     erlang:binary_to_atom(iolist_to_binary(Bins), utf8).
 
 as_bin(B) when is_binary(B) ->
@@ -289,11 +298,31 @@ gen_params(N) ->
     Params = [ "$" ++ erlang:integer_to_list(I) || I <- lists:seq(1, N) ],
     string:join(Params, ", ").
 
+%% @doc Return a SQL DELETE query appropriate for module `RecName'
+%% implementing the `sqerl_rec' behaviour. Example:
+%%
+%% ```
+%% SQL = gen_delete(user, id),
+%% SQL = ["DELETE FROM ","cookers"," WHERE ","id"," = $1"]
+%% '''
+-spec gen_delete(atom(), atom()) -> [string()].
 gen_delete(RecName, By) ->
     ByStr = to_str(By),
     Table = table_name(RecName),
     ["DELETE FROM ", Table, " WHERE ", ByStr, " = $1"].
 
+%% @doc Generate an UPDATE query. Uses ``RecName:'#update_fields'/0''
+%% to determine the fields to include for SET.
+%%
+%% Example:
+%% ```
+%% SQL = sqerl_rec:gen_update(cook, id),
+%% SQL = ["UPDATE ","cookers"," SET ",
+%%        "name = $1, auth_token = $2, ssh_pub_key = $3, "
+%%        "first_name = $4, last_name = $5, email = $6",
+%%        " WHERE ","id"," = ","$7"]
+%% '''
+-spec gen_update(atom(), atom()) -> [string()].
 gen_update(RecName, By) ->
     UpdateFields = RecName:'#update_fields'(),
     ByStr = to_str(By),
@@ -306,6 +335,19 @@ gen_update(RecName, By) ->
     ["UPDATE ", Table, " SET ", KeyVals,
      " WHERE ", ByStr, " = ", LastParam].
 
+%% @doc Generate an INSERT query for sqerl_rec behaviour
+%% `RecName'. Uses ``RecName:'#insert_fields'/0'' to determine the
+%% fields to insert. Generates an INSERT ... RETURNING query that
+%% returns a complete record.
+%%
+%% Example:
+%% ```
+%% SQL = sqerl_rec:gen_insert(kitchen),
+%% SQL = ["INSERT INTO ", "kitchens",
+%%        "(", "name", ") VALUES (", "$1",
+%%        ") RETURNING ", "id, name"]
+%% '''
+-spec gen_insert(atom()) -> [string()].
 gen_insert(RecName) ->
     InsertFields = map_to_str(RecName:'#insert_fields'()),
     InsertFieldsSQL = string:join(InsertFields, ", "),
@@ -315,6 +357,16 @@ gen_insert(RecName) ->
     ["INSERT INTO ", Table, "(", InsertFieldsSQL,
      ") VALUES (", Params, ") RETURNING ", AllFieldsSQL].
 
+%% @doc Generate a paginated fetch query.
+%%
+%% Example:
+%% ```
+%% SQL = sqerl_rec:gen_fetch_page(kitchen, name).
+%% SQL = ["SELECT ", "id, name", " FROM ", "kitchens",
+%%        " WHERE ","name",
+%%        " > $1 ORDER BY ","name"," LIMIT $2"]
+%% '''
+-spec gen_fetch_page(atom(), atom()) -> [string()].
 gen_fetch_page(RecName, OrderBy) ->
     AllFields = map_to_str(all_fields(RecName)),
     FieldsSQL = string:join(AllFields, ", "),
@@ -324,6 +376,15 @@ gen_fetch_page(RecName, OrderBy) ->
      " WHERE ", OrderByStr, " > $1 ORDER BY ", OrderByStr,
      " LIMIT $2"].
 
+%% @doc Generate a query to return all rows
+%%
+%% Example:
+%% ```
+%% SQL = sqerl_rec:gen_fetch_all(kitchen, name),
+%% SQL = ["SELECT ", "id, name", " FROM ", "kitchens",
+%%        " ORDER BY ", "name"]
+%% '''
+-spec gen_fetch_all(atom(), atom()) -> [string()].
 gen_fetch_all(RecName, OrderBy) ->
     AllFields = map_to_str(all_fields(RecName)),
     FieldsSQL = string:join(AllFields, ", "),
@@ -332,6 +393,22 @@ gen_fetch_all(RecName, OrderBy) ->
     ["SELECT ", FieldsSQL, " FROM ", Table,
      " ORDER BY ", OrderByStr].
 
+%% @doc Generate a SELECT query for `RecName' rows.
+%%
+%% Example:
+%% ```
+%% SQL1 = sqerl_rec:gen_fetch(kitchen, name).
+%% SQL1 = ["SELECT ", "id, name", " FROM ", "kitchens",
+%%         " WHERE ", "name", " = $1"]
+%%
+%% SQL2 = sqerl_rec:gen_fetch(cook, [kitchen_id, name]),
+%% SQL2 = ["SELECT ",
+%%         "id, kitchen_id, name, auth_token, auth_token_bday, "
+%%         "ssh_pub_key, first_name, last_name, email",
+%%         " FROM ", "cookers", " WHERE ",
+%%         "kitchen_id = $1 AND name = $2"]
+%% '''
+-spec gen_fetch(atom(), atom() | [atom()]) -> [string()].
 gen_fetch(RecName, By) when is_atom(By) ->
     AllFields = map_to_str(all_fields(RecName)),
     FieldsSQL = string:join(AllFields, ", "),
@@ -368,6 +445,9 @@ to_str(A) when is_atom(A) ->
     erlang:atom_to_list(A);
 to_str(I) when is_integer(I) ->
     erlang:integer_to_list(I).
+
+first_field(RecName) ->
+    hd(all_fields(RecName)).
 
 all_fields(RecName) ->
     RecName:'#info-'(RecName).
