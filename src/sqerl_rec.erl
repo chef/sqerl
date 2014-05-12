@@ -62,6 +62,7 @@
          first_page/0,
          insert/1,
          qfetch/3,
+         cquery/3,
          update/1,
          statements/1,
          statements_for/1,
@@ -118,15 +119,41 @@
 %% @doc Fetch using prepared query `Query' returning a list of records
 %% `[#RecName{}]'. The `Vals' list is the list of parameters for the
 %% prepared query. If the prepared query does not take parameters, use
-%% `[]'.
--spec qfetch(atom(), atom(), [any()]) -> [db_rec()] | {error, _}.
+%% `[]'. Note that this can be used for INSERT and UPDATE queries if
+%% they use an appropriate RETURNING clause.
+-spec qfetch(atom(), atom_list(), [any()]) -> [db_rec()] | {error, _}.
 qfetch(RecName, Query, Vals) ->
     RealQ = join_atoms([RecName, '_', Query]),
     case sqerl:select(RealQ, Vals) of
         {ok, none} ->
             [];
+        {ok, N} when is_integer(N) ->
+            Msg = "query returned count only; expected rows",
+            {error,
+             {sqerl_rec, qfetch, Msg, [RecName, Query, Vals]}};
         {ok, Rows} ->
             rows_to_recs(Rows, RecName);
+        {ok, N, Rows} when is_integer(N) ->
+            rows_to_recs(Rows, RecName);
+        Error ->
+            ensure_error(Error)
+    end.
+
+%% @doc Execute query `Query' that returns a row count. If the query
+%% returns results, e.g. an UPDATE ... RETURNING query, the result is
+%% ignored and only the count is returned. See also {@link qfetch/3}.
+-spec cquery(atom(), atom_list(), [any()]) -> {ok, integer()} | {error, _}.
+cquery(RecName, Query, Vals) ->
+    RealQ = join_atoms([RecName, '_', Query]),
+    case sqerl:select(RealQ, Vals) of
+        {ok, N} when is_integer(N) ->
+            {ok, N};
+        {ok, N, _Rows} when is_integer(N) ->
+            {ok, N};
+        {ok, Rows} when is_list(Rows) ->
+            Msg = "query returned rows and no count; expected count",
+            {error,
+             {sqerl_rec, cquery, Msg, [RecName, Query, Vals]}};
         Error ->
             ensure_error(Error)
     end.
@@ -173,49 +200,35 @@ first_page() ->
 insert(Rec) ->
     RecName = rec_name(Rec),
     InsertFields = RecName:'#insert_fields'(),
-    Query = join_atoms([RecName, '_', insert]),
     Values = rec_to_vlist(Rec, InsertFields),
-    case sqerl:select(Query, Values) of
-        {ok, 1, Rows} ->
-            rows_to_recs(Rows, RecName);
-        Error ->
-            ensure_error(Error)
-    end.
+    qfetch(RecName, insert, Values).
 
 %% @doc Update record `Rec'. Uses the prepared query with name
 %% `RecName_update'. Assumes an `id' field and corresponding column
 %% which is used to find the row to update. The fields from `Rec'
 %% passed as parameters to the query are determined by
-%% `RecName:'#update_fields/0'.
--spec update(db_rec()) -> ok | {error, _}.
+%% `RecName:'#update_fields/0'. This function assumes the UPDATE query
+%% uses a RETURNING clause so that it can return a list of updated
+%% records (similar to {@link insert/1}. This allows calling code to
+%% receive db generated values such as timestamps and sequence ids
+%% without making an additional round trip.
+-spec update(db_rec()) -> [db_rec()] | {error, _}.
 update(Rec) ->
     RecName = rec_name(Rec),
     UpdateFields = RecName:'#update_fields'(),
-    Query = join_atoms([RecName, '_', update]),
     Values = rec_to_vlist(Rec, UpdateFields),
     Id = RecName:'#get-'(id, Rec),
-    case sqerl:select(Query, Values ++ [Id]) of
-        {ok, 1} ->
-            ok;
-        Error ->
-            ensure_error(Error)
-    end.
+    qfetch(RecName, update, Values ++ [Id]).
 
 %% @doc Delete the rows where the column identified by `By' matches
 %% the value as found in `Rec'. Typically, one would use `id' to
 %% delete a single row. The prepared query with name
 %% `RecName_delete_by_By' will be used.
--spec delete(db_rec(), atom()) -> ok | {error, _}.
+-spec delete(db_rec(), atom()) -> {ok, integer()} | {error, _}.
 delete(Rec, By) ->
     RecName = rec_name(Rec),
-    Query = join_atoms([RecName, '_', delete_by, '_', By]),
     Id = RecName:'#get-'(By, Rec),
-    case sqerl:select(Query, [Id]) of
-        {ok, _} ->
-            ok;
-        Error ->
-            ensure_error(Error)
-    end.
+    cquery(RecName, ['delete_by_', By], [Id]).
 
 rec_to_vlist(Rec, Fields) ->
     RecName = rec_name(Rec),
@@ -332,8 +345,10 @@ gen_update(RecName, By) ->
     AllFields = map_to_str(UpdateFields),
     IdxFields = lists:zip(map_to_str(lists:seq(1, UpdateCount)), AllFields),
     KeyVals = string:join([ Key ++ " = $" ++ I || {I, Key} <- IdxFields ], ", "),
+    AllFieldsSQL = string:join(map_to_str(all_fields(RecName)), ", "),
     ["UPDATE ", Table, " SET ", KeyVals,
-     " WHERE ", ByStr, " = ", LastParam].
+     " WHERE ", ByStr, " = ", LastParam,
+    " RETURNING ", AllFieldsSQL].
 
 %% @doc Generate an INSERT query for sqerl_rec behaviour
 %% `RecName'. Uses ``RecName:'#insert_fields'/0'' to determine the

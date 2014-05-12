@@ -79,7 +79,7 @@ kitchen_test_() ->
                ?assertEqual(K1, FK1),
 
                K2 = kitchen:'#set-'([{name, <<"tennis">>}], K1),
-               ?assertEqual(ok, sqerl_rec:update(K2)),
+               ?assertEqual([K2], sqerl_rec:update(K2)),
                ?assertEqual(K2,
                             hd(sqerl_rec:fetch(kitchen, name, <<"tennis">>)))
        end},
@@ -90,7 +90,7 @@ kitchen_test_() ->
                Kitchens = sqerl_rec:fetch_all(kitchen),
                ?assertEqual(2, length(Kitchens)),
                Res = [ sqerl_rec:delete(K, id) || K <- Kitchens ],
-               ?assertEqual([ok, ok], Res),
+               ?assertEqual([{ok, 1}, {ok, 1}], Res),
                ?assertEqual([], sqerl_rec:fetch_all(kitchen))
        end},
       
@@ -225,7 +225,11 @@ gen_update_test() ->
               " SET ",
               "name = $1, auth_token = $2, ssh_pub_key = $3, "
               "first_name = $4, last_name = $5, email = $6",
-              " WHERE ", "id", " = ", "$7"],
+              " WHERE ", "id", " = ", "$7",
+              " RETURNING ",
+              "id, kitchen_id, name, auth_token, auth_token_bday, "
+              "ssh_pub_key, "
+              "first_name, last_name, email"],
     ?assertEqual(Expect, sqerl_rec:gen_update(cook, id)).
 
 gen_insert_test() ->
