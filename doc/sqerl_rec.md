@@ -64,6 +64,18 @@ the mapping.
 
 
 
+### <a name="type-atom_list">atom_list()</a> ###
+
+
+
+<pre><code>
+atom_list() = atom() | [atom() | <a href="#type-atom_list">atom_list()</a>]
+</code></pre>
+
+
+
+
+
 ### <a name="type-db_rec">db_rec()</a> ###
 
 
@@ -85,7 +97,8 @@ column name and <code>Val</code> is the value of the column to match for in a
 WHERE clause.</td></tr><tr><td valign="top"><a href="#fetch_all-1">fetch_all/1</a></td><td>Return all rows from the table associated with record module
 <code>RecName</code>.</td></tr><tr><td valign="top"><a href="#fetch_page-3">fetch_page/3</a></td><td>Fetch rows from the table associated with record module
 <code>RecName</code> in a paginated fashion.</td></tr><tr><td valign="top"><a href="#first_page-0">first_page/0</a></td><td>Return an ascii value, as a string, that sorts less or equal
-to any valid name.</td></tr><tr><td valign="top"><a href="#insert-1">insert/1</a></td><td>Insert record <code>Rec</code> using prepared query <code>RecName_insert</code>.</td></tr><tr><td valign="top"><a href="#qfetch-3">qfetch/3</a></td><td>Fetch using prepared query <code>Query</code> returning a list of records
+to any valid name.</td></tr><tr><td valign="top"><a href="#gen_delete-2">gen_delete/2</a></td><td>Return a SQL DELETE query appropriate for module <code>RecName</code>
+implementing the <code>sqerl_rec</code> behaviour.</td></tr><tr><td valign="top"><a href="#gen_fetch-2">gen_fetch/2</a></td><td>Generate a SELECT query for <code>RecName</code> rows.</td></tr><tr><td valign="top"><a href="#gen_fetch_all-2">gen_fetch_all/2</a></td><td>Generate a query to return all rows.</td></tr><tr><td valign="top"><a href="#gen_fetch_page-2">gen_fetch_page/2</a></td><td>Generate a paginated fetch query.</td></tr><tr><td valign="top"><a href="#insert-1">insert/1</a></td><td>Insert record <code>Rec</code> using prepared query <code>RecName_insert</code>.</td></tr><tr><td valign="top"><a href="#qfetch-3">qfetch/3</a></td><td>Fetch using prepared query <code>Query</code> returning a list of records
 <code>[#RecName{}]</code>.</td></tr><tr><td valign="top"><a href="#statements-1">statements/1</a></td><td>Given a list of module (and record) names implementing the
 <code>sqerl_rec</code> behaviour, return a proplist of prepared queries in the
 form of <code>[{QueryName, SQLBinary}]</code>.</td></tr><tr><td valign="top"><a href="#statements_for-1">statements_for/1</a></td><td></td></tr><tr><td valign="top"><a href="#update-1">update/1</a></td><td>Update record <code>Rec</code>.</td></tr></table>
@@ -170,6 +183,108 @@ as the value for `StartName` to fetch the "next" page.
 
 Return an ascii value, as a string, that sorts less or equal
 to any valid name.
+<a name="gen_delete-2"></a>
+
+### gen_delete/2 ###
+
+
+<pre><code>
+gen_delete(RecName::atom(), By::atom()) -&gt; [string()]
+</code></pre>
+
+<br></br>
+
+
+
+Return a SQL DELETE query appropriate for module `RecName`
+implementing the `sqerl_rec` behaviour. Example:
+
+
+
+```
+  SQL = gen_delete(user, id),
+  SQL = ["DELETE FROM ","cookers"," WHERE ","id"," = $1"]
+```
+
+<a name="gen_fetch-2"></a>
+
+### gen_fetch/2 ###
+
+
+<pre><code>
+gen_fetch(RecName::atom(), By::atom() | [atom()]) -&gt; [string()]
+</code></pre>
+
+<br></br>
+
+
+
+Generate a SELECT query for `RecName` rows.
+
+
+Example:
+
+```
+  SQL1 = sqerl_rec:gen_fetch(kitchen, name).
+  SQL1 = ["SELECT ", "id, name", " FROM ", "kitchens",
+          " WHERE ", "name", " = $1"]
+  SQL2 = sqerl_rec:gen_fetch(cook, [kitchen_id, name]),
+  SQL2 = ["SELECT ",
+          "id, kitchen_id, name, auth_token, auth_token_bday, "
+          "ssh_pub_key, first_name, last_name, email",
+          " FROM ", "cookers", " WHERE ",
+          "kitchen_id = $1 AND name = $2"]
+```
+
+<a name="gen_fetch_all-2"></a>
+
+### gen_fetch_all/2 ###
+
+
+<pre><code>
+gen_fetch_all(RecName::atom(), OrderBy::atom()) -&gt; [string()]
+</code></pre>
+
+<br></br>
+
+
+
+Generate a query to return all rows
+
+
+Example:
+
+```
+  SQL = sqerl_rec:gen_fetch_all(kitchen, name),
+  SQL = ["SELECT ", "id, name", " FROM ", "kitchens",
+         " ORDER BY ", "name"]
+```
+
+<a name="gen_fetch_page-2"></a>
+
+### gen_fetch_page/2 ###
+
+
+<pre><code>
+gen_fetch_page(RecName::atom(), OrderBy::atom()) -&gt; [string()]
+</code></pre>
+
+<br></br>
+
+
+
+Generate a paginated fetch query.
+
+
+Example:
+
+```
+  SQL = sqerl_rec:gen_fetch_page(kitchen, name).
+  SQL = ["SELECT ", "id, name", " FROM ", "kitchens",
+         " WHERE ","name",
+         " > $1 ORDER BY ","name"," LIMIT $2"]
+```
+
 <a name="insert-1"></a>
 
 ### insert/1 ###
@@ -215,15 +330,20 @@ statements(RecList::[atom()]) -&gt; [{atom(), binary()}]
 <br></br>
 
 
+
 Given a list of module (and record) names implementing the
 `sqerl_rec` behaviour, return a proplist of prepared queries in the
-form of `[{QueryName, SQLBinary}]`. If the atom `default'' is
-present in the list, then a default set of queries will be
-generated. These include: `fetch_by_id`, `fetch_by_name`,
-`delete_by_id`, `insert`, `fetch_all`, `fetch_page`, and
-`update`. The returned query names will have `Recname_`
-prepended. Custom queries override default queries of the same
-name.
+form of `[{QueryName, SQLBinary}]`.
+
+
+If the atom `default` is present in the list, then a default set of
+queries will be generated using the first field returned by
+`RecName:'#info-'/1` as a unique column for the WHERE clauses of
+UPDATE, DELETE, and SELECT of single rows. The default queries are:
+`fetch_by_FF`, `delete_by_FF`, `insert`, and `update`, where `FF`
+is the name of the First Field. The returned query names will have
+`RecName_` prepended. Custom queries override default queries of
+the same name.
 <a name="statements_for-1"></a>
 
 ### statements_for/1 ###
