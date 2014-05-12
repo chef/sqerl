@@ -405,7 +405,14 @@ parse_error(pgsql, {error,               % error from sqerl
                     {error,              % error record marker from epgsql
                      _Severity,          % Severity
                      Code, Message, _Extra}}) ->
-    do_parse_error({Code, Message}, ?PGSQL_ERROR_CODES).
+    do_parse_error({Code, Message}, ?PGSQL_ERROR_CODES);
+parse_error(_, Error) ->
+    case Error of
+        {error, _} ->
+            Error;
+        _ ->
+            {error, Error}
+    end.
 
 do_parse_error({Code, Message}, CodeList) ->
     case lists:keyfind(Code, 1, CodeList) of

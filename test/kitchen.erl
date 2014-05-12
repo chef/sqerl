@@ -26,4 +26,7 @@
      {test_query,
       ["SELECT name FROM ",
        "kitchens ",
-       "ORDER BY name"]}].
+       "ORDER BY name"]},
+     {bad_query,
+      ["SELECT name FROM not_a_table"]}
+    ].

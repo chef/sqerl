@@ -1,8 +1,57 @@
-%% TODO:
-%% - common handler for sqerl results
-%% - intermediate form to chain queries and include in a transaction.
-%% specs, docs, tests
-
+%% -*- erlang-indent-level: 4;indent-tabs-mode: nil; fill-column: 92 -*-
+%% ex: ts=4 sw=4 et
+%%
+%% Copyright 2014 CHEF Software, Inc. All Rights Reserved.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%% @author Seth Falcon <seth@getchef.com>
+%% @copyright 2014 CHEF Software, Inc. All Rights Reserved.
+%% @doc Record to DB mapping module and behaviour.
+%%
+%% This module helps you map records to and from the DB using prepared
+%% queries. By creating a module, named the same as your record, and
+%% implementing the `sqerl_rec' behaviour, you can take advantage of a
+%% default set of generated prepared queries and helper functions
+%% (defined in this module) that leverage those queries.
+%%
+%% Most of the callbacks can be generated for you if you use the
+%% `exprecs' parse transform. If you use this parse transform, then
+%% you will only need to implement the following three callbacks in
+%% your record module:
+%%
+%% <ul>
+%% <li>``'#insert_fields'/0'' A list of atoms describing the fields (which
+%% should align with column names) used to insert a row into the
+%% db. In many cases this is a proper subset of the record fields to
+%% account for sequence ids and db generated timestamps.</li>
+%% <li>``'#update_fields'/0'' A list of atoms giving the fields used for
+%% updating a row.</li>
+%% <li>``'#statements'/0'' A list of `[default | {atom(),
+%% iolist()}]'. If the atom `'default'' is included, then a default
+%% set of queries will be generated. Custom queries provided as
+%% `{Name, SQL}' tuples will override any default queries of the same
+%% name.</li>
+%% </ul>
+%%
+%% If the table name associated with your record name does not follow
+%% the naive pluralization rule implemented by `sqerl_rel', you can
+%% export a ``'#table_name'/0'' function to provide the table name for
+%% the mapping.
+%%
+%% @end
 -module(sqerl_rec).
 
 -export([
@@ -12,6 +61,7 @@
          fetch_page/3,
          first_page/0,
          insert/1,
+         qfetch/3,
          update/1,
          statements/1,
          statements_for/1
@@ -57,49 +107,61 @@
 -callback '#statements'() ->
     [default | {atom(), iolist()}].
 
+%% @doc Fetch using prepared query `Query' returning a list of records
+%% `[#RecName{}]'. The `Vals' list is the list of parameters for the
+%% prepared query. If the prepared query does not take parameters, use
+%% `[]'.
+-spec qfetch(atom(), atom(), [any()]) -> [db_rec()] | {error, _}.
+qfetch(RecName, Query, Vals) ->
+    case sqerl:select(Query, Vals) of
+        {ok, none} ->
+            [];
+        {ok, Rows} ->
+            rows_to_recs(Rows, RecName);
+        Error ->
+            ensure_error(Error)
+    end.
+
+%% @doc Return a list of `RecName' records using single parameter
+%% prepared query `RecName_fetch_by_By' where `By' is a field and
+%% column name and `Val' is the value of the column to match for in a
+%% WHERE clause. A (possibly empty) list of record results is returned
+%% even though a common use is to fetch a single row.
 -spec fetch(atom(), atom(), any()) -> [db_rec()] | {error, _}.
 fetch(RecName, By, Val) ->
     Query = join_atoms([RecName, '_', fetch_by, '_', By]),
-    case sqerl:select(Query, [Val]) of
-        {ok, none} ->
-            [];
-        %% match on single row result
-        {ok, Rows} ->
-            rows_to_recs(Rows, RecName);
-        {error, _Why} = E ->
-            E;
-        Why ->
-            {error, Why}
-    end.
+    qfetch(RecName, Query, [Val]).
 
+%% @doc Return all rows from the table associated with record module
+%% `RecName'. Results will, by default, be ordered by the name field
+%% (which is assumed to exist).
 -spec fetch_all(atom()) -> [db_rec()] | {error, _}.
 fetch_all(RecName) ->
     Query = join_atoms([RecName, '_', fetch_all]),
-    case sqerl:select(Query, []) of
-        {ok, none} ->
-            [];
-        {ok, Rows} ->
-            rows_to_recs(Rows, RecName);
-        E ->
-            E
-    end.
+    qfetch(RecName, Query, []).
 
+%% @doc Fetch rows from the table associated with record module
+%% `RecName' in a paginated fashion. The default generated query, like
+%% that for `fetch_all', assumes a `name' field and column and orders
+%% results by this field. The `StartName' argument determines the
+%% start point and `Limit' the number of items to return. To fetch the
+%% "first" page, use {@link first_page/0}. Use the last name received
+%% as the value for `StartName' to fetch the "next" page.
 -spec fetch_page(atom(), string(), integer()) -> [db_rec()] | {error, _}.
 fetch_page(RecName, StartName, Limit) ->
     Query = join_atoms([RecName, '_', fetch_page]),
-    case sqerl:select(Query, [StartName, Limit]) of
-        {ok, none} ->
-            [];
-        {ok, Rows} ->
-            rows_to_recs(Rows, RecName);
-        E ->
-            E
-    end.
+    qfetch(RecName, Query, [StartName, Limit]).
 
+%% @doc Return an ascii value, as a string, that sorts less or equal
+%% to any valid name.
 first_page() ->
-    %% ascii value that sorts less or equal to any valid name.
     "\001".
 
+%% @doc Insert record `Rec' using prepared query `RecName_insert'. The
+%% fields of `Rec' passed as parameters to the query are determined by
+%% `RecName:'#insert_fields/0'. This function assumes the query uses
+%% "INSERT ... RETURNING" and returns a record with db assigned fields
+%% (such as sequence ids and timestamps filled out).
 -spec insert(db_rec()) -> [db_rec()] | {error, _}.
 insert(Rec) ->
     RecName = rec_name(Rec),
@@ -109,10 +171,15 @@ insert(Rec) ->
     case sqerl:select(Query, Values) of
         {ok, 1, Rows} ->
             rows_to_recs(Rows, RecName);
-        E ->
-            E
+        Error ->
+            ensure_error(Error)
     end.
 
+%% @doc Update record `Rec'. Uses the prepared query with name
+%% `RecName_update'. Assumes an `id' field and corresponding column
+%% which is used to find the row to update. The fields from `Rec'
+%% passed as parameters to the query are determined by
+%% `RecName:'#update_fields/0'.
 -spec update(db_rec()) -> ok | {error, _}.
 update(Rec) ->
     RecName = rec_name(Rec),
@@ -123,10 +190,14 @@ update(Rec) ->
     case sqerl:select(Query, Values ++ [Id]) of
         {ok, 1} ->
             ok;
-        E ->
-            E
+        Error ->
+            ensure_error(Error)
     end.
 
+%% @doc Delete the rows where the column identified by `By' matches
+%% the value as found in `Rec'. Typically, one would use `id' to
+%% delete a single row. The prepared query with name
+%% `RecName_delete_by_By' will be used.
 -spec delete(db_rec(), atom()) -> ok | {error, _}.
 delete(Rec, By) ->
     RecName = rec_name(Rec),
@@ -135,8 +206,8 @@ delete(Rec, By) ->
     case sqerl:select(Query, [Id]) of
         {ok, _} ->
             ok;
-        E ->
-            E
+        Error ->
+            ensure_error(Error)
     end.
 
 rec_to_vlist(Rec, Fields) ->
@@ -158,6 +229,15 @@ atomize_keys(L) ->
 bin_to_atom(B) ->
     erlang:binary_to_atom(B, utf8).
 
+%% @doc Given a list of module (and record) names implementing the
+%% `sqerl_rec' behaviour, return a proplist of prepared queries in the
+%% form of `[{QueryName, SQLBinary}]'. If the atom `'default'' is
+%% present in the list, then a default set of queries will be
+%% generated. These include: `fetch_by_id', `fetch_by_name',
+%% `delete_by_id', `insert', `fetch_all', `fetch_page', and
+%% `update'. The returned query names will have `Recname_'
+%% prepended. Custom queries override default queries of the same
+%% name.
 -spec statements([atom()]) -> [{atom(), binary()}].
 statements(RecList) ->
     lists:flatten([ statements_for(RecName) || RecName <- RecList ]).
@@ -200,7 +280,6 @@ as_bin(B) when is_binary(B) ->
     B;
 as_bin(S) ->
     erlang:iolist_to_binary(S).
-
 
 rec_name(Rec) ->
     erlang:element(1, Rec).
@@ -313,3 +392,8 @@ do_pluralize("y" ++ Rest) ->
     lists:reverse("sei" ++ Rest);
 do_pluralize(S) ->
     lists:reverse("s" ++ S).
+
+ensure_error({error, _} = E) ->
+    E;
+ensure_error(E) ->
+    {error, E}.

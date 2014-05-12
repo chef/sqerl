@@ -123,9 +123,9 @@ execute_prepared({#prepared_statement{} = PrepStmt, Statements}, Parameters,
             {error, X}
         end,
     {Result, State#state{statements = Statements}};
-execute_prepared(Error, _Parameters, _State) ->
+execute_prepared(Error, _Parameters, State) ->
     %% There was an error preparing the query or the named query was not found.
-    Error.
+    {Error, State}.
 
 
 %% @doc Prepare a new statement.
