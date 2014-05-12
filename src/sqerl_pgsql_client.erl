@@ -272,8 +272,8 @@ pqc_fetch(Name, Cache, Con, PrepareFun) ->
       PrepareFun :: fun((Con, Name, binary()) -> {ok, PrepQ} | {error, term()}),
       Result :: {PrepQ, dict()} | {error, term()},
       PrepQ :: term().
-pqc_fetch_internal(_Name, error, _Cache, _Con, _PrepareFun) ->
-    {error, query_not_found};
+pqc_fetch_internal(Name, error, _Cache, _Con, _PrepareFun) ->
+    {error, {query_not_found, Name}};
 pqc_fetch_internal(Name, {ok, SQL}, Cache, Con, PrepareFun) when is_binary(SQL) ->
     %% prepare it, store it, return it
     case PrepareFun(Con, Name, SQL) of

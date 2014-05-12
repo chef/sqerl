@@ -47,7 +47,7 @@ prepared_query_cache_test_() ->
      {"pqc_fetch query_not_found",
       fun() ->
               Ans = sqerl_pgsql_client:pqc_fetch(no_query, dict:new(), self()),
-              ?assertEqual({error, query_not_found}, Ans)
+              ?assertEqual({error, {query_not_found, no_query}}, Ans)
       end},
 
      {"pqc_remove",
@@ -58,7 +58,7 @@ prepared_query_cache_test_() ->
               %% verify removing something not found is ok
               Cache3 = sqerl_pgsql_client:pqc_remove(my_query, Cache2),
               Ans = sqerl_pgsql_client:pqc_fetch(my_query, Cache3, self()),
-              ?assertEqual({error, query_not_found}, Ans)
+              ?assertEqual({error, {query_not_found, my_query}}, Ans)
       end},
 
      {"pqc_fetch",
