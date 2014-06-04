@@ -93,7 +93,99 @@ kitchen_test_() ->
                ?assertEqual([{ok, 1}, {ok, 1}], Res),
                ?assertEqual([], sqerl_rec:fetch_all(kitchen))
        end},
-      
+
+      {"fetch_all, fetch_page",
+       fun() ->
+               %% setup
+               Kitchens = [ begin
+                                B = int_to_0bin(I),
+                                {K, _Name} = make_kitchen(<<"A-", B/binary, "-">>),
+                                K
+                            end
+                            || I <- lists:seq(1, 20) ],
+               [ sqerl_rec:insert(K) || K <- Kitchens ],
+
+               All = sqerl_rec:fetch_all(kitchen),
+               ExpectNames = [ kitchen:'#get-'(name, K) || K <- Kitchens ],
+               FoundNames = [ kitchen:'#get-'(name, K) || K <- All ],
+               ?assertEqual(ExpectNames, FoundNames),
+
+               K_1_10 = sqerl_rec:fetch_page(kitchen, sqerl_rec:first_page(), 10),
+               Next = kitchen:'#get-'(name, lists:last(K_1_10)),
+               K_11_20 = sqerl_rec:fetch_page(kitchen, Next , 10),
+               PageNames = [ kitchen:'#get-'(name, K) || K <- (K_1_10 ++ K_11_20) ],
+               ?assertEqual(ExpectNames, PageNames)
+       end},
+      {"bad query returns error",
+       fun() ->
+               Error = sqerl:select(kitchen_bad_query, []),
+               Msg = <<"relation \"not_a_table\" does not exist">>,
+               ?assertMatch({error, {syntax, {Msg, _}}}, Error)
+       end},
+      {"scalar_fetch",
+       fun() ->
+               Names = sqerl_rec:scalar_fetch(kitchen, fetch_names, []),
+               Len = length(Names),
+               ?assert(Len > 1),
+               Matched = [ B || <<"A-00", _/binary>> = B <- Names ],
+               ?assertEqual(Len, length(Matched))
+       end},
+      {"scalar_fetch bad query",
+       fun() ->
+               ?assertMatch({error, {sqerl_rec, scalar_fetch,
+                                     "query did not return a single column",
+                                     [kitchen, fetch_all, []],
+                                     {bad_row, _}}},
+                            sqerl_rec:scalar_fetch(kitchen, fetch_all, []))
+       end}
+     ]}.
+
+kitchen_app_test_() ->
+    {setup,
+     fun() ->
+             sqerl_test_helper:setup_db_app()
+             %% , application:set_env(sqerl, log_statements, true)
+             , error_logger:tty(false)
+     end,
+     fun(_) ->
+             pooler:rm_pool(sqerl),
+             Apps = [pooler, epgsql, sqerl, epgsql],
+             [ application:stop(A) || A <- Apps ]
+     end,
+     [
+      ?_assertEqual([], sqerl_rec:fetch_all(kitchen)),
+      ?_assertEqual([], sqerl_rec:fetch(kitchen, name, <<"none">>)),
+      ?_assertEqual([], sqerl_rec:fetch_page(kitchen, <<"a">>, 1000)),
+      {"insert",
+       fun() ->
+               {K0, Name} = make_kitchen(<<"pingpong">>),
+               [K1] = sqerl_rec:insert(K0),
+               validate_kitchen(Name, K1)
+       end},
+      {"insert, fetch, update, fetch",
+       fun() ->
+               {K0, Name0} = make_kitchen(<<"pingpong">>),
+               [K1] = sqerl_rec:insert(K0),
+               [FK1] = sqerl_rec:fetch(kitchen, name, Name0),
+               %% can fetch inserted
+               ?assertEqual(K1, FK1),
+
+               K2 = kitchen:'#set-'([{name, <<"tennis">>}], K1),
+               ?assertEqual([K2], sqerl_rec:update(K2)),
+               ?assertEqual(K2,
+                            hd(sqerl_rec:fetch(kitchen, name, <<"tennis">>)))
+       end},
+      {"fetch_all, delete",
+       fun() ->
+               %% TODO: if you provide a bad atom here, you get a
+               %% confusing crash. Try: 'kitchens'
+               Kitchens = sqerl_rec:fetch_all(kitchen),
+               ?assertEqual(2, length(Kitchens)),
+               Res = [ sqerl_rec:delete(K, id) || K <- Kitchens ],
+               ?assertEqual([{ok, 1}, {ok, 1}], Res),
+               ?assertEqual([], sqerl_rec:fetch_all(kitchen))
+       end},
+
       {"fetch_all, fetch_page",
        fun() ->
                %% setup
@@ -167,6 +259,33 @@ cook_test_() ->
        end}
      ]}.
 
+cook_app_test_() ->
+    {setup,
+     fun() ->
+             sqerl_test_helper:setup_db_app()
+             %% , application:set_env(sqerl, log_statements, true)
+             , error_logger:tty(false)
+     end,
+     fun(_) ->
+             pooler:rm_pool(sqerl),
+             Apps = [pooler, epgsql, sqerl, epgsql],
+             [ application:stop(A) || A <- Apps ]
+     end,
+     [
+      {"insert, qfetch by multiple cooks",
+       fun() ->
+               {K0, _KName0} = make_kitchen(<<"basket">>),
+               [K1] = sqerl_rec:insert(K0),
+               KitchenId = kitchen:'#get-'(id, K1),
+               {C0, CName0} = make_cook(<<"grace">>, KitchenId,
+                                          <<"grace">>, <<"hopper">>),
+               [C1] = sqerl_rec:insert(C0),
+               [C2] = sqerl_rec:qfetch(cook, fetch_by_name_kitchen_id,
+                                       [CName0, KitchenId]),
+               ?assertEqual(C1, C2)
+       end}
+     ]}.
+
 int_to_0bin(I) ->
     erlang:iolist_to_binary(io_lib:format("~5.10.0B", [I])).
 
@@ -189,7 +308,7 @@ make_cook(Prefix, KitchenId, First, Last) ->
                                {last_name, Last}
                               ]),
     {C, Name}.
-    
+
 validate_kitchen(Name, K) ->
     ?assert(kitchen:'#is_record-'(kitchen, K)),
     ?assertEqual(Name, kitchen:'#get-'(name, K)),

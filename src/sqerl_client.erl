@@ -179,20 +179,52 @@ exec_driver({Call, QueryOrName, Args}, _From, #state{cb_mod=CBMod, cb_state=CBSt
     ?LOG_RESULT(Result),
     {reply, Result, State#state{cb_state=NewCBState}, Timeout}.
 
--spec read_statements([{atom(), term()}]
-                      | string()
-                      | {atom(), atom(), list()}) -> [{atom(), binary()}].
+
 %% @doc Prepared statements can be provides as a list of `{atom(), binary()}' tuples, as a
 %% path to a file that can be consulted for such tuples, or as `{M, F, A}' such that
 %% `apply(M, F, A)' returns the statements tuples.
-read_statements({Mod, Fun, Args}) ->
-    apply(Mod, Fun, Args);
+%%
+%% This translates the new app way of specifying sqerl modules to the
+%% origin syntax:
+%% From: {sqerl_rec, statements, [[mod1, mod2, mod3, {app, app1}]]}}
+%% To: {sqerl_rec, statements, [[mod1, mod2, mod3, mod4, mod5]]}}
+-spec read_statements([{atom(), term()}]
+                      | string()
+                      | {atom(), atom(), list(list(atom() | {app, atom()}))})
+                     -> [{atom(), binary()}].
+read_statements({Mod, Fun, [Args]}) ->
+    Args2 = expand_apps(Args),
+    apply(Mod, Fun, [Args2]);
 read_statements(L = [{Label, SQL}|_T]) when is_atom(Label) andalso is_binary(SQL) ->
     L;
 read_statements(Path) when is_list(Path) ->
     {ok, Statements} = file:consult(Path),
     Statements.
 
+expand_apps(Args) ->
+    lists:flatten(lists:map(fun(X) -> expand_app(X) end, Args)).
+
+expand_app({app, App}) ->
+    lists:flatten(inspect_app(App));
+expand_app(Mod) ->
+    Mod.
+
+inspect_app(App) ->
+    {ok, Mods} = application:get_key(App, modules),
+    lists:flatten(lists:map(fun(X) -> inspect_mod(X) end, Mods)).
+
+inspect_mod(Mod) ->
+    Attributes = Mod:module_info(attributes),
+    case lists:filter(fun({behavior, Type}) ->
+                              [sqerl_rec] == Type;
+                         (_) ->
+                              false
+                      end, Attributes) of
+        [] ->
+            [];
+        _ ->
+            Mod
+    end.
 
 %% @doc Returns SQL parameter style atom, e.g. qmark, dollarn.
 %% Note on approach: here we rely on sqerl config in
