@@ -37,7 +37,7 @@ statements_test_() ->
               ?assertEqual(KitchenFetchAll,
                            proplists:get_value(kitchen_fetch_all, Statements)),
               ?assertEqual(<<"SELECT name FROM kitchens ORDER BY name">>,
-                           proplists:get_value(kitchen_test_query, Statements))
+                           proplists:get_value(kitchen_fetch_names, Statements))
       end},
 
      {"[eg1]",
@@ -121,6 +121,22 @@ kitchen_test_() ->
                Error = sqerl:select(kitchen_bad_query, []),
                Msg = <<"relation \"not_a_table\" does not exist">>,
                ?assertMatch({error, {syntax, {Msg, _}}}, Error)
+       end},
+      {"scalar_fetch",
+       fun() ->
+               Names = sqerl_rec:scalar_fetch(kitchen, fetch_names, []),
+               Len = length(Names),
+               ?assert(Len > 1),
+               Matched = [ B || <<"A-00", _/binary>> = B <- Names ],
+               ?assertEqual(Len, length(Matched))
+       end},
+      {"scalar_fetch bad query",
+       fun() ->
+               ?assertMatch({error, {sqerl_rec, scalar_fetch,
+                                     "query did not return a single column",
+                                     [kitchen, fetch_all, []],
+                                     {bad_row, _}}},
+                            sqerl_rec:scalar_fetch(kitchen, fetch_all, []))
        end}
      ]}.
 

@@ -64,6 +64,7 @@
          qfetch/3,
          cquery/3,
          update/1,
+         scalar_fetch/3,
          statements/1,
          statements_for/1,
          gen_fetch/2,
@@ -157,6 +158,35 @@ cquery(RecName, Query, Vals) ->
         Error ->
             ensure_error(Error)
     end.
+
+%% @doc Execute a query that returns a list of scalar values. The
+%% query must return a single column in result rows. This does
+%% slightly less processing than using the rows_as_scalars transform
+%% and prepends `RecName' to `Query' to match the sqerl_rec style.
+-spec scalar_fetch(atom(), atom(), [any()]) -> [any()] | {error, _}.
+scalar_fetch(RecName, Query, Params) ->
+    RealQuery = join_atoms([RecName, '_', Query]),
+    case sqerl:select(RealQuery, Params) of
+        {ok, none} ->
+            [];
+        {ok, Results} ->
+            try scalar_results(Results)
+            catch throw:{bad_row, Bad} ->
+                    Msg = "query did not return a single column",
+                    {error,
+                     {sqerl_rec, scalar_fetch, Msg, [RecName, Query, Params],
+                      {bad_row, Bad}}}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+scalar_results(Results) ->
+    lists:map(fun([{_ColName, Value}]) ->
+                      Value;
+                 (Bad) ->
+                      throw({bad_row, Bad})
+              end, Results).
 
 %% @doc Return a list of `RecName' records using single parameter
 %% prepared query `RecName_fetch_by_By' where `By' is a field and

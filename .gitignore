@@ -7,3 +7,4 @@ logfile
 sqerl.plt
 deps.plt
 .concrete/
+/.rebar
