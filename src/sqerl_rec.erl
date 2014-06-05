@@ -131,7 +131,8 @@ qfetch(RecName, Query, Vals) ->
         {ok, N} when is_integer(N) ->
             Msg = "query returned count only; expected rows",
             {error,
-             {sqerl_rec, qfetch, Msg, [RecName, Query, Vals]}};
+             {{ok, N},
+              {sqerl_rec, qfetch, Msg, [RecName, Query, Vals]}}};
         {ok, Rows} ->
             rows_to_recs(Rows, RecName);
         {ok, N, Rows} when is_integer(N) ->
@@ -154,7 +155,8 @@ cquery(RecName, Query, Vals) ->
         {ok, Rows} when is_list(Rows) ->
             Msg = "query returned rows and no count; expected count",
             {error,
-             {sqerl_rec, cquery, Msg, [RecName, Query, Vals]}};
+             {{ok, Rows},
+              {sqerl_rec, cquery, Msg, [RecName, Query, Vals]}}};
         Error ->
             ensure_error(Error)
     end.
@@ -174,8 +176,9 @@ scalar_fetch(RecName, Query, Params) ->
             catch throw:{bad_row, Bad} ->
                     Msg = "query did not return a single column",
                     {error,
-                     {sqerl_rec, scalar_fetch, Msg, [RecName, Query, Params],
-                      {bad_row, Bad}}}
+                     {{bad_row, Bad},
+                      {sqerl_rec, scalar_fetch, Msg,
+                       [RecName, Query, Params]}}}
             end;
         {error, _} = Error ->
             Error
@@ -298,22 +301,27 @@ statements(RecList) ->
 -spec statements_for(atom()) -> [{atom(), binary()}].
 statements_for(RecName) ->
     RawStatements = RecName:'#statements'(),
+    %% We need to normalize the query names (keys) with join_atoms
+    %% *before* merging custom and defaults. Otherwise a duplicate
+    %% could sneak in since the same query can be expressed in more
+    %% than one way (e.g. `foo_bar' and `[foo_, bar]').
+    Prefix = [RecName, '_'],
     %% do we have default?
     Defaults = case lists:member(default, RawStatements) of
                    true ->
-                       default_queries(RecName);
+                       [ {join_atoms([Prefix, Key]), as_bin(SQL)}
+                         || {Key, SQL} <- default_queries(RecName) ];
                    false ->
                        []
                end,
-    Customs = [ Q || {_Name, _SQL} = Q <- RawStatements ],
-    Prefix = [RecName, '_'],
-    [ {join_atoms([Prefix, Key]), as_bin(Query)}
-      || {Key, Query} <- proplist_merge(Customs, Defaults) ].
+    Customs = [ {join_atoms([Prefix, Key]), as_bin(SQL)}
+                || {Key, SQL} <- RawStatements ],
+    proplist_merge(Customs, Defaults).
 
 proplist_merge(L1, L2) ->
-    SL1 = lists:keysort(1, L1),
-    SL2 = lists:keysort(1, L2),
-    lists:keymerge(1, SL1, SL2).
+    SL1 = lists:ukeysort(1, L1),
+    SL2 = lists:ukeysort(1, L2),
+    lists:ukeymerge(1, SL1, SL2).
 
 default_queries(RecName) ->
     FirstField = first_field(RecName),
@@ -321,7 +329,6 @@ default_queries(RecName) ->
        {insert,                     gen_insert(RecName)}
      , {update,                     gen_update(RecName, FirstField)}
      , {['delete_by_', FirstField], gen_delete(RecName, FirstField)}
-     , {['fetch_by_', FirstField],  gen_fetch(RecName, FirstField)}
      , {['fetch_by_', FirstField],  gen_fetch(RecName, FirstField)}
     ].
 

@@ -42,6 +42,13 @@
 
 '#statements'() ->
     [default,
+     {insert2,
+      ["INSERT INTO cookers (kitchen_id, name) "
+       "SELECT k.id, $2 FROM kitchens AS k "
+       "WHERE k.name = $1 RETURNING "
+       "id, kitchen_id, name, auth_token, "
+       "auth_token_bday, ssh_pub_key, "
+       "first_name, last_name, email"]},
      {fetch_by_name_kitchen_id,
       sqerl_rec:gen_fetch(cook, [name, kitchen_id])}].
 

@@ -37,14 +37,34 @@ statements_test_() ->
               ?assertEqual(KitchenFetchAll,
                            proplists:get_value(kitchen_fetch_all, Statements)),
               ?assertEqual(<<"SELECT name FROM kitchens ORDER BY name">>,
-                           proplists:get_value(kitchen_fetch_names, Statements))
+                           proplists:get_value(kitchen_fetch_names, Statements)),
+
+              %% no dups
+              ?assertEqual(length(Statements), length(lists:usort(Statements)))
       end},
 
-     {"[eg1]",
+     {"[eg1] (no defaults)",
       fun() ->
               Statements = sqerl_rec:statements([eg1]),
               Expect = [{eg1_test, <<"SELECT * FROM eg1">>}],
               ?assertEqual(Expect, Statements)
+      end},
+     {"[spoon] overriding defaults",
+      fun() ->
+              Statements = sqerl_rec:statements([spoon]),
+
+              ?assertEqual(<<"SELECT 'testing' FROM spoons">>,
+                           proplists:get_value(spoon_fetch_by_id, Statements)),
+
+              ?assertEqual(<<"DELETE FROM spoons WHERE name = 'testing'">>,
+                           proplists:get_value(spoon_delete_by_id, Statements)),
+
+              ExpectKeys = lists:sort([spoon_delete_by_id,
+                                       spoon_fetch_by_id,
+                                       spoon_insert,
+                                       spoon_update]),
+              GotKeys = lists:sort([ K || {K, _} <- Statements ]),
+              ?assertEqual(ExpectKeys, GotKeys)
       end}
     ].
 
@@ -132,10 +152,11 @@ kitchen_test_() ->
        end},
       {"scalar_fetch bad query",
        fun() ->
-               ?assertMatch({error, {sqerl_rec, scalar_fetch,
-                                     "query did not return a single column",
-                                     [kitchen, fetch_all, []],
-                                     {bad_row, _}}},
+               ?assertMatch({error,
+                             {{bad_row, _},
+                             {sqerl_rec, scalar_fetch,
+                              "query did not return a single column",
+                              [kitchen, fetch_all, []]}}},
                             sqerl_rec:scalar_fetch(kitchen, fetch_all, []))
        end}
      ]}.
@@ -224,10 +245,12 @@ kitchen_app_test_() ->
        end},
       {"scalar_fetch bad query",
        fun() ->
-               ?assertMatch({error, {sqerl_rec, scalar_fetch,
-                                     "query did not return a single column",
-                                     [kitchen, fetch_all, []],
-                                     {bad_row, _}}},
+               ?assertMatch({error,
+                             {{bad_row, _},
+                              {sqerl_rec, scalar_fetch,
+                               "query did not return a single column",
+                               [kitchen, fetch_all, []]}
+                              }},
                             sqerl_rec:scalar_fetch(kitchen, fetch_all, []))
        end}
      ]}.
@@ -256,6 +279,18 @@ cook_test_() ->
                [C2] = sqerl_rec:qfetch(cook, fetch_by_name_kitchen_id,
                                        [CName0, KitchenId]),
                ?assertEqual(C1, C2)
+       end},
+      {"qfetch no result on insert",
+       fun() ->
+               ?assertMatch({error,
+                             {{ok, 0},
+                              {sqerl_rec, qfetch,
+                               "query returned count only; expected rows",
+                               [cook, insert2,
+                                [<<"no such kitchen">>, <<"sam">>]]}}},
+                            sqerl_rec:qfetch(cook, insert2,
+                                             [<<"no such kitchen">>,
+                                              <<"sam">>]))
        end}
      ]}.
 
