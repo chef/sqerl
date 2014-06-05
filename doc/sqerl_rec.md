@@ -99,9 +99,9 @@ WHERE clause.</td></tr><tr><td valign="top"><a href="#fetch_all-1">fetch_all/1</
 <code>RecName</code> in a paginated fashion.</td></tr><tr><td valign="top"><a href="#first_page-0">first_page/0</a></td><td>Return an ascii value, as a string, that sorts less or equal
 to any valid name.</td></tr><tr><td valign="top"><a href="#gen_delete-2">gen_delete/2</a></td><td>Return a SQL DELETE query appropriate for module <code>RecName</code>
 implementing the <code>sqerl_rec</code> behaviour.</td></tr><tr><td valign="top"><a href="#gen_fetch-2">gen_fetch/2</a></td><td>Generate a SELECT query for <code>RecName</code> rows.</td></tr><tr><td valign="top"><a href="#gen_fetch_all-2">gen_fetch_all/2</a></td><td>Generate a query to return all rows.</td></tr><tr><td valign="top"><a href="#gen_fetch_page-2">gen_fetch_page/2</a></td><td>Generate a paginated fetch query.</td></tr><tr><td valign="top"><a href="#insert-1">insert/1</a></td><td>Insert record <code>Rec</code> using prepared query <code>RecName_insert</code>.</td></tr><tr><td valign="top"><a href="#qfetch-3">qfetch/3</a></td><td>Fetch using prepared query <code>Query</code> returning a list of records
-<code>[#RecName{}]</code>.</td></tr><tr><td valign="top"><a href="#statements-1">statements/1</a></td><td>Given a list of module (and record) names implementing the
-<code>sqerl_rec</code> behaviour, return a proplist of prepared queries in the
-form of <code>[{QueryName, SQLBinary}]</code>.</td></tr><tr><td valign="top"><a href="#statements_for-1">statements_for/1</a></td><td></td></tr><tr><td valign="top"><a href="#update-1">update/1</a></td><td>Update record <code>Rec</code>.</td></tr></table>
+<code>[#RecName{}]</code>.</td></tr><tr><td valign="top"><a href="#scalar_fetch-3">scalar_fetch/3</a></td><td>Execute a query that returns a list of scalar values.</td></tr><tr><td valign="top"><a href="#statements-1">statements/1</a></td><td>Given a list of module, record or app names (using the form
+{app, AppName}) implementing the sqerl_rec' behaviour, return a
+proplist of prepared queries in the form of <code>[{QueryName, SQLBinary}]</code>.</td></tr><tr><td valign="top"><a href="#statements_for-1">statements_for/1</a></td><td></td></tr><tr><td valign="top"><a href="#update-1">update/1</a></td><td>Update record <code>Rec</code>.</td></tr></table>
 
 
 <a name="functions"></a>
@@ -334,24 +334,47 @@ Fetch using prepared query `Query` returning a list of records
 prepared query. If the prepared query does not take parameters, use
 `[]`. Note that this can be used for INSERT and UPDATE queries if
 they use an appropriate RETURNING clause.
+<a name="scalar_fetch-3"></a>
+
+### scalar_fetch/3 ###
+
+
+<pre><code>
+scalar_fetch(RecName::atom(), Query::atom(), Params::[any()]) -&gt; [any()] | {error, term()}
+</code></pre>
+
+<br></br>
+
+
+Execute a query that returns a list of scalar values. The
+query must return a single column in result rows. This does
+slightly less processing than using the rows_as_scalars transform
+and prepends `RecName` to `Query` to match the sqerl_rec style.
 <a name="statements-1"></a>
 
 ### statements/1 ###
 
 
 <pre><code>
-statements(RecList::[atom()]) -&gt; [{atom(), binary()}]
+statements(RecList::[atom() | {atom(), term()}]) -&gt; [{atom(), binary()}]
 </code></pre>
 
 <br></br>
 
 
 
-Given a list of module (and record) names implementing the
-`sqerl_rec` behaviour, return a proplist of prepared queries in the
-form of `[{QueryName, SQLBinary}]`.
+Given a list of module, record or app names (using the form
+{app, AppName}) implementing the sqerl_rec' behaviour, return a
+proplist of prepared queries in the form of `[{QueryName, SQLBinary}]`.
 
 
+
+Example inputs:
+
+
+
+[mod1, mod2, rec1, {app, app1}]
+[mod1, mod2, mod3, mod4, mod5]
 If the atom `default` is present in the list, then a default set of
 queries will be generated using the first field returned by
 `RecName:'#info-'/1` as a unique column for the WHERE clauses of
