@@ -2,7 +2,8 @@
 
 -export([
          run_cmd/1,
-         setup_db/0
+         setup_db/0,
+         setup_db_app/0
         ]).
 
 -define(TEST_DB_NAME, "sqerl_rec_test_db").
@@ -13,6 +14,12 @@
 -define(DB_PASS, "sesame").
 
 setup_db() ->
+    setup_db_i({sqerl_rec, statements, [[kitchen, cook]]}).
+
+setup_db_app() ->
+    setup_db_i({sqerl_rec, statements, [[kitchen, cook, {app, sqerl}]]}).
+
+setup_db_i(PreparedStatements) ->
     handle_cmd_result(drop_db(), [0, 1]),
     handle_cmd_result(create_db(), [0]),
     handle_cmd_result(create_tables(), [0]),
@@ -22,9 +29,11 @@ setup_db() ->
                 {db_pass, ?DB_PASS},
                 {db_name, ?TEST_DB_NAME},
                 {idle_check, 10000},
-                {prepared_statements, {sqerl_rec, statements, [[kitchen, cook]]}},
+                {prepared_statements, PreparedStatements},
                 {column_transforms, []}],
     [ ok = application:set_env(sqerl, Key, Val) || {Key, Val} <- SqerlEnv ],
+
+    io:format("Sqerl env: ~p~n", [SqerlEnv]),
 
     PoolConfig = [{name, sqerl},
                   {max_count, 3},
@@ -33,6 +42,7 @@ setup_db() ->
     ok = application:set_env(pooler, pools, [PoolConfig]),
     Apps = [crypto, asn1, public_key, ssl, pooler, epgsql, sqerl],
     [ application:start(A) || A <- Apps ].
+
 
 create_db() ->
     Cmd = ["createdb -T template1 -E utf8", ?TEST_DB_NAME],
