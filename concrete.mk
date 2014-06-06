@@ -80,7 +80,7 @@ endif
 
 ~/.dialyzer_plt:
 	@echo "ERROR: Missing ~/.dialyzer_plt. Please wait while a new PLT is compiled."
-	dialyzer --build_plt --apps $(ERLANG_DIALYZER_APPS)
+	dialyzer --build_plt --apps $(ERLANG_DIALYZER_APPS) | fgrep -v dialyzer.ignore
 	@echo "now try your build again"
 
 doc:
