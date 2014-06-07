@@ -35,7 +35,7 @@ ERLANG_DIALYZER_APPS = asn1 \
                        webtool \
                        xmerl
 
-all: .concrete/DEV_MODE compile eunit dialyzer $(ALL_HOOK)
+all: .concrete/DEV_MODE compile eunit dialyzer itest $(ALL_HOOK)
 
 .concrete/DEV_MODE:
 	@mkdir -p .concrete

@@ -44,8 +44,8 @@
                  %% `#prepared_statement{}' record or the SQL needed to create the prepared
                  %% query as a binary. The dict should only be manipulated via `pqc_*'
                  %% functions.
-                 statements = dict:new() :: dict(),
-                 ctrans :: dict() | undefined }).
+                 statements = dict:new() :: sqerl_dict(),
+                 ctrans :: sqerl_dict() | undefined }).
 
 -record(prepared_statement,
         {name :: string(),
@@ -202,7 +202,7 @@ init(Config) ->
 %% @doc Load prepared queries. Note that this function does not prepare the queries on the
 %% connection. Instead, the query names and corresponding SQL are stored in the client's
 %% state to be prepared on-demand when `execute' is called.
--spec load_statements([{atom(), binary()}]) -> {ok, dict()}.
+-spec load_statements([{atom(), binary()}]) -> {ok, sqerl_dict()}.
 load_statements(Statements) ->
     AddFun = fun({Name, SQL}, Dict) when is_atom(Name), is_binary(SQL) ->
                      pqc_add(Name, SQL, Dict);
@@ -216,7 +216,7 @@ load_statements(Statements) ->
 %% the query cache and has been previously prepared, it will be unloaded; this function
 %% overwrites queries of same name only taking care to make sure that previously prepared
 %% queries are unloaded from the connection.
--spec load_statement(connection(), atom(), sqerl_sql(), dict()) -> {ok, dict()}.
+-spec load_statement(connection(), atom(), sqerl_sql(), sqerl_dict()) -> {ok, sqerl_dict()}.
 load_statement(Connection, Name, SQL, Dict) ->
     %% prevent leak of previously prepared query with same name
     Dict1 = case dict:find(Name, Dict) of
@@ -234,13 +234,13 @@ load_statement(Connection, Name, SQL, Dict) ->
 %% PQC - Prepared Query Cache
 
 %% @doc Add a named query to the cache blindly overwritting any existing entries.
--spec pqc_add(atom(), binary(), dict()) -> dict().
+-spec pqc_add(atom(), binary(), sqerl_dict()) -> sqerl_dict().
 pqc_add(Name, Query, Cache) ->
     dict:store(Name, Query, Cache).
 
 %% @doc Remove the named query from the cache (no cleanup of query prepared on the
 %% connection will occur).
--spec pqc_remove(atom(), dict()) -> dict().
+-spec pqc_remove(atom(), sqerl_dict()) -> sqerl_dict().
 pqc_remove(Name, Cache) ->
     dict:erase(Name, Cache).
 
@@ -253,9 +253,9 @@ pqc_remove(Name, Cache) ->
 %% query is in raw SQL form, needs to be prepared before it's ready to use 3. We don't know
 %% about such a query For case #2, we have to talk to the db and errors may result.
 %%
-%% NB: Take care to update client state with the returned `dict()' value as it may contain a
+%% NB: Take care to update client state with the returned `sqerl_dict()' value as it may contain a
 %% newly cached entry.
--spec pqc_fetch(atom(), dict(), connection()) -> {#prepared_statement{}, dict()} |
+-spec pqc_fetch(atom(), sqerl_dict(), connection()) -> {#prepared_statement{}, sqerl_dict()} |
                                                  {error, _}.
 pqc_fetch(Name, Cache, Con) ->
     pqc_fetch(Name, Cache, Con, fun prepare_statement/3).
@@ -267,10 +267,10 @@ pqc_fetch(Name, Cache, Con, PrepareFun) ->
 -spec pqc_fetch_internal(Name, Found, Cache, Con, PrepareFun) -> Result when
       Name :: atom(),
       Found :: {ok, binary() | PrepQ},
-      Cache :: dict(),
+      Cache :: sqerl_dict(),
       Con :: connection(),
       PrepareFun :: fun((Con, Name, binary()) -> {ok, PrepQ} | {error, term()}),
-      Result :: {PrepQ, dict()} | {error, term()},
+      Result :: {PrepQ, sqerl_dict()} | {error, term()},
       PrepQ :: term().
 pqc_fetch_internal(Name, error, _Cache, _Con, _PrepareFun) ->
     {error, {query_not_found, Name}};
@@ -310,7 +310,7 @@ prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
 %% @doc Unload statement: unprepare in DB, then update statement
 %% state dict.
 %% Returns {ok, UpdatedDict}.
--spec unload_statement(connection(), atom(), dict()) -> {ok, dict()}.
+-spec unload_statement(connection(), atom(), sqerl_dict()) -> {ok, sqerl_dict()}.
 unload_statement(Connection, Name, Dict) ->
         unprepare_statement(Connection, Name),
         {ok, pqc_remove(Name, Dict)}.
