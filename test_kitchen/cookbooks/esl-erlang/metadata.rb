@@ -1,0 +1,6 @@
+name             'esl-erlang'
+maintainer       'Jean Rouge'
+maintainer_email 'jean@getchef.com'
+license          'All rights reserved'
+description      'Installs Erlang for some Ubuntu flavors from erlang-solutions\'s packages (https://www.erlang-solutions.com/downloads/download-erlang-otp#tabs-ubuntu)'
+version          '0.1.0'

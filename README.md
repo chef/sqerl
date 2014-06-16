@@ -24,6 +24,8 @@ You will also need to set up the repository with the appropriate branches. We do
 
 Once your repository is set up, you can start working on the code.
 
+You can work in a [Test-Kitchen](https://github.com/test-kitchen/test-kitchen)-driven VM if you have [Chef-DK](http://www.getchef.com/downloads/chef-dk/) installed. Just `cd` to the `test_kitchen` directory, and run `kitchen verify <version>` where `<version>` is the Erlang version of your choice (15, 16 or 17).
+
 # LINKS:
 
 Source:

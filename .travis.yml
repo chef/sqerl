@@ -6,4 +6,4 @@ otp_release:
   - R16B02
   - R16B01
   - R15B03
-script: "rm -fr deps && make all"
+script: "rm -fr deps && make get-rebar base-plt all"

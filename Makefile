@@ -39,19 +39,18 @@ itest_clean:
 	@echo Dropping integration test database
 	@${DB_CMD} < itest/itest_${DB_TYPE}_clean.sql
 
-itest: compile itest_create itest_run itest_clean
+itest_module_%:
+	# sadly enough, make macros are not expanded in target names
+	$(MAKE) compile	itest_create itest_run_module_$* itest_clean
 
-itest_run:
-	cd itest;erlc -I ../include *.erl
-	@erl -pa deps/*/ebin -pa ebin -pa itest -noshell -eval "eunit:test(itest, [verbose])" \
-	-s erlang halt -db_type $(DB_TYPE)
+itest_run_module_%:
+	cd itest && erlc -I ../include *.erl
+	erl -pa deps/*/ebin -pa ebin -pa itest -noshell \
+		-eval "ok = eunit:test($*, [verbose])" \
+		-s erlang halt -db_type $(DB_TYPE)
 
-perftest: compile itest_create perftest_run itest_clean
+itest: itest_module_itest
 
-perftest_run:
-	cd itest;erlc -I ../include *.erl
-	@erl -pa deps/*/ebin -pa ebin -pa itest -noshell \
-	-eval "eunit:test(perftest, [verbose])" \
-	-s erlang halt -db_type $(DB_TYPE)
+perftest: itest_module_perftest
 
-.PHONY: itest itest_clean itest_create itest_run perftest perftest_run
+.PHONY: itest itest_clean itest_create itest_run perftest

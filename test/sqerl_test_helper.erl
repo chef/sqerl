@@ -20,12 +20,15 @@ setup_db_app() ->
     setup_db_i({sqerl_rec, statements, [[kitchen, cook, {app, sqerl}]]}).
 
 setup_db_i(PreparedStatements) ->
-    handle_cmd_result(drop_db(), [0, 1]),
-    handle_cmd_result(create_db(), [0]),
-    handle_cmd_result(create_tables(), [0]),
+    User = get_user(),
+
+    handle_cmd_result(drop_db(User), [0, 1]),
+    handle_cmd_result(create_db(User), [0]),
+    handle_cmd_result(create_tables(User), [0]),
+
     SqerlEnv = [{db_host, ?DB_HOST},
                 {db_port, ?DB_PORT},
-                {db_user, os:getenv("USER")},
+                {db_user, User},
                 {db_pass, ?DB_PASS},
                 {db_name, ?TEST_DB_NAME},
                 {idle_check, 10000},
@@ -43,17 +46,22 @@ setup_db_i(PreparedStatements) ->
     Apps = [crypto, asn1, public_key, ssl, pooler, epgsql, sqerl],
     [ application:start(A) || A <- Apps ].
 
+get_user() ->
+    case os:getenv("PG_USER") of
+        false -> os:getenv("USER");
+        User -> User
+    end.
 
-create_db() ->
-    Cmd = ["createdb -T template1 -E utf8", ?TEST_DB_NAME],
+create_db(User) ->
+    Cmd = ["createdb -T template1 -E utf8 -U ", User, ?TEST_DB_NAME],
     run_cmd(Cmd).
 
-drop_db() ->
-    Cmd = ["dropdb", ?TEST_DB_NAME],
+drop_db(User) ->
+    Cmd = ["dropdb -U ", User, ?TEST_DB_NAME],
     run_cmd(Cmd).
 
-create_tables() ->
-    Cmd = ["psql", "--set ON_ERROR_STOP=1", ?TEST_DB_NAME, "-f", ?TEST_DB_SCHEMA],
+create_tables(User) ->
+    Cmd = ["psql -U", User, "--set ON_ERROR_STOP=1", ?TEST_DB_NAME, "-f", ?TEST_DB_SCHEMA],
     run_cmd(Cmd).
 
 -spec run_cmd([string()]) -> {Status :: integer(),

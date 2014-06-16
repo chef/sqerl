@@ -1,0 +1,5 @@
+source "https://api.berkshelf.com"
+
+cookbook 'git'
+cookbook 'postgresql'
+cookbook 'esl-erlang', path: ::File.expand_path('../cookbooks/esl-erlang', __FILE__)

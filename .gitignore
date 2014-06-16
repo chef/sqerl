@@ -1,10 +1,11 @@
-deps/*
-ebin/*
-.eunit
+/deps
+/ebin
+/.eunit
 *~
 *.beam
 logfile
 sqerl.plt
 deps.plt
-.concrete/
+/.concrete/
 /.rebar
+/test_kitchen/.kitchen

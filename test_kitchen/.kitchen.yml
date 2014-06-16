@@ -1,0 +1,60 @@
+<%
+repo_root = File.expand_path '../..', __FILE__
+
+# a helper function to parse a .gitignore file into a list of paths to exclude from the sync
+def parse_gitignore_to_list file_directory
+    lines = File.read(File.join(file_directory, '.gitignore')).split("\n")
+    # strip comments, empty lines, and lines starting with a bang
+    # (there's no way to translate gitignore bangs into an rsync exclude param)
+    lines.reject! { |line| line.match /^\s*(?:[!#]|$)/ }
+    # and strip leading slashes as they don't mean the same to the sync and to git
+    lines.map { |line| line.gsub /^\/+/, '' }
+end
+%>
+---
+driver:
+  name: vagrant
+  customize:
+    memory: 4096
+    cpus: 4
+
+provisioner:
+  name: chef_solo
+
+platforms:
+  - name: ubuntu-12.04
+
+suites:
+<%
+%w{R15B03 R16B03 17.0}.each do |erl_version|
+%>
+  - name: sqerl-<%= erl_version %>
+    driver:
+      synced_folders:
+        - ['<%= repo_root %>', '/root/sqerl', 'type: "rsync", rsync__exclude: <%= parse_gitignore_to_list repo_root %>']
+    run_list:
+      - 'git'
+      - 'postgresql::server'
+      - 'esl-erlang'
+    attributes:
+      postgresql:
+        password:
+          postgres: 'sesame'
+        pg_hba:
+          - type: 'local'
+            db: 'all'
+            user: 'postgres'
+            method: 'trust'
+          - type: 'host'
+            db: 'all'
+            user: 'postgres'
+            addr: '127.0.0.1/32'
+            method: 'trust'
+          - type: 'host'
+            db: 'itest'
+            user: 'itest'
+            addr: '127.0.0.1/32'
+            method: 'trust'
+      esl-erlang:
+        version: '<%= erl_version %>'
+<% end %>
