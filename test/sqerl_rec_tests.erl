@@ -379,9 +379,11 @@ gen_fetch_multiple_test_() ->
       || {{Rec, By}, E} <- Tests ].
 
 gen_delete_test() ->
-    Expect = ["DELETE FROM ", "kitchens",
+    Expect1 = ["DELETE FROM ", "kitchens",
               " WHERE ", "id", " = $1"],
-    ?assertEqual(Expect, sqerl_rec:gen_delete(kitchen, id)).
+    ?assertEqual(Expect1, sqerl_rec:gen_delete(kitchen, id)),
+    Expect2 = Expect1 ++ [" AND ", "name", " = $2"],
+    ?assertEqual(Expect2, sqerl_rec:gen_delete(kitchen, [id, name])).
 
 gen_params_test_() ->
     Tests = [{1, "$1"},
@@ -395,12 +397,12 @@ gen_update_test() ->
               " SET ",
               "name = $1, auth_token = $2, ssh_pub_key = $3, "
               "first_name = $4, last_name = $5, email = $6",
-              " WHERE ", "id", " = ", "$7",
+              " WHERE ", "id", " = $7", " AND ", "email", " = $8",
               " RETURNING ",
               "id, kitchen_id, name, auth_token, auth_token_bday, "
               "ssh_pub_key, "
               "first_name, last_name, email"],
-    ?assertEqual(Expect, sqerl_rec:gen_update(cook, id)).
+    ?assertEqual(Expect, sqerl_rec:gen_update(cook, [id, email])).
 
 gen_insert_test() ->
     Expect = ["INSERT INTO ", "cookers", "(",
