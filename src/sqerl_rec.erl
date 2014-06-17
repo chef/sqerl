@@ -69,6 +69,7 @@
          statements_for/1,
          gen_fetch/2,
          gen_delete/2,
+         gen_update/2,
          gen_fetch_page/2,
          gen_fetch_all/2
         ]).
@@ -380,11 +381,12 @@ gen_params(N) ->
 %% SQL = gen_delete(user, id),
 %% SQL = ["DELETE FROM ","cookers"," WHERE ","id"," = $1"]
 %% '''
--spec gen_delete(atom(), atom()) -> [string()].
-gen_delete(RecName, By) ->
-    ByStr = to_str(By),
+-spec gen_delete(atom(), atom() | [atom()]) -> [string()].
+gen_delete(RecName, Atom) when is_atom(Atom) ->
+    gen_delete(RecName, [Atom]);
+gen_delete(RecName, By) when is_list(By) ->
     Table = table_name(RecName),
-    ["DELETE FROM ", Table, " WHERE ", ByStr, " = $1"].
+    ["DELETE FROM ", Table, " WHERE " | gen_named_params(By)].
 
 %% @doc Generate an UPDATE query. Uses ``RecName:'#update_fields'/0''
 %% to determine the fields to include for SET.
@@ -397,20 +399,36 @@ gen_delete(RecName, By) ->
 %%        "first_name = $4, last_name = $5, email = $6",
 %%        " WHERE ","id"," = ","$7"]
 %% '''
--spec gen_update(atom(), atom()) -> [string()].
-gen_update(RecName, By) ->
+-spec gen_update(atom(), atom() | [atom()]) -> [string()].
+gen_update(RecName, Atom) when is_atom(Atom) ->
+    gen_update(RecName, [Atom]);
+gen_update(RecName, By) when is_list(By)->
     UpdateFields = RecName:'#update_fields'(),
-    ByStr = to_str(By),
     Table = table_name(RecName),
     UpdateCount = length(UpdateFields),
-    LastParam = "$" ++ erlang:integer_to_list(1 + UpdateCount),
+    WhereClause = gen_named_params(By, UpdateCount + 1),
     AllFields = map_to_str(UpdateFields),
     IdxFields = lists:zip(map_to_str(lists:seq(1, UpdateCount)), AllFields),
     KeyVals = string:join([ Key ++ " = $" ++ I || {I, Key} <- IdxFields ], ", "),
     AllFieldsSQL = string:join(map_to_str(all_fields(RecName)), ", "),
     ["UPDATE ", Table, " SET ", KeyVals,
-     " WHERE ", ByStr, " = ", LastParam,
-    " RETURNING ", AllFieldsSQL].
+     " WHERE " | WhereClause]
+    ++ [" RETURNING ", AllFieldsSQL].
+
+gen_named_params(Names) ->
+    gen_named_params(Names, 1).
+gen_named_params(Names, StartingPosition) ->
+    {[" AND " | Result], _} = lists:foldl(
+        fun(Name, {List, Position}) ->
+            {
+                [" AND ", " = $" ++ erlang:integer_to_list(Position), to_str(Name) | List],
+                Position + 1
+            }
+        end,
+        {[], StartingPosition},
+        Names
+    ),
+    lists:reverse(Result).
 
 %% @doc Generate an INSERT query for sqerl_rec behaviour
 %% `RecName'. Uses ``RecName:'#insert_fields'/0'' to determine the

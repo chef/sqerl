@@ -180,7 +180,7 @@ exec_driver({Call, QueryOrName, Args}, _From, #state{cb_mod=CBMod, cb_state=CBSt
     {reply, Result, State#state{cb_state=NewCBState}, Timeout}.
 
 
-%% @doc Prepared statements can be provides as a list of `{atom(), binary()}' tuples, as a
+%% @doc Prepared statements can be provided as a list of `{atom(), binary()}' tuples, as a
 %% path to a file that can be consulted for such tuples, or as `{M, F, A}' such that
 %% `apply(M, F, A)' returns the statements tuples.
 -spec read_statements([{atom(), term()}]
