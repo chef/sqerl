@@ -171,13 +171,14 @@ init(Config) ->
     {timeout, Timeout} = lists:keyfind(timeout, 1, Config),
     {db, Db} = lists:keyfind(db, 1, Config),
     {prepared_statements, Statements} = lists:keyfind(prepared_statements, 1, Config),
-    Opts = [{database, Db}, {port, Port}, {timeout, Timeout}],
+    {opts, Opts} = lists:keyfind(opts, 1, Config),
+    Opts2 = lists:flatten([Opts | [{database, Db}, {port, Port}, {timeout, Timeout}]]),
     CTrans =
         case lists:keyfind(column_transforms, 1, Config) of
             {column_transforms, CT} -> CT;
             false -> undefined
         end,
-    case pgsql:connect(Host, User, Pass, Opts) of
+    case pgsql:connect(Host, User, Pass, Opts2) of
         {error, timeout} ->
             {stop, timeout};
         {ok, Connection} ->
