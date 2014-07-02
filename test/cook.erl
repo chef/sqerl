@@ -50,7 +50,11 @@
        "auth_token_bday, ssh_pub_key, "
        "first_name, last_name, email"]},
      {fetch_by_name_kitchen_id,
-      sqerl_rec:gen_fetch(cook, [name, kitchen_id])}].
+      sqerl_rec:gen_fetch(cook, [name, kitchen_id])},
+     {fetch_null_last_names,
+      ["SELECT id, kitchen_id, name, auth_token, auth_token_bday, ",
+       "ssh_pub_key, first_name, last_name, email FROM cookers "
+       "WHERE last_name IS NULL AND kitchen_id = $1"]}].
 
 '#table_name'() ->
     "cookers".

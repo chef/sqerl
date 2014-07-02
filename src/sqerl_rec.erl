@@ -51,6 +51,9 @@
 %% export a ``'#table_name'/0'' function to provide the table name for
 %% the mapping.
 %%
+%% It's also worth noting that `undefined' properties of a record will
+%% be saved in the DB as `NULL', and then translated back to `undefined'
+%% when fetched from the DB.
 %% @end
 -module(sqerl_rec).
 
@@ -265,7 +268,12 @@ delete(Rec, By) ->
 
 rec_to_vlist(Rec, Fields) ->
     RecName = rec_name(Rec),
-    [ RecName:'#get-'(F, Rec) || F <- Fields ].
+    [ undef_to_null(RecName:'#get-'(F, Rec)) || F <- Fields ].
+
+%% we translate `undefined' properties to `null' so that
+%% they get saved as `NULL' in the DB, and not `"undefined"'
+undef_to_null(undefined) -> null;
+undef_to_null(Other) -> Other.
 
 rows_to_recs(Rows, RecName) when is_atom(RecName) ->
     rows_to_recs(Rows, RecName:'#new-'(RecName));
@@ -274,13 +282,17 @@ rows_to_recs(Rows, Rec) when is_tuple(Rec) ->
 
 row_to_rec(Row, Rec) ->
     RecName = rec_name(Rec),
-    RecName:'#fromlist-'(atomize_keys(Row), Rec).
+    RecName:'#fromlist-'(atomize_keys_and_null_to_undef(Row), Rec).
 
-atomize_keys(L) ->
-    [ {bin_to_atom(B), V} || {B, V} <- L ].
+atomize_keys_and_null_to_undef(L) ->
+    [ {bin_to_atom(B), null_to_undef(V)} || {B, V} <- L ].
 
 bin_to_atom(B) ->
     erlang:binary_to_atom(B, utf8).
+
+%% same as for saving, we need to translate `null' back to `undefined'
+null_to_undef(null) -> undefined;
+null_to_undef(Other) -> Other.
 
 %% @doc This function is intended to be used as the `{M, F, A}' for sqerl's
 %% `prepared_statements' app config key and returns a proplist of prepared

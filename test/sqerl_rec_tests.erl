@@ -113,7 +113,6 @@ kitchen_test_() ->
                ?assertEqual([{ok, 1}, {ok, 1}], Res),
                ?assertEqual([], sqerl_rec:fetch_all(kitchen))
        end},
-
       {"fetch_all, fetch_page",
        fun() ->
                %% setup
@@ -291,6 +290,18 @@ cook_test_() ->
                             sqerl_rec:qfetch(cook, insert2,
                                              [<<"no such kitchen">>,
                                               <<"sam">>]))
+       end},
+       {"undefined record properties get translated to NULL, and back",
+        fun() ->
+                {K0, _KName} = make_kitchen(<<"null-test">>),
+                [K1] = sqerl_rec:insert(K0),
+                KitchenId = kitchen:'#get-'(id, K1),
+                {Cook, _CName} = make_cook(<<"no-last-name">>, KitchenId),
+                [SavedCook] = sqerl_rec:insert(Cook),
+                [FetchedCook] = sqerl_rec:qfetch(cook, fetch_null_last_names,
+                                                 [KitchenId]),
+                ?assertEqual(SavedCook, FetchedCook),
+                ?assertEqual(undefined, cook:'#get-'(last_name, FetchedCook))
        end}
      ]}.
 
@@ -329,20 +340,24 @@ make_kitchen(Prefix) ->
     K = kitchen:'#fromlist-kitchen'([{name, Name}]),
     {K, Name}.
 
-make_cook(Prefix, KitchenId, First, Last) ->
+make_cook(Prefix, KitchenId) ->
     Name = make_name(Prefix),
-    Email = iolist_to_binary([First, "@", Last, ".com"]),
     SSH = <<"NONE">>,
     AuthToken = base64:encode(crypto:rand_bytes(10)),
     C = cook:'#fromlist-cook'([{name, Name},
                                {kitchen_id, KitchenId},
-                               {email, Email},
                                {auth_token, AuthToken},
-                               {ssh_pub_key, SSH},
-                               {first_name, First},
-                               {last_name, Last}
+                               {ssh_pub_key, SSH}
                               ]),
     {C, Name}.
+
+make_cook(Prefix, KitchenId, First, Last) ->
+    {Cook, Name} = make_cook(Prefix, KitchenId),
+    Email = iolist_to_binary([First, "@", Last, ".com"]),
+    NewCook = cook:'#set-'([{email, Email},
+                            {first_name, First},
+                            {last_name, Last}], Cook),
+    {NewCook, Name}.
 
 validate_kitchen(Name, K) ->
     ?assert(kitchen:'#is_record-'(kitchen, K)),
