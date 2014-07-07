@@ -26,6 +26,7 @@
   {applications, [kernel,
                   stdlib,
                   crypto,
+                  envy,
                   epgsql,
                   pooler]}
  ]}.

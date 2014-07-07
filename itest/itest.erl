@@ -61,7 +61,7 @@ setup_env() ->
                   {init_count, 1},
                   {start_mfa, {sqerl_client, start_link, []}}],
     ok = application:set_env(pooler, pools, [PoolConfig]),
-    Apps = [crypto, asn1, public_key, ssl, epgsql, pooler],
+    Apps = [crypto, asn1, public_key, ssl, envy, epgsql, pooler],
     [ application:start(A) || A <- Apps ].
 
 statements() ->
