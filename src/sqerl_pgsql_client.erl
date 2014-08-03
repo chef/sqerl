@@ -372,8 +372,6 @@ extract_column_names({prepared_column_data, ColumnData}) ->
 %%%
 %%% Simple hooks to support coercion inputs to match the type expected by pgsql
 %%%
-transform(timestamp, {{_Y, _M, _D}, {_H, _M, _S}}=TS) ->
-    sqerl_transformers:convert_YMDHMS_tuple_to_datetime(TS);
 transform(timestamp, {datetime, X}) ->
     X;
 transform(timestamp, X) when is_binary(X) ->
