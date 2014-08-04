@@ -27,7 +27,7 @@
 
 -define(GET_ARG(Name, Args), proplists:get_value(Name, Args)).
 -define(NAMES, [["Kevin", "Smith", 666, <<"2011-10-01 16:47:46">>, true],
-                ["Mark", "Anderson", 42, <<"2011-10-02 16:47:46">>, true],
+                ["Mark", "Anderson", 42, <<"2011-10-02 16:11:46">>, true],
                 ["Chris", "Maier", 0, <<"2011-10-03 16:47:46">>, true],
                 ["Elvis", "Presley", 16, <<"2011-10-04 16:47:46">>, false]]).
 -define(POOL_NAME, sqerl).
@@ -273,7 +273,7 @@ update_created() ->
                       "Smith"])),
     ?assertMatch({ok, 1},
                  sqerl:statement(update_created_by_lname,
-                     [{{2011, 11, 2}, {16, 47, 46}}, "Anderson"])),
+                     [{{2011, 11, 2}, {16, 11, 46}}, "Anderson"])),
     ?assertMatch({ok, 1},
                  sqerl:statement(update_created_by_lname,
                      [<<"2011-11-03 16:47:46">>, "Maier"])),
@@ -281,7 +281,7 @@ update_created() ->
     {ok, User1} = sqerl:select(find_created_by_lname, ["Smith"], first_as_scalar, [created]),
     ?assertMatch({datetime, {{2011, 11, 01}, {16, 47, 46}}}, User1),
     {ok, User2} = sqerl:select(find_created_by_lname, ["Anderson"], first_as_scalar, [created]),
-    ?assertMatch({datetime, {{2011, 11, 02}, {16, 47, 46}}}, User2),
+    ?assertMatch({datetime, {{2011, 11, 02}, {16, 11, 46}}}, User2),
     {ok, User3} = sqerl:select(find_created_by_lname, ["Maier"], first_as_scalar, [created]),
     ?assertMatch({datetime, {{2011, 11, 03}, {16, 47, 46}}}, User3).
 
