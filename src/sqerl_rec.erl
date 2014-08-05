@@ -89,18 +89,17 @@
 %% is implemented.
 -type db_rec() :: tuple().
 
-%% These callbacks are a bit odd, but align with the functions created
-%% by the exprecs parse transform.
--callback '#get-'(atom(), db_rec()) ->
+%% These callbacks are better, thanks to the sqerl_gobot parse transform.
+-callback getval(atom(), db_rec()) ->
     any().
 
--callback '#new-'(atom()) ->
+-callback '#new'() ->
     db_rec().
 
--callback '#fromlist-'([{atom(), _}], db_rec()) ->
+-callback fromlist([{atom(), _}]) ->
     db_rec().
 
--callback '#info-'(atom()) ->
+-callback fields() ->
     [atom()].
 
 %% these are not part of the exprecs parse transform. Making these /0
@@ -253,7 +252,7 @@ update(Rec) ->
     RecName = rec_name(Rec),
     UpdateFields = RecName:'#update_fields'(),
     Values = rec_to_vlist(Rec, UpdateFields),
-    Id = RecName:'#get-'(id, Rec),
+    Id = RecName:getval(id, Rec),
     qfetch(RecName, update, Values ++ [Id]).
 
 %% @doc Delete the rows where the column identified by `By' matches
@@ -263,12 +262,12 @@ update(Rec) ->
 -spec delete(db_rec(), atom()) -> {ok, integer()} | {error, _}.
 delete(Rec, By) ->
     RecName = rec_name(Rec),
-    Id = RecName:'#get-'(By, Rec),
+    Id = RecName:getval(By, Rec),
     cquery(RecName, ['delete_by_', By], [Id]).
 
 rec_to_vlist(Rec, Fields) ->
     RecName = rec_name(Rec),
-    [ undef_to_null(RecName:'#get-'(F, Rec)) || F <- Fields ].
+    [ undef_to_null(RecName:getval(F, Rec)) || F <- Fields ].
 
 %% we translate `undefined' properties to `null' so that
 %% they get saved as `NULL' in the DB, and not `"undefined"'
@@ -276,13 +275,13 @@ undef_to_null(undefined) -> null;
 undef_to_null(Other) -> Other.
 
 rows_to_recs(Rows, RecName) when is_atom(RecName) ->
-    rows_to_recs(Rows, RecName:'#new-'(RecName));
+    rows_to_recs(Rows, RecName:'#new'());
 rows_to_recs(Rows, Rec) when is_tuple(Rec) ->
     [ row_to_rec(Row, Rec) || Row <- Rows ].
 
 row_to_rec(Row, Rec) ->
     RecName = rec_name(Rec),
-    RecName:'#fromlist-'(atomize_keys_and_null_to_undef(Row), Rec).
+    RecName:fromlist(atomize_keys_and_null_to_undef(Row)).
 
 atomize_keys_and_null_to_undef(L) ->
     [ {bin_to_atom(B), null_to_undef(V)} || {B, V} <- L ].
@@ -419,7 +418,7 @@ gen_update(RecName, By) ->
     AllFields = map_to_str(UpdateFields),
     IdxFields = lists:zip(map_to_str(lists:seq(1, UpdateCount)), AllFields),
     KeyVals = string:join([ Key ++ " = $" ++ I || {I, Key} <- IdxFields ], ", "),
-    AllFieldsSQL = string:join(map_to_str(all_fields(RecName)), ", "),
+    AllFieldsSQL = string:join(map_to_str(RecName:fields()), ", "),
     ["UPDATE ", Table, " SET ", KeyVals,
      " WHERE ", ByStr, " = ", LastParam,
     " RETURNING ", AllFieldsSQL].
@@ -440,7 +439,7 @@ gen_update(RecName, By) ->
 gen_insert(RecName) ->
     InsertFields = map_to_str(RecName:'#insert_fields'()),
     InsertFieldsSQL = string:join(InsertFields, ", "),
-    AllFieldsSQL = string:join(map_to_str(all_fields(RecName)), ", "),
+    AllFieldsSQL = string:join(map_to_str(RecName:fields()), ", "),
     Params = gen_params(length(InsertFields)),
     Table = table_name(RecName),
     ["INSERT INTO ", Table, "(", InsertFieldsSQL,
@@ -457,7 +456,7 @@ gen_insert(RecName) ->
 %% '''
 -spec gen_fetch_page(atom(), atom()) -> [string()].
 gen_fetch_page(RecName, OrderBy) ->
-    AllFields = map_to_str(all_fields(RecName)),
+    AllFields = map_to_str(RecName:fields()),
     FieldsSQL = string:join(AllFields, ", "),
     OrderByStr = to_str(OrderBy),
     Table = table_name(RecName),
@@ -475,7 +474,7 @@ gen_fetch_page(RecName, OrderBy) ->
 %% '''
 -spec gen_fetch_all(atom(), atom()) -> [string()].
 gen_fetch_all(RecName, OrderBy) ->
-    AllFields = map_to_str(all_fields(RecName)),
+    AllFields = map_to_str(RecName:fields()),
     FieldsSQL = string:join(AllFields, ", "),
     OrderByStr = to_str(OrderBy),
     Table = table_name(RecName),
@@ -499,14 +498,14 @@ gen_fetch_all(RecName, OrderBy) ->
 %% '''
 -spec gen_fetch(atom(), atom() | [atom()]) -> [string()].
 gen_fetch(RecName, By) when is_atom(By) ->
-    AllFields = map_to_str(all_fields(RecName)),
+    AllFields = map_to_str(RecName:fields()),
     FieldsSQL = string:join(AllFields, ", "),
     ByStr = to_str(By),
     Table = table_name(RecName),
     ["SELECT ", FieldsSQL, " FROM ", Table,
      " WHERE ", ByStr, " = $1"];
 gen_fetch(RecName, ByList) when is_list(ByList) ->
-    AllFields = map_to_str(all_fields(RecName)),
+    AllFields = map_to_str(RecName:fields()),
     FieldsSQL = string:join(AllFields, ", "),
     WhereItems = zip_params(ByList, " = "),
     WhereClause = string:join(WhereItems, " AND "),
@@ -536,10 +535,7 @@ to_str(I) when is_integer(I) ->
     erlang:integer_to_list(I).
 
 first_field(RecName) ->
-    hd(all_fields(RecName)).
-
-all_fields(RecName) ->
-    RecName:'#info-'(RecName).
+    hd(RecName:fields()).
 
 table_name(RecName) ->
     Exports = RecName:module_info(exports),

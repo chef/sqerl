@@ -98,7 +98,7 @@ kitchen_test_() ->
                %% can fetch inserted
                ?assertEqual(K1, FK1),
 
-               K2 = kitchen:'#set-'([{name, <<"tennis">>}], K1),
+               K2 = kitchen:setvals([{name, <<"tennis">>}], K1),
                ?assertEqual([K2], sqerl_rec:update(K2)),
                ?assertEqual(K2,
                             hd(sqerl_rec:fetch(kitchen, name, <<"tennis">>)))
@@ -125,14 +125,14 @@ kitchen_test_() ->
                [ sqerl_rec:insert(K) || K <- Kitchens ],
 
                All = sqerl_rec:fetch_all(kitchen),
-               ExpectNames = [ kitchen:'#get-'(name, K) || K <- Kitchens ],
-               FoundNames = [ kitchen:'#get-'(name, K) || K <- All ],
+               ExpectNames = [ kitchen:getval(name, K) || K <- Kitchens ],
+               FoundNames = [ kitchen:getval(name, K) || K <- All ],
                ?assertEqual(ExpectNames, FoundNames),
 
                K_1_10 = sqerl_rec:fetch_page(kitchen, sqerl_rec:first_page(), 10),
-               Next = kitchen:'#get-'(name, lists:last(K_1_10)),
+               Next = kitchen:getval(name, lists:last(K_1_10)),
                K_11_20 = sqerl_rec:fetch_page(kitchen, Next , 10),
-               PageNames = [ kitchen:'#get-'(name, K) || K <- (K_1_10 ++ K_11_20) ],
+               PageNames = [ kitchen:getval(name, K) || K <- (K_1_10 ++ K_11_20) ],
                ?assertEqual(ExpectNames, PageNames)
        end},
       {"bad query returns error",
@@ -190,7 +190,7 @@ kitchen_app_test_() ->
                %% can fetch inserted
                ?assertEqual(K1, FK1),
 
-               K2 = kitchen:'#set-'([{name, <<"tennis">>}], K1),
+               K2 = kitchen:setvals([{name, <<"tennis">>}], K1),
                ?assertEqual([K2], sqerl_rec:update(K2)),
                ?assertEqual(K2,
                             hd(sqerl_rec:fetch(kitchen, name, <<"tennis">>)))
@@ -218,14 +218,14 @@ kitchen_app_test_() ->
                [ sqerl_rec:insert(K) || K <- Kitchens ],
 
                All = sqerl_rec:fetch_all(kitchen),
-               ExpectNames = [ kitchen:'#get-'(name, K) || K <- Kitchens ],
-               FoundNames = [ kitchen:'#get-'(name, K) || K <- All ],
+               ExpectNames = [ kitchen:getval(name, K) || K <- Kitchens ],
+               FoundNames = [ kitchen:getval(name, K) || K <- All ],
                ?assertEqual(ExpectNames, FoundNames),
 
                K_1_10 = sqerl_rec:fetch_page(kitchen, sqerl_rec:first_page(), 10),
-               Next = kitchen:'#get-'(name, lists:last(K_1_10)),
+               Next = kitchen:getval(name, lists:last(K_1_10)),
                K_11_20 = sqerl_rec:fetch_page(kitchen, Next , 10),
-               PageNames = [ kitchen:'#get-'(name, K) || K <- (K_1_10 ++ K_11_20) ],
+               PageNames = [ kitchen:getval(name, K) || K <- (K_1_10 ++ K_11_20) ],
                ?assertEqual(ExpectNames, PageNames)
        end},
       {"bad query returns error",
@@ -271,9 +271,9 @@ cook_test_() ->
        fun() ->
                {K0, _KName0} = make_kitchen(<<"basket">>),
                [K1] = sqerl_rec:insert(K0),
-               KitchenId = kitchen:'#get-'(id, K1),
+               KitchenId = kitchen:getval(id, K1),
                {C0, CName0} = make_cook(<<"grace">>, KitchenId,
-                                          <<"grace">>, <<"hopper">>),
+                                        <<"grace">>, <<"hopper">>),
                [C1] = sqerl_rec:insert(C0),
                [C2] = sqerl_rec:qfetch(cook, fetch_by_name_kitchen_id,
                                        [CName0, KitchenId]),
@@ -295,13 +295,13 @@ cook_test_() ->
         fun() ->
                 {K0, _KName} = make_kitchen(<<"null-test">>),
                 [K1] = sqerl_rec:insert(K0),
-                KitchenId = kitchen:'#get-'(id, K1),
+                KitchenId = kitchen:getval(id, K1),
                 {Cook, _CName} = make_cook(<<"no-last-name">>, KitchenId),
                 [SavedCook] = sqerl_rec:insert(Cook),
                 [FetchedCook] = sqerl_rec:qfetch(cook, fetch_null_last_names,
                                                  [KitchenId]),
                 ?assertEqual(SavedCook, FetchedCook),
-                ?assertEqual(undefined, cook:'#get-'(last_name, FetchedCook))
+                ?assertEqual(undefined, cook:getval(last_name, FetchedCook))
        end}
      ]}.
 
@@ -322,9 +322,9 @@ cook_app_test_() ->
        fun() ->
                {K0, _KName0} = make_kitchen(<<"basket">>),
                [K1] = sqerl_rec:insert(K0),
-               KitchenId = kitchen:'#get-'(id, K1),
+               KitchenId = kitchen:getval(id, K1),
                {C0, CName0} = make_cook(<<"grace">>, KitchenId,
-                                          <<"grace">>, <<"hopper">>),
+                                        <<"grace">>, <<"hopper">>),
                [C1] = sqerl_rec:insert(C0),
                [C2] = sqerl_rec:qfetch(cook, fetch_by_name_kitchen_id,
                                        [CName0, KitchenId]),
@@ -337,32 +337,32 @@ int_to_0bin(I) ->
 
 make_kitchen(Prefix) ->
     Name = make_name(Prefix),
-    K = kitchen:'#fromlist-kitchen'([{name, Name}]),
+    K = kitchen:fromlist([{name, Name}]),
     {K, Name}.
 
 make_cook(Prefix, KitchenId) ->
     Name = make_name(Prefix),
     SSH = <<"NONE">>,
     AuthToken = base64:encode(crypto:rand_bytes(10)),
-    C = cook:'#fromlist-cook'([{name, Name},
-                               {kitchen_id, KitchenId},
-                               {auth_token, AuthToken},
-                               {ssh_pub_key, SSH}
-                              ]),
+    C = cook:fromlist([ {name, Name},
+                        {kitchen_id, KitchenId},
+                        {auth_token, AuthToken},
+                        {ssh_pub_key, SSH}
+                      ]),
     {C, Name}.
 
 make_cook(Prefix, KitchenId, First, Last) ->
     {Cook, Name} = make_cook(Prefix, KitchenId),
     Email = iolist_to_binary([First, "@", Last, ".com"]),
-    NewCook = cook:'#set-'([{email, Email},
+    NewCook = cook:setvals([{email, Email},
                             {first_name, First},
                             {last_name, Last}], Cook),
     {NewCook, Name}.
 
 validate_kitchen(Name, K) ->
-    ?assert(kitchen:'#is_record-'(kitchen, K)),
-    ?assertEqual(Name, kitchen:'#get-'(name, K)),
-    ?assert(erlang:is_integer(kitchen:'#get-'(id, K))).
+    ?assert(kitchen:'#is'(K)),
+    ?assertEqual(Name, kitchen:getval(name, K)),
+    ?assert(erlang:is_integer(kitchen:getval(id, K))).
 
 gen_fetch_test_() ->
     Tests = [

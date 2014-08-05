@@ -1,5 +1,4 @@
 -module(cook).
--behaviour(sqerl_rec).
 
 -export([
          '#insert_fields'/0,
@@ -8,8 +7,7 @@
          '#table_name'/0
         ]).
 
--compile({parse_transform, exprecs}).
--export_records([cook]).
+-compile({parse_transform, sqerl_gobot}).
 
 -record(cook, {
           id,
