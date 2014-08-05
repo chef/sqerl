@@ -1,5 +1,4 @@
 -module(kitchen).
--behaviour(sqerl_rec).
 
 -export([
          '#insert_fields'/0,
@@ -7,8 +6,7 @@
          '#statements'/0
         ]).
 
--compile({parse_transform, exprecs}).
--export_records([kitchen]).
+-compile({parse_transform, sqerl_gobot}).
 
 -record(kitchen, {
           id,
