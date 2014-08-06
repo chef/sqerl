@@ -127,7 +127,8 @@
 -spec qfetch(atom(), atom_list(), [any()]) -> [db_rec()] | {error, _}.
 qfetch(RecName, Query, Vals) ->
     RealQ = join_atoms([RecName, '_', Query]),
-    case sqerl:select(RealQ, Vals) of
+    CleanVals = [undef_to_null(V) || V <- Vals],
+    case sqerl:select(RealQ, CleanVals) of
         {ok, none} ->
             [];
         {ok, N} when is_integer(N) ->
@@ -267,7 +268,7 @@ delete(Rec, By) ->
 
 rec_to_vlist(Rec, Fields) ->
     RecName = rec_name(Rec),
-    [ undef_to_null(RecName:getval(F, Rec)) || F <- Fields ].
+    [ RecName:getval(F, Rec) || F <- Fields ].
 
 %% we translate `undefined' properties to `null' so that
 %% they get saved as `NULL' in the DB, and not `"undefined"'

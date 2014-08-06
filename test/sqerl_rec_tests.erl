@@ -291,6 +291,30 @@ cook_test_() ->
                                              [<<"no such kitchen">>,
                                               <<"sam">>]))
        end},
+      {"qfetch insert undefineds sanitized",
+       fun() ->
+               {K0, _KName} = make_kitchen(<<"no such kitchen">>),
+               [K1] = sqerl_rec:insert(K0),
+               KitchenId = kitchen:getval(id, K1),
+               [C] = sqerl_rec:qfetch(cook, insert,
+                                      [KitchenId,
+                                       make_name(<<"asm">>),
+                                       <<"asdsasd">>,
+                                       <<"NONE">>,
+                                       <<"">>,
+                                       undefined,
+                                       <<"">>
+                                      ]),
+               %% make sure we can insert via raw qfetch
+               ?assertMatch(cook, element(1, C)),
+
+               %% make sure that undefineds aren't coming back as
+               %% literal binaries
+               Name = cook:getval(name, C),
+               [FetchedCook] = sqerl_rec:qfetch(cook, fetch_by_name_kitchen_id,
+                                                [Name, KitchenId]),
+               ?assertEqual(undefined, cook:getval(last_name, FetchedCook))
+       end},
        {"undefined record properties get translated to NULL, and back",
         fun() ->
                 {K0, _KName} = make_kitchen(<<"null-test">>),
