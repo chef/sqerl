@@ -410,25 +410,34 @@ gen_delete(RecName, ByList) when is_list(ByList) ->
 %%
 %% Example:
 %% ```
-%% SQL = sqerl_rec:gen_update(cook, id),
-%% SQL = ["UPDATE ","cookers"," SET ",
-%%        "name = $1, auth_token = $2, ssh_pub_key = $3, "
-%%        "first_name = $4, last_name = $5, email = $6",
-%%        " WHERE ","id"," = ","$7"]
+%% SQL1 = sqerl_rec:gen_update(cook, id),
+%% SQL1 = ["UPDATE ","cookers"," SET ",
+%%         "name = $1, auth_token = $2, ssh_pub_key = $3, "
+%%         "first_name = $4, last_name = $5, email = $6",
+%%         " WHERE ","id = $7"]
+%%
+%% SQL2 = sqerl_rec:gen_update(cook, [id, name]),
+%% SQL2 = ["UPDATE ","cookers"," SET ",
+%%         "name = $1, auth_token = $2, ssh_pub_key = $3, "
+%%         "first_name = $4, last_name = $5, email = $6",
+%%         " WHERE ","id = $7 AND name = $8"]
 %% '''
--spec gen_update(atom(), atom()) -> [string()].
-gen_update(RecName, By) ->
+-spec gen_update(atom(), atom() | [atom()]) -> [string()].
+gen_update(RecName, By) when is_atom(By) ->
+    gen_update(RecName, [By]);
+gen_update(RecName, ByList) when is_list(ByList) ->
     UpdateFields = RecName:'#update_fields'(),
-    ByStr = to_str(By),
     Table = table_name(RecName),
     UpdateCount = length(UpdateFields),
-    LastParam = "$" ++ erlang:integer_to_list(1 + UpdateCount),
+    LastParam = 1 + UpdateCount,
     AllFields = map_to_str(UpdateFields),
     IdxFields = lists:zip(map_to_str(lists:seq(1, UpdateCount)), AllFields),
     KeyVals = string:join([ Key ++ " = $" ++ I || {I, Key} <- IdxFields ], ", "),
     AllFieldsSQL = string:join(map_to_str(RecName:fields()), ", "),
+    WhereItems = zip_params(ByList, " = ", LastParam),
+    WhereClause = string:join(WhereItems, " AND "),
     ["UPDATE ", Table, " SET ", KeyVals,
-     " WHERE ", ByStr, " = ", LastParam,
+     " WHERE ", WhereClause,
     " RETURNING ", AllFieldsSQL].
 
 %% @doc Generate an INSERT query for sqerl_rec behaviour
@@ -517,7 +526,10 @@ gen_fetch(RecName, ByList) when is_list(ByList) ->
      " WHERE ", WhereClause].
 
 zip_params(Prefixes, Sep) ->
-    Params = str_seq("$", 1, length(Prefixes)),
+    zip_params(Prefixes, Sep, 1).
+
+zip_params(Prefixes, Sep, StartIndex) ->
+    Params = str_seq("$", StartIndex, length(Prefixes) + StartIndex - 1),
     [ to_str(Prefix) ++ Sep ++ Param
       || {Prefix, Param} <- lists:zip(Prefixes, Params) ].
 
