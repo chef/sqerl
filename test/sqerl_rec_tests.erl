@@ -394,13 +394,13 @@ gen_fetch_test_() ->
               ["SELECT ",
                "id, name",
                " FROM ", "kitchens",
-               " WHERE ", "name", " = $1"]},
+               " WHERE ", "name = $1"]},
 
              {{kitchen, id},
               ["SELECT ",
                "id, name",
                " FROM ", "kitchens",
-               " WHERE ", "id", " = $1"]}
+               " WHERE ", "id = $1"]}
             ],
     [ ?_assertEqual(E, sqerl_rec:gen_fetch(Rec, By))
       || {{Rec, By}, E} <- Tests ].

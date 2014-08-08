@@ -499,12 +499,7 @@ gen_fetch_all(RecName, OrderBy) ->
 %% '''
 -spec gen_fetch(atom(), atom() | [atom()]) -> [string()].
 gen_fetch(RecName, By) when is_atom(By) ->
-    AllFields = map_to_str(RecName:fields()),
-    FieldsSQL = string:join(AllFields, ", "),
-    ByStr = to_str(By),
-    Table = table_name(RecName),
-    ["SELECT ", FieldsSQL, " FROM ", Table,
-     " WHERE ", ByStr, " = $1"];
+    gen_fetch(RecName, [By]);
 gen_fetch(RecName, ByList) when is_list(ByList) ->
     AllFields = map_to_str(RecName:fields()),
     FieldsSQL = string:join(AllFields, ", "),
