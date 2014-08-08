@@ -405,7 +405,7 @@ gen_fetch_test_() ->
     [ ?_assertEqual(E, sqerl_rec:gen_fetch(Rec, By))
       || {{Rec, By}, E} <- Tests ].
 
-gen_fetch_multiple_test() ->
+gen_fetch_multiple_test_() ->
     Tests = [
              {{cook, [name, kitchen_id]},
               ["SELECT ",
