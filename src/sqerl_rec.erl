@@ -389,14 +389,21 @@ gen_params(N) ->
 %% implementing the `sqerl_rec' behaviour. Example:
 %%
 %% ```
-%% SQL = gen_delete(user, id),
-%% SQL = ["DELETE FROM ","cookers"," WHERE ","id"," = $1"]
+%% SQL1 = gen_delete(user, id),
+%% SQL1 = ["DELETE FROM ","cookers"," WHERE ","id = $1"]
+%%
+%% SQL2 = gen_delete(user, [id, name]),
+%% SQL2 = ["DELETE FROM ","cookers",
+%%         " WHERE ","id = $1 AND name = $2"]
 %% '''
--spec gen_delete(atom(), atom()) -> [string()].
-gen_delete(RecName, By) ->
-    ByStr = to_str(By),
+-spec gen_delete(atom(), atom() | [atom()]) -> [string()].
+gen_delete(RecName, By) when is_atom(By) ->
+    gen_delete(RecName, [By]);
+gen_delete(RecName, ByList) when is_list(ByList) ->
+    WhereItems = zip_params(ByList, " = "),
+    WhereClause = string:join(WhereItems, " AND "),
     Table = table_name(RecName),
-    ["DELETE FROM ", Table, " WHERE ", ByStr, " = $1"].
+    ["DELETE FROM ", Table, " WHERE ", WhereClause].
 
 %% @doc Generate an UPDATE query. Uses ``RecName:'#update_fields'/0''
 %% to determine the fields to include for SET.
@@ -488,7 +495,7 @@ gen_fetch_all(RecName, OrderBy) ->
 %% ```
 %% SQL1 = sqerl_rec:gen_fetch(kitchen, name).
 %% SQL1 = ["SELECT ", "id, name", " FROM ", "kitchens",
-%%         " WHERE ", "name", " = $1"]
+%%         " WHERE ", "name = $1"]
 %%
 %% SQL2 = sqerl_rec:gen_fetch(cook, [kitchen_id, name]),
 %% SQL2 = ["SELECT ",

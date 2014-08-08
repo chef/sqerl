@@ -405,7 +405,7 @@ gen_fetch_test_() ->
     [ ?_assertEqual(E, sqerl_rec:gen_fetch(Rec, By))
       || {{Rec, By}, E} <- Tests ].
 
-gen_fetch_multiple_test_() ->
+gen_fetch_multiple_test() ->
     Tests = [
              {{cook, [name, kitchen_id]},
               ["SELECT ",
@@ -419,8 +419,13 @@ gen_fetch_multiple_test_() ->
 
 gen_delete_test() ->
     Expect = ["DELETE FROM ", "kitchens",
-              " WHERE ", "id", " = $1"],
+              " WHERE ", "id = $1"],
     ?assertEqual(Expect, sqerl_rec:gen_delete(kitchen, id)).
+
+gen_delete_multiple_restrictions_test() ->
+    Expect = ["DELETE FROM ", "kitchens",
+              " WHERE ", "id = $1 AND name = $2"],
+    ?assertEqual(Expect, sqerl_rec:gen_delete(kitchen, [id, name])).
 
 gen_params_test_() ->
     Tests = [{1, "$1"},
