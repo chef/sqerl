@@ -394,13 +394,13 @@ gen_fetch_test_() ->
               ["SELECT ",
                "id, name",
                " FROM ", "kitchens",
-               " WHERE ", "name", " = $1"]},
+               " WHERE ", "name = $1"]},
 
              {{kitchen, id},
               ["SELECT ",
                "id, name",
                " FROM ", "kitchens",
-               " WHERE ", "id", " = $1"]}
+               " WHERE ", "id = $1"]}
             ],
     [ ?_assertEqual(E, sqerl_rec:gen_fetch(Rec, By))
       || {{Rec, By}, E} <- Tests ].
@@ -419,8 +419,13 @@ gen_fetch_multiple_test_() ->
 
 gen_delete_test() ->
     Expect = ["DELETE FROM ", "kitchens",
-              " WHERE ", "id", " = $1"],
+              " WHERE ", "id = $1"],
     ?assertEqual(Expect, sqerl_rec:gen_delete(kitchen, id)).
+
+gen_delete_multiple_restrictions_test() ->
+    Expect = ["DELETE FROM ", "kitchens",
+              " WHERE ", "id = $1 AND name = $2"],
+    ?assertEqual(Expect, sqerl_rec:gen_delete(kitchen, [id, name])).
 
 gen_params_test_() ->
     Tests = [{1, "$1"},
@@ -434,12 +439,24 @@ gen_update_test() ->
               " SET ",
               "name = $1, auth_token = $2, ssh_pub_key = $3, "
               "first_name = $4, last_name = $5, email = $6",
-              " WHERE ", "id", " = ", "$7",
+              " WHERE ", "id = $7",
               " RETURNING ",
               "id, kitchen_id, name, auth_token, auth_token_bday, "
               "ssh_pub_key, "
               "first_name, last_name, email"],
     ?assertEqual(Expect, sqerl_rec:gen_update(cook, id)).
+
+gen_update_multiple_restrictions_test() ->
+    Expect = ["UPDATE ", "cookers",
+              " SET ",
+              "name = $1, auth_token = $2, ssh_pub_key = $3, "
+              "first_name = $4, last_name = $5, email = $6",
+              " WHERE ", "id = $7 AND name = $8",
+              " RETURNING ",
+              "id, kitchen_id, name, auth_token, auth_token_bday, "
+              "ssh_pub_key, "
+              "first_name, last_name, email"],
+    ?assertEqual(Expect, sqerl_rec:gen_update(cook, [id, name])).
 
 gen_insert_test() ->
     Expect = ["INSERT INTO ", "cookers", "(",
