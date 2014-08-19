@@ -1,7 +1,11 @@
 # This Makefile written by concrete
 #
-# {concrete_makefile_version, 1}
+# {concrete_makefile_version, 3}
 #
+# ANY CHANGES TO THIS FILE WILL BE OVERWRITTEN on `concrete update`
+# IF YOU WANT TO CHANGE ANY OF THESE LINES BELOW, COPY THEM INTO
+# custom.mk FIRST
+
 # Use this to override concrete's default dialyzer options of
 # -Wunderspecs
 # DIALYZER_OPTS = ...
@@ -18,6 +22,16 @@
 # by concrete, add them here (along with make rules to build them if needed)
 # ALL_HOOK = ...
 
+## .DEFAULT_GOAL can be overridden in custom.mk if "all" is not the desired
+## default
+.DEFAULT_GOAL := all
+
+# custom.mk is totally optional
+custom_rules_file = $(wildcard custom.mk)
+ifeq ($(custom_rules_file),custom.mk)
+    include custom.mk
+endif
+
 concrete_rules_file = $(wildcard concrete.mk)
 ifeq ($(concrete_rules_file),concrete.mk)
     include concrete.mk
@@ -26,31 +40,3 @@ else
 	@echo "ERROR: missing concrete.mk"
 	@echo "  run: concrete update"
 endif
-
-DB_TYPE ?= pgsql
--include itest/$(DB_TYPE)_conf.mk
-
-itest_create:
-	@echo Creating integration test database
-	@${DB_CMD} < itest/itest_${DB_TYPE}_create.sql
-
-itest_clean:
-	@rm -f itest/*.beam
-	@echo Dropping integration test database
-	@${DB_CMD} < itest/itest_${DB_TYPE}_clean.sql
-
-itest_module_%:
-	# sadly enough, make macros are not expanded in target names
-	$(MAKE) compile	itest_create itest_run_module_$* itest_clean
-
-itest_run_module_%:
-	cd itest && erlc -I ../include *.erl
-	erl -pa deps/*/ebin -pa ebin -pa itest -noshell \
-		-eval "ok = eunit:test($*, [verbose])" \
-		-s erlang halt -db_type $(DB_TYPE)
-
-itest: itest_module_itest
-
-perftest: itest_module_perftest
-
-.PHONY: itest itest_clean itest_create itest_run perftest

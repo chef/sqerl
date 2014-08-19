@@ -93,13 +93,25 @@ ifeq ($(MD5_BIN),)
 # neither md5 nor md5sum, we just take the project name
 BASE_PLT_ID := $(PROJ)
 else
-BASE_PLT_ID := $(word 1, $(shell echo $(ERLANG_DIALYZER_APPS) $(ERLANG_VERSION) | $(MD5_BIN)))
+BASE_PLT_ID := $(word 1, $(shell echo $(ERLANG_DIALYZER_APPS) | $(MD5_BIN)))
 endif
+
+ifeq ($(TRAVIS),true)
+## If we're running on travis, pull the plt from S3
+## We got them from https://github.com/esl/erlang-plts
+## To add to the collection make sure they're public and match the erlang version
+## reported by erlang:system_info(otp_release)
+## s3cmd put --acl-public --guess-mime-type <FILENAME> s3://concrete-plts
+
+BASE_PLT := travis-erlang-$(ERLANG_VERSION).plt
+BASE_PLT_URL := http://s3.amazonaws.com/concrete-plts/$(BASE_PLT)
+else
 BASE_PLT := ~/.concrete_dialyzer_plt_$(BASE_PLT_ID)_$(ERLANG_VERSION).plt
+endif
 
 all: all_but_dialyzer dialyzer
 
-all_but_dialyzer: .concrete/DEV_MODE compile eunit itest $(ALL_HOOK)
+all_but_dialyzer: .concrete/DEV_MODE compile eunit $(ALL_HOOK)
 
 $(REBAR):
 	curl -Lo rebar $(REBAR_URL) || wget $(REBAR_URL)
@@ -139,10 +151,10 @@ test: eunit
 
 # Only include local PLT if we have deps that we are going to analyze
 ifeq ($(strip $(DIALYZER_DEPS)),)
-dialyzer: base-plt
-	@$(DIALYZER) $(DIALYZER_OPTS) -r ebin
+dialyzer: $(BASE_PLT)
+	@$(DIALYZER) $(DIALYZER_OPTS) --plts $(BASE_PLT) -r ebin
 else
-dialyzer: base-plt $(DEPS_PLT)
+dialyzer: $(BASE_PLT) $(DEPS_PLT)
 	@$(DIALYZER) $(DIALYZER_OPTS) --plts $(BASE_PLT) $(DEPS_PLT) -r ebin
 
 $(DEPS_PLT):
@@ -150,13 +162,23 @@ $(DEPS_PLT):
 endif
 
 $(BASE_PLT):
-	@echo "Missing $(BASE_PLT). Please wait while a new PLT is compiled."
-	$(DIALYZER) --build_plt --apps $(ERLANG_DIALYZER_APPS) --output_plt $(BASE_PLT)
-	@echo "now try your build again"
+ifeq ($(TRAVIS),true)
+		@echo "Attempting to download PLT: $(BASE_PLT_URL)."
+		-wget $(BASE_PLT_URL)
 
-base-plt: $(BASE_PLT)
-	# needed for backward-compatibility reasons
-	[ -r ~/.dialyzer_plt ] || ln -s $(BASE_PLT) ~/.dialyzer_plt
+		@if [ -f $(BASE_PLT) ] ; then \
+			echo "Downloaded PLT successfully to $(BASE_PLT)" ; \
+		else \
+			echo "Download failed. Please wait while a new PLT is compiled." ; \
+			$(DIALYZER) --build_plt --apps $(ERLANG_DIALYZER_APPS) --output_plt $(BASE_PLT) ; \
+			echo "now try your build again" ; \
+		fi;
+
+else
+		@echo "Missing $(BASE_PLT). Please wait while a new PLT is compiled."
+		$(DIALYZER) --build_plt --apps $(ERLANG_DIALYZER_APPS) --output_plt $(BASE_PLT)
+		@echo "now try your build again"
+endif
 
 doc:
 	@$(REBARC) doc skip_deps=true
@@ -175,8 +197,19 @@ RELX_OPTS ?=
 RELX_OUTPUT_DIR ?= _rel
 ifeq ($(RELX),)
 RELX = $(CURDIR)/relx
+RELX_VERSION = 1.0.4
+else
+RELX_VERSION = $(shell relx --version)
 endif
-RELX_URL = https://github.com/erlware/relx/releases/download/v1.0.2/relx
+RELX_URL = https://github.com/erlware/relx/releases/download/v$(RELX_VERSION)/relx
+
+# relx introduced a breaking change in v1: the output doesn't have the same structure
+# see https://github.com/erlware/relx/releases/tag/v1.0.0
+ifeq ($(shell echo $(RELX_VERSION) | head -c 1), 0)
+RELX_RELEASE_DIR = $(RELX_OUTPUT_DIR)
+else
+RELX_RELEASE_DIR = $(RELX_OUTPUT_DIR)/$(PROJ)
+endif
 
 $(RELX):
 	curl -Lo relx $(RELX_URL) || wget $(RELX_URL)
@@ -186,7 +219,7 @@ rel: relclean all_but_dialyzer $(RELX)
 	@$(RELX) -c $(RELX_CONFIG) -o $(RELX_OUTPUT_DIR) $(RELX_OPTS)
 
 devrel: rel
-devrel: lib_dir=$(wildcard $(RELX_OUTPUT_DIR)/lib/$(PROJ)-* )
+devrel: lib_dir=$(wildcard $(RELX_RELEASE_DIR)/lib/$(PROJ)-* )
 devrel:
 	@/bin/echo Symlinking deps and apps into release
 	@rm -rf $(lib_dir); mkdir -p $(lib_dir)
