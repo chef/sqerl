@@ -118,7 +118,8 @@ inspect_ast([_|T], TheState) ->
 walk_ast(Acc, [], _TheState) ->
     lists:reverse(Acc);
 %% EOF? Append the Sqerl_Rec abstractions
-walk_ast(Acc, [{eof, _Line}=H], #state{append_ast=ASTAddOns}=TheState) ->
+walk_ast(Acc, [{eof, Line}=H], TheState) ->
+    ASTAddOns = generate_our_functions(Line, TheState),
     walk_ast([H|ASTAddOns] ++ Acc, [], TheState);
 %% Right after the module directive add our exports and behavior directive
 walk_ast(Acc, [{attribute, L, module, Module}=H|T], TheState) ->
@@ -129,26 +130,18 @@ walk_ast(Acc, [{attribute, L, module, Module}=H|T], TheState) ->
 walk_ast(Acc,
          [{attribute, Line, record, {Name, _Fields}}=H|T],
          #state{typed_record=false, record=Name}=TheState) ->
-    ASTAddOns = generate(Line, TheState),
+    ASTAddOns = generate_types(Line, TheState),
     walk_ast(ASTAddOns ++ [H|Acc], T, TheState);
 %% Do the same thing here for typed records
 walk_ast(Acc, [{attribute, Line, type, {{record, Name}, _RType,_}}=H|T],
                                    #state{record=Name} = TheState) ->
-    ASTAddOns = generate(Line, TheState),
+    ASTAddOns = generate_types(Line, TheState),
     walk_ast(ASTAddOns ++ [H|Acc], T, TheState);
 %% Swallow the original exports, we've got it covered above.
 walk_ast(Acc, [{attribute, _L, export, _}|T], TheState) ->
     walk_ast(Acc, T, TheState);
 walk_ast(Acc, [H|T], TheState) ->
     walk_ast([H|Acc], T, TheState).
-
-%% Generate all our code
-generate(Line, TheState) ->
-    ASTAddOns = lists:reverse(
-        generate_types(Line, TheState)
-        ++
-        generate_our_functions(Line, TheState)),
-    ASTAddOns.
 
 %% Function name wrappers, in case we want to change the conventions
 fname(new) -> '#new';
@@ -162,14 +155,16 @@ fname(Atom) when is_atom(Atom) ->
   ).
 
 generate_our_functions(L, TheState) ->
-    lists:flatten([
-        f_new_(L, TheState),
-        f_get_(L, TheState),
-        f_fromlist_(L, TheState),
-        f_info_(L, TheState),
-        f_is_(L, TheState),
-        f_set_(L, TheState)
-    ]).
+    lists:reverse(
+        lists:flatten([
+            f_new_(L, TheState),
+            f_get_(L, TheState),
+            f_fromlist_(L, TheState),
+            f_info_(L, TheState),
+            f_is_(L, TheState),
+            f_set_(L, TheState)
+        ])
+    ).
 
 %% generates the new/0 function
 f_new_(L, #state{module=Module}) ->
@@ -327,7 +322,7 @@ f_set_(L, #state{record=RecName, fields=Fields}) ->
     ].
 
 generate_types(L, #state{record=RecName, fields=Fields, types=Types}) ->
-    [
+    lists:reverse([
     %% Type one, the record!
     {attribute, L, type, {RecName, {type, L, record, [{atom, L, RecName}] }, []}},
     %% Possible attributes
@@ -340,7 +335,7 @@ generate_types(L, #state{record=RecName, fields=Fields, types=Types}) ->
     || {A,T} <- Types]}, []}}
     ,
     {attribute, L, export_type, [{attr,0}, {RecName, 0}, {prop, 0}]}
-    ].
+    ]).
 
 bad_record_op(L, Fname, Val, R) ->
     {call, L, {remote, L, {atom,L,erlang}, {atom,L,error}},
