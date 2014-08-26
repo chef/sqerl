@@ -21,6 +21,10 @@
           email
          }).
 
+-type custom_type() :: atom().
+
+-export_type([{custom_type,0}]).
+
 '#insert_fields'() ->
     [kitchen_id,
      name,

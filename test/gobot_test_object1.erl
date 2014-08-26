@@ -19,6 +19,10 @@
     '#table_name'/0
     ]).
 
+-type custom_type() :: atom().
+
+-export_type([{custom_type,0}]).
+
 '#insert_fields'() ->
     [name, rank, serial_no, non_typed].
 
