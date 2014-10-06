@@ -50,7 +50,7 @@
 -define(PGSQL_ERROR_CODES, [{<<"23505">>, conflict}, {<<"23503">>, foreign_key}]).
 
 checkout() ->
-    pooler:take_member(sqerl).
+    pooler:take_member(sqerl, envy:get(sqerl, pooler_timeout, 0, integer)).
 
 checkin(Connection) ->
     pooler:return_member(sqerl, Connection).

@@ -31,6 +31,7 @@
                 ["Chris", "Maier", 0, <<"2011-10-03 16:47:46">>, true],
                 ["Elvis", "Presley", 16, <<"2011-10-04 16:47:46">>, false]]).
 -define(POOL_NAME, sqerl).
+-define(POOLER_TIMEOUT, 500).
 -define(MAX_POOL_COUNT, 3).
 
 -compile([export_all]).
@@ -49,6 +50,7 @@ setup_env() ->
     ok = application:set_env(sqerl, db_pass, "itest"),
     ok = application:set_env(sqerl, db_name, ?GET_ARG(db, Info)),
     ok = application:set_env(sqerl, idle_check, 10000),
+    ok = application:set_env(sqerl, pooler_timeout, ?POOLER_TIMEOUT),
     %% we could also call it like this:
     %% {prepared_statements, statements()},
     %% {prepared_statements, "itest/statements_pgsql.conf"},
@@ -196,9 +198,9 @@ basic_test_() ->
      ]}.
 
 kill_pool(1) ->
-    pooler:take_member(?POOL_NAME);
+    pooler:take_member(?POOL_NAME, ?POOLER_TIMEOUT);
 kill_pool(X) ->
-    pooler:take_member(?POOL_NAME),
+    pooler:take_member(?POOL_NAME, ?POOLER_TIMEOUT),
     kill_pool(X - 1).
 
 pool_overflow() ->
