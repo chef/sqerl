@@ -33,6 +33,7 @@ suites:
       synced_folders:
         - ['<%= repo_root %>', '/root/sqerl', 'type: "rsync", rsync__exclude: <%= parse_gitignore_to_list repo_root %>']
     run_list:
+      - 'apt'
       - 'git'
       - 'postgresql::server'
       - 'esl-erlang'
