@@ -1,27 +1,28 @@
-DB_TYPE ?= pgsql
--include itest/$(DB_TYPE)_conf.mk
+CT_DIR = common_test
 
-itest_create:
-	@echo Creating integration test database
-	@${DB_CMD} < itest/itest_${DB_TYPE}_create.sql
+ALL_HOOK = ct
 
-itest_clean:
-	@rm -f itest/*.beam
-	@echo Dropping integration test database
-	@${DB_CMD} < itest/itest_${DB_TYPE}_clean.sql
+ct: clean_ct compile
+	$(REBARC) ct skip_deps=true
 
-itest_module_%:
-	# sadly enough, make macros are not expanded in target names
-	$(MAKE) compile	itest_create itest_run_module_$* itest_clean
+ct_fast: clean_ct
+	$(REBARC) compile ct skip_deps=true
 
-itest_run_module_%:
-	cd itest && erlc -I ../include *.erl
-	erl -pa deps/*/ebin -pa ebin -pa itest -noshell \
-		-eval "ok = eunit:test($*, [verbose])" \
-		-s erlang halt -db_type $(DB_TYPE)
+# Runs a specific test suite
+# e.g. make ct_deliv_hand_user_authn
+# supports a regex as argument, as long as it only matches one suite
+ct_%: clean_ct
+	@ SUITE=$$(if [ -f "$(CT_DIR)/$*_SUITE.erl" ]; then \
+		echo "$*"; \
+	else \
+		FIND_RESULT=$$(find "$(CT_DIR)" -name "*$**_SUITE\.erl"); \
+		[ -z "$$FIND_RESULT" ] && echo "No suite found with input '$*'" 1>&2 && exit 1; \
+		NB_MACTHES=$$(echo "$$FIND_RESULT" | wc -l) && [[ $$NB_MACTHES != 1 ]] && echo -e "Found $$NB_MACTHES suites matching input:\n$$FIND_RESULT" 1>&2 && exit 1; \
+		echo "$$FIND_RESULT" | perl -wlne 'print $$1 if /\/([^\/]+)_SUITE\.erl/'; \
+	fi) && COMMAND="$(REBARC) ct suite=$$SUITE" && echo $$COMMAND && eval $$COMMAND;
 
-itest: itest_module_itest
+clean_ct:
+	@rm -f $(CT_DIR)/*.beam
+	@rm -rf $(CT_DIR)/logs
 
-perftest: itest_module_perftest
-
-.PHONY: itest itest_clean itest_create itest_run perftest
+.PHONY: ct clean_ct ct_fast
