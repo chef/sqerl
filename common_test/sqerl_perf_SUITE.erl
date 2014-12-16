@@ -15,30 +15,25 @@
 %% under the License.
 %%
 
--module(perftest).
+-module(sqerl_perf_SUITE).
 
 -exports([setup_env/0, basic_test_/0]).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("common_test/include/ct.hrl").
 -include("sqerl.hrl").
 
 -compile([export_all]).
 
-perf_test_() ->
-    itest:setup_env(),
-    Status = application:start(sqerl),
-    %% sqerl should start or already be running for each test
-    ?assert(lists:member(Status, [ok, {error, {already_started, sqerl}}])),
-    {
-     foreach,
-     fun() -> error_logger:tty(true) end,
-     fun(_) -> error_logger:tty(true) end,
-     [
-      {timeout, 600, {<<"Adhoc insert">>, fun adhoc_insert/0}}
-     ]
-    }.
+all() -> [perf_test].
 
-adhoc_insert() ->
+init_per_testcase(_, Config) ->
+    pgsql_test_buddy:clean(),
+    pgsql_test_buddy:create(Config),
+    pgsql_test_buddy:setup_env(),
+    Config.
+
+perf_test(Config) ->
     adhoc_insert(10000, 1),
     adhoc_insert(10000, 10),
     adhoc_insert(10000, 100),
@@ -61,5 +56,5 @@ adhoc_insert_delete_test(Table, Columns, Data, BatchSize) ->
     {ok, _DeleteCount} = sqerl:adhoc_delete(Table, all).
 
 info_msg(Count, BatchSize, Microsecs) ->
-    error_logger:info_msg("Inserted ~p rows at batch size ~p in ~p microsec: ~p microsec/record~n",
+    ct:pal("Inserted ~p rows at batch size ~p in ~p microsec: ~p microsec/record~n",
                           [Count, BatchSize, Microsecs, Microsecs/Count]).

@@ -13,4 +13,4 @@ addons:
 
 install: true
 
-script: "make get-rebar all itest"
+script: "make get-rebar all"
