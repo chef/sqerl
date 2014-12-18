@@ -34,18 +34,22 @@
          is_connected/1,
          sql_parameter_style/0]).
 
+-define(EPGSQL_TIMEOUT_ERROR, {error,error,<<"57014">>,
+                                  <<"canceling statement due to statement timeout">>,
+                                  []}).
 -ifdef(TEST).
 -compile([export_all]).
 -endif.
 
--record(state,  {cn,
+-record(state,  {cn = undefined :: pid() | undefined,
                  %% The statements dict is the backing store of meta data for prepared
                  %% queries on this connection. It maps named queries (atoms) to either a
                  %% `#prepared_statement{}' record or the SQL needed to create the prepared
                  %% query as a binary. The dict should only be manipulated via `pqc_*'
                  %% functions.
                  statements = dict:new() :: sqerl_dict(),
-                 ctrans :: sqerl_dict() | undefined }).
+                 ctrans :: sqerl_dict() | undefined,
+                 default_timeout = 0 :: non_neg_integer() }).
 
 -record(prepared_statement,
         {name :: string(),
@@ -77,6 +81,7 @@
               State :: #state{}) ->
                   {sqerl_results(), #state{}}.
 execute(SQL, Parameters, #state{cn=Cn}=State) when is_binary(SQL) ->
+    set_statement_timeout(State),
     TParameters = input_transforms(Parameters),
     case pgsql:equery(Cn, SQL, TParameters) of
         {ok, Columns, Rows} ->
@@ -85,7 +90,10 @@ execute(SQL, Parameters, #state{cn=Cn}=State) when is_binary(SQL) ->
             {{ok, Count}, State};
         {ok, Count, Columns, Rows} ->
             {{ok, {Count, format_result(Columns, Rows)}}, State};
+        {error, ?EPGSQL_TIMEOUT_ERROR} ->
+            {{error, timeout}, State};
         {error, Error} ->
+            io:format("Error, ~p", [Error]),
             {{error, Error}, State}
     end;
 %% Prepared statement execution
@@ -95,6 +103,7 @@ execute(StatementName, Parameters, #state{cn = Cn, statements = Statements} = St
 
 execute_prepared({#prepared_statement{} = PrepStmt, Statements}, Parameters,
                  #state{cn = Cn, ctrans = CTrans} = State) ->
+    set_statement_timeout(State),
     Stmt = PrepStmt#prepared_statement.stmt,
     TParameters = input_transforms(Parameters, PrepStmt, State),
     ok = pgsql:bind(Cn, Stmt, TParameters),
@@ -115,6 +124,9 @@ execute_prepared({#prepared_statement{} = PrepStmt, Statements}, Parameters,
             Rows = unpack_rows(PrepStmt, RowData),
             TRows = sqerl_transformers:by_column_name(Rows, CTrans),
             {ok, Count, TRows};
+        {error, ?EPGSQL_TIMEOUT_ERROR} ->
+            pgsql:sync(Cn),
+            {error, timeout};
         Other ->
             pgsql:sync(Cn),
             {error, Other}
@@ -178,23 +190,23 @@ init(Config) ->
             false -> undefined
         end,
     case pgsql:connect(Host, User, Pass, Opts) of
-        {error, timeout} ->
-            {stop, timeout};
+        %% epgsql/epgsql no longer handles connect timeouts. It's listed as a TODO in the
+        %% source
+        %% {error, timeout} ->
+        %%     {stop, timeout};
         {ok, Connection} ->
             %% Link to pid so if this process dies we clean up
             %% the socket
             erlang:link(Connection),
             {ok, Prepared} = load_statements(Statements),
-            {ok, #state{cn=Connection, statements=Prepared, ctrans=CTrans}};
-        {error, {syntax, Msg}} ->
-            {stop, {syntax, Msg}};
-        {error, _} = Error ->
-            Error1 = sqerl_pgsql_errors:translate(Error),
-            error_logger:error_msg("Unable to start database connection: ~p~n", [Error1]),
-            Error1;
-        X ->
-            error_logger:error_report(X),
-            {stop, X}
+            {ok, #state{cn=Connection, statements=Prepared, ctrans=CTrans, default_timeout=Timeout}};
+        %% I [jd] can't find any evidence of this clause in the wg/epgsql
+        %%{error, {syntax, Msg}} ->
+        %%    {stop, {syntax, Msg}};
+        {error, Error} ->
+            ErrorMsg = sqerl_pgsql_errors:translate(Error),
+            error_logger:error_msg("Unable to start database connection: ~p~n", [ErrorMsg]),
+            ErrorMsg
     end.
 
 %% Internal functions
@@ -397,3 +409,10 @@ input_transforms(Parameters) ->
 -spec transform(any()) -> any().
 transform({datetime, X}) -> X;
 transform(X) -> X.
+
+-spec set_statement_timeout(#state{}) -> term().
+set_statement_timeout(#state{cn=Cn, default_timeout=T}) ->
+    SQL = list_to_binary(
+        lists:flatten(io_lib:format("set statement_timeout=~p", [T]))),
+    %%lager:error("Setting timeout: ~p", [SQL]),
+    pgsql:squery(Cn, SQL).

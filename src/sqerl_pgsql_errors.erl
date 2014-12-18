@@ -20,12 +20,16 @@
 %% @doc Translates Postgres error codes into human-friendly error tuples
 -module(sqerl_pgsql_errors).
 
+-include_lib("epgsql/include/pgsql.hrl").
+
 -export([translate/1,
          translate_code/1]).
 
 %% Error codes taken from http://www.postgresql.org/docs/9.1/static/errcodes-appendix.html
 
--spec translate({error, binary()} | term()) -> {error, atom()} | term().
+-spec translate(#error{} | {error, binary()} | term()) -> {error, atom()} | term().
+translate(#error{code=Code}=_Error) ->
+    translate({error, Code});
 translate({error, Code}) when is_binary(Code) ->
     {error, {Code, translate_code(Code)}};
 translate(Error) ->
