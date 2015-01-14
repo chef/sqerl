@@ -93,7 +93,6 @@ execute(SQL, Parameters, #state{cn=Cn}=State) when is_binary(SQL) ->
         {error, ?EPGSQL_TIMEOUT_ERROR} ->
             {{error, timeout}, State};
         {error, Error} ->
-            io:format("Error, ~p", [Error]),
             {{error, Error}, State}
     end;
 %% Prepared statement execution
