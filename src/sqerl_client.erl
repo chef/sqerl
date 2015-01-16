@@ -67,7 +67,7 @@
 
 -record(state, {cb_mod,
                 cb_state,
-                timeout}).
+                timeout = 5000 :: pos_integer()}).
 
 %% behavior callback definitions
 -callback init(Config :: [{atom(), term()}]) ->
@@ -137,9 +137,8 @@ init(CallbackMod) ->
               {column_transforms, envy:get(sqerl, column_transforms, list)}],
     case CallbackMod:init(Config) of
         {ok, CallbackState} ->
-            Timeout = IdleCheck,
             {ok, #state{cb_mod=CallbackMod, cb_state=CallbackState,
-                        timeout=Timeout}, Timeout};
+                        timeout=IdleCheck}, IdleCheck};
         Error ->
             {stop, Error}
     end.
