@@ -24,7 +24,7 @@
 -behaviour(sqerl_client).
 
 -include_lib("sqerl.hrl").
--include_lib("epgsql/include/pgsql.hrl").
+-include_lib("epgsql/include/epgsql.hrl").
 
 %% sqerl_client callbacks
 -export([init/1,
@@ -83,7 +83,7 @@
 execute(SQL, Parameters, #state{cn=Cn}=State) when is_binary(SQL) ->
     set_statement_timeout(State),
     TParameters = input_transforms(Parameters),
-    case pgsql:equery(Cn, SQL, TParameters) of
+    case epgsql:equery(Cn, SQL, TParameters) of
         {ok, Columns, Rows} ->
             {{ok, format_result(Columns, Rows)}, State};
         {ok, Count} ->
@@ -105,32 +105,32 @@ execute_prepared({#prepared_statement{} = PrepStmt, Statements}, Parameters,
     set_statement_timeout(State),
     Stmt = PrepStmt#prepared_statement.stmt,
     TParameters = input_transforms(Parameters, PrepStmt, State),
-    ok = pgsql:bind(Cn, Stmt, TParameters),
-    Result = try pgsql:execute(Cn, Stmt) of
+    ok = epgsql:bind(Cn, Stmt, TParameters),
+    Result = try epgsql:execute(Cn, Stmt) of
         {ok, Count} when is_integer(Count) ->
             % returned for update, delete, so sync db
-            pgsql:sync(Cn),
+            epgsql:sync(Cn),
             {ok, Count};
         {ok, RowData} when is_list(RowData) ->
             % query results, read-only, so no sync needed...?
             % call it just in case, it shouldn't hurt
-            pgsql:sync(Cn),
+            epgsql:sync(Cn),
             Rows = unpack_rows(PrepStmt, RowData),
             TRows = sqerl_transformers:by_column_name(Rows, CTrans),
             {ok, TRows};
         {ok, Count, RowData} when is_list(RowData), is_integer(Count) ->
-            pgsql:sync(Cn),
+            epgsql:sync(Cn),
             Rows = unpack_rows(PrepStmt, RowData),
             TRows = sqerl_transformers:by_column_name(Rows, CTrans),
             {ok, Count, TRows};
         {error, ?EPGSQL_TIMEOUT_ERROR} ->
-            pgsql:sync(Cn),
+            epgsql:sync(Cn),
             {error, timeout};
         Other ->
-            pgsql:sync(Cn),
+            epgsql:sync(Cn),
             {error, Other}
         catch _:X ->
-            pgsql:sync(Cn),
+            epgsql:sync(Cn),
             {error, X}
         end,
     {Result, State#state{statements = Statements}};
@@ -167,7 +167,7 @@ unprepare(Name, #state{cn=Cn, statements=Statements}=State) ->
 sql_parameter_style() -> dollarn.
 
 is_connected(#state{cn=Cn}=State) ->
-    case catch pgsql:squery(Cn, ?PING_QUERY) of
+    case catch epgsql:squery(Cn, ?PING_QUERY) of
         {ok, _, _} ->
             {true, State};
         _ ->
@@ -188,7 +188,7 @@ init(Config) ->
             {column_transforms, CT} -> CT;
             false -> undefined
         end,
-    case pgsql:connect(Host, User, Pass, Opts) of
+    case epgsql:connect(Host, User, Pass, Opts) of
         %% epgsql/epgsql no longer handles connect timeouts. It's listed as a TODO in the
         %% source
         %% {error, timeout} ->
@@ -301,9 +301,9 @@ pqc_fetch_internal(_Name, {ok, PrepQ}, Cache, _Con, _PrepareFun) ->
 -spec prepare_statement(connection(), atom(), sqerl_sql()) ->
     {ok, #prepared_statement{}} | {error, term()}.
 prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
-    case pgsql:parse(Connection, atom_to_list(Name), SQL, []) of
+    case epgsql:parse(Connection, atom_to_list(Name), SQL, []) of
         {ok, Statement} ->
-            {ok, {statement, SName, Desc, DataTypes}} = pgsql:describe(Connection, Statement),
+            {ok, {statement, SName, Desc, DataTypes}} = epgsql:describe(Connection, Statement),
             ColumnData = [ {CN, CT} || {column, CN, CT, _, _, _} <- Desc ],
             P = #prepared_statement{
               name = SName,
@@ -331,7 +331,7 @@ unload_statement(Connection, Name, Dict) ->
 unprepare_statement(Connection, Name) when is_atom(Name) ->
     SQL = list_to_binary([<<"DEALLOCATE ">>, atom_to_binary(Name, latin1)]),
     %% Have to do squery here (execute/3 uses equery which will try to prepare)
-    {ok, _, _} = pgsql:squery(Connection, SQL),
+    {ok, _, _} = epgsql:squery(Connection, SQL),
     ok.
 
 
@@ -414,4 +414,4 @@ set_statement_timeout(#state{cn=Cn, default_timeout=T}) ->
     SQL = list_to_binary(
         lists:flatten(io_lib:format("set statement_timeout=~p", [T]))),
     %%lager:error("Setting timeout: ~p", [SQL]),
-    pgsql:squery(Cn, SQL).
+    epgsql:squery(Cn, SQL).
