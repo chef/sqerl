@@ -6,7 +6,6 @@ otp_release:
   - R16B03
   - R16B02
   - R16B01
-  - R15B03
 
 addons:
   postgresql: "9.3"
