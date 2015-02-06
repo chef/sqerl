@@ -20,7 +20,7 @@
 %% @doc Translates Postgres error codes into human-friendly error tuples
 -module(sqerl_pgsql_errors).
 
--include_lib("epgsql/include/pgsql.hrl").
+-include_lib("epgsql/include/epgsql.hrl").
 
 -export([translate/1,
          translate_code/1]).
