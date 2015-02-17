@@ -39,6 +39,14 @@
 -compile([export_all]).
 -endif.
 
+% reference libpsql - this 'magic number' is the fixed value of
+% 'infinity' for postgres - below from libpq/timestamp.h. Note that
+% there will be some incompatibility here if run against a build that does not
+% have INT64 timestamp support.
+% #ifdef HAVE_INT64_TIMESTAMP
+% #define DT_NOEND	(INT64CONST(0x7fffffffffffffff))
+-define(INFINITY_TIMESTAMP, {{294277,1,9},{4,0,54.775807}}).
+
 -include_lib("eunit/include/eunit.hrl").
 
 rows() ->
@@ -121,12 +129,16 @@ count(Count) ->
 b2i(X) when is_binary(X) ->
     list_to_integer(binary_to_list(X)).
 
+parse_timestamp_to_datetime(<<"infinity">>) ->
+    ?INFINITY_TIMESTAMP;
 parse_timestamp_to_datetime(TS) when is_binary(TS) ->
     {match, [_, Year,Month,Day,Hour,Min,Sec]} =
         re:run(TS, "^(\\d+)-(\\d+)-(\\d+)\s(\\d+):(\\d+):(\\d+)",
                [{capture, all, binary}]),
     {{b2i(Year),b2i(Month),b2i(Day)}, {b2i(Hour),b2i(Min),b2i(Sec)}}.
 
+convert_YMDHMS_tuple_to_datetime(?INFINITY_TIMESTAMP) ->
+    {datetime, <<"infinity">>};
 convert_YMDHMS_tuple_to_datetime({{Y,Mo,D}, {H,Mi,S}}) ->
     {datetime, {{Y,Mo,D}, {H,Mi,trunc(S)}}}.
 
