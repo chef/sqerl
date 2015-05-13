@@ -103,38 +103,47 @@ execute_prepared({#prepared_statement{} = PrepStmt, Statements}, Parameters,
                  #state{cn = Cn, ctrans = CTrans} = State) ->
     Stmt = PrepStmt#prepared_statement.stmt,
     TParameters = input_transforms(Parameters, PrepStmt, State),
-    ok = epgsql:bind(Cn, Stmt, TParameters),
-    Result = try epgsql:execute(Cn, Stmt) of
-        {ok, Count} when is_integer(Count) ->
+    % epsql:execute_batch pipelines the multiple calls into epgsql we had to make for
+    % bind, execute, sync.
+    Result = try epgsql:execute_batch(Cn, [{Stmt, TParameters}]) of
+        % NOTE we ignore additional data for now, but this opens up the possibility of accepting a list of
+        % prepared statements and returning separate responses for each in a single call.
+        [{ok, Count}|_] when is_integer(Count) ->
             % returned for update, delete, so sync db
-            epgsql:sync(Cn),
             {ok, Count};
-        {ok, RowData} when is_list(RowData) ->
-            % query results, read-only, so no sync needed...?
-            % call it just in case, it shouldn't hurt
-            epgsql:sync(Cn),
+        [{ok, RowData}|_] when is_list(RowData) ->
             Rows = unpack_rows(PrepStmt, RowData),
             TRows = sqerl_transformers:by_column_name(Rows, CTrans),
             {ok, TRows};
-        {ok, Count, RowData} when is_list(RowData), is_integer(Count) ->
-            epgsql:sync(Cn),
+        [{ok, Count, RowData}|_] when is_list(RowData), is_integer(Count) ->
             Rows = unpack_rows(PrepStmt, RowData),
             TRows = sqerl_transformers:by_column_name(Rows, CTrans),
             {ok, Count, TRows};
-        {error, ?EPGSQL_TIMEOUT_ERROR} ->
-            epgsql:sync(Cn),
-            {error, timeout};
-        Other ->
-            epgsql:sync(Cn),
-            {error, Other}
+        Unexpected ->
+            handle_error_response(Cn, Unexpected)
         catch _:X ->
-            epgsql:sync(Cn),
-            {error, X}
+            handle_error_response(Cn, X)
         end,
     {Result, State#state{statements = Statements}};
 execute_prepared(Error, _Parameters, State) ->
     %% There was an error preparing the query or the named query was not found.
     {Error, State}.
+
+handle_error_response(Cn, Response) ->
+    epgsql:sync(Cn),
+    handle_error_response(Response).
+
+% Note -
+handle_error_response([{error, ?EPGSQL_TIMEOUT_ERROR}|_]) ->
+    {error, timeout};
+handle_error_response({error, ?EPGSQL_TIMEOUT_ERROR}) ->
+    {error, timeout};
+handle_error_response({error, Error}) ->
+    {error, Error};
+handle_error_response([{error, Error}|_]) ->
+    {error, Error};
+handle_error_response(Other) ->
+    {error, Other}.
 
 
 %% @doc Prepare a new statement.
