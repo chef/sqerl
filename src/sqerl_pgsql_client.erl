@@ -81,7 +81,6 @@
               State :: #state{}) ->
                   {sqerl_results(), #state{}}.
 execute(SQL, Parameters, #state{cn=Cn}=State) when is_binary(SQL) ->
-    set_statement_timeout(State),
     TParameters = input_transforms(Parameters),
     case epgsql:equery(Cn, SQL, TParameters) of
         {ok, Columns, Rows} ->
@@ -102,7 +101,6 @@ execute(StatementName, Parameters, #state{cn = Cn, statements = Statements} = St
 
 execute_prepared({#prepared_statement{} = PrepStmt, Statements}, Parameters,
                  #state{cn = Cn, ctrans = CTrans} = State) ->
-    set_statement_timeout(State),
     Stmt = PrepStmt#prepared_statement.stmt,
     TParameters = input_transforms(Parameters, PrepStmt, State),
     ok = epgsql:bind(Cn, Stmt, TParameters),
@@ -198,6 +196,7 @@ init(Config) ->
             %% the socket
             erlang:link(Connection),
             {ok, Prepared} = load_statements(Statements),
+            set_statement_timeout(Connection, Timeout),
             {ok, #state{cn=Connection, statements=Prepared, ctrans=CTrans, default_timeout=Timeout}};
         %% I [jd] can't find any evidence of this clause in the wg/epgsql
         %%{error, {syntax, Msg}} ->
@@ -409,9 +408,8 @@ input_transforms(Parameters) ->
 transform({datetime, X}) -> X;
 transform(X) -> X.
 
--spec set_statement_timeout(#state{}) -> term().
-set_statement_timeout(#state{cn=Cn, default_timeout=T}) ->
+-spec set_statement_timeout(connection(), integer()) -> term().
+set_statement_timeout(Connection, Timeout) ->
     SQL = list_to_binary(
-        lists:flatten(io_lib:format("set statement_timeout=~p", [T]))),
-    %%lager:error("Setting timeout: ~p", [SQL]),
-    epgsql:squery(Cn, SQL).
+            lists:flatten(io_lib:format("set statement_timeout=~p", [Timeout]))),
+    epgsql:squery(Connection, SQL).
