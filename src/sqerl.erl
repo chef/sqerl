@@ -113,6 +113,9 @@ statement(StmtName, StmtArgs, XformName, XformArgs) ->
             {ok, none};
         {ok, N} when is_number(N) ->
             {ok, N};
+        % response from execute of raw sql
+        {ok, {N, Rows}} when is_number(N) ->
+            {ok, N, Rows};
         {ok, N, Rows} when is_number(N) ->
             {ok, N, Rows};
         {error, Reason} ->
@@ -396,11 +399,14 @@ parse_error(Reason) ->
 
 -spec parse_error(pgsql,
                   'no_connections' |
+                  {'error', 'error', _, _, _} |
                   {'error', {'error', _, _, _, _}}) -> sqerl_error().
 parse_error(_DbType, no_connections) ->
     {error, no_connections};
 parse_error(_DbType, {error, Reason} = Error) when is_atom(Reason) ->
     Error;
+parse_error(pgsql, {error, error, Code, Message, _Extra}) ->
+    do_parse_error({Code, Message}, ?PGSQL_ERROR_CODES);
 parse_error(pgsql, {error,               % error from sqerl
                     {error,              % error record marker from epgsql
                      _Severity,          % Severity
