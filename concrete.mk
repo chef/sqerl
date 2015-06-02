@@ -85,9 +85,6 @@ ERLANG_DIALYZER_APPS ?= asn1 \
 
 PROJ = $(notdir $(CURDIR))
 
-# Let's compute $(BASE_PLT_ID) that identifies the base PLT to use for this project
-# and depends on your `$(ERLANG_DIALYZER_APPS)' list and your erlang version
-ERLANG_VERSION := $(shell $(ERL) -eval 'io:format("~s~n", [erlang:system_info(otp_release)]), halt().' -noshell)
 MD5_BIN := $(shell which md5 || which md5sum)
 ifeq ($(MD5_BIN),)
 # neither md5 nor md5sum, we just take the project name
@@ -103,10 +100,10 @@ ifeq ($(TRAVIS),true)
 ## reported by erlang:system_info(otp_release)
 ## s3cmd put --acl-public --guess-mime-type <FILENAME> s3://concrete-plts
 
-BASE_PLT := travis-erlang-$(ERLANG_VERSION).plt
+BASE_PLT := travis-erlang-$(TRAVIS_OTP_RELEASE).plt
 BASE_PLT_URL := http://s3.amazonaws.com/concrete-plts/$(BASE_PLT)
 else
-BASE_PLT := ~/.concrete_dialyzer_plt_$(BASE_PLT_ID)_$(ERLANG_VERSION).plt
+BASE_PLT := ~/.concrete_dialyzer_plt_$(BASE_PLT_ID)_$(TRAVIS_OTP_RELEASE).plt
 endif
 
 all: .concrete/DEV_MODE $(DEPS)
