@@ -67,6 +67,7 @@
          qfetch/3,
          cquery/3,
          update/1,
+         update/2,
          scalar_fetch/3,
          statements/1,
          statements_for/1,
@@ -250,10 +251,14 @@ insert(Rec) ->
 %% without making an additional round trip.
 -spec update(db_rec()) -> [db_rec()] | {error, _}.
 update(Rec) ->
+    update(Rec, id).
+
+-spec update(db_rec(), atom()) -> [db_rec()] | {error, _}.
+update(Rec, By) ->
     RecName = rec_name(Rec),
     UpdateFields = RecName:'#update_fields'(),
     Values = rec_to_vlist(Rec, UpdateFields),
-    Id = RecName:getval(id, Rec),
+    Id = RecName:getval(By, Rec),
     qfetch(RecName, update, Values ++ [Id]).
 
 %% @doc Delete the rows where the column identified by `By' matches
