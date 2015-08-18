@@ -157,6 +157,11 @@ kitchen_test_() ->
                               "query did not return a single column",
                               [kitchen, fetch_all, []]}}},
                             sqerl_rec:scalar_fetch(kitchen, fetch_all, []))
+       end},
+      {"cinsert",
+       fun() ->
+               {K0, _Name} = make_kitchen(<<"pingpang">>),
+               {ok, 1} = sqerl_rec:cinsert(K0)
        end}
      ]}.
 
