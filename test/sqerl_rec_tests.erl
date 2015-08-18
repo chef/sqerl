@@ -158,10 +158,45 @@ kitchen_test_() ->
                               [kitchen, fetch_all, []]}}},
                             sqerl_rec:scalar_fetch(kitchen, fetch_all, []))
        end},
-      {"cinsert",
+      {"cinsert and delete",
        fun() ->
-               {K0, _Name} = make_kitchen(<<"pingpang">>),
-               {ok, 1} = sqerl_rec:cinsert(K0)
+               {K0, _Name} = make_kitchen(<<"pingpong">>),
+               ?assertMatch({ok, 1}, sqerl_rec:cinsert(K0)),
+               sqerl_rec:delete(K0, id)
+       end},
+      {"cquery and delete",
+       fun() ->
+               {K0, _KName0} = make_kitchen(<<"basket">>),
+               [K1] = sqerl_rec:insert(K0),
+               KitchenId = kitchen:getval(id, K1),
+               {C0, _CName0} = make_cook(<<"grace">>, KitchenId,
+                                        <<"grace">>, <<"hopper">>),
+               [C1] = sqerl_rec:insert(C0),
+               C2 = sqerl_rec:cquery(cook, update_email_to_null, []),
+               ?assertMatch({ok, 1}, C2),
+               sqerl_rec:delete(K0, id),
+               sqerl_rec:delete(C1, id)
+       end},
+      {"cquery cleanvals and delete",
+       fun() ->
+               {K0, _KName0} = make_kitchen(<<"basket">>),
+               [K1] = sqerl_rec:insert(K0),
+               KitchenId = kitchen:getval(id, K1),
+               {C0, _CName0} = make_cook(<<"grace">>, KitchenId,
+                                        <<"grace">>, <<"hopper">>),
+               [C1] = sqerl_rec:insert(C0),
+               %% email is converted from undefined to null and then back
+               %% during the qfetch
+               C2 = sqerl_rec:cquery(cook, update_all_emails, [undefined]),
+               ?assertMatch({ok, 1}, C2),
+               Results = sqerl_rec:qfetch(cook, fetch_null_emails,[]),
+               ?assertMatch(true,
+                            lists:all(fun(R) ->
+                                        cook:getval(email, R) == undefined
+                                      end, Results)),
+               sqerl_rec:delete(K0, id),
+               sqerl_rec:delete(C1, id)
+
        end}
      ]}.
 
