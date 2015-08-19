@@ -64,6 +64,7 @@
          fetch_page/3,
          first_page/0,
          insert/1,
+         cinsert/1,
          qfetch/3,
          cquery/3,
          update/1,
@@ -150,7 +151,8 @@ qfetch(RecName, Query, Vals) ->
 -spec cquery(atom(), atom_list(), [any()]) -> {ok, integer()} | {error, _}.
 cquery(RecName, Query, Vals) ->
     RealQ = join_atoms([RecName, '_', Query]),
-    case sqerl:select(RealQ, Vals) of
+    CleanVals = [undef_to_null(V) || V <- Vals],
+    case sqerl:select(RealQ, CleanVals) of
         {ok, N} when is_integer(N) ->
             {ok, N};
         {ok, N, _Rows} when is_integer(N) ->
@@ -159,7 +161,7 @@ cquery(RecName, Query, Vals) ->
             Msg = "query returned rows and no count; expected count",
             {error,
              {{ok, Rows},
-              {sqerl_rec, cquery, Msg, [RecName, Query, Vals]}}};
+              {sqerl_rec, cquery, Msg, [RecName, Query, CleanVals]}}};
         Error ->
             ensure_error(Error)
     end.
@@ -238,6 +240,18 @@ insert(Rec) ->
     InsertFields = RecName:'#insert_fields'(),
     Values = rec_to_vlist(Rec, InsertFields),
     qfetch(RecName, insert, Values).
+
+%% @doc Insert record `Rec' using prepared query `RecName_insert'. The
+%% fields of `Rec' passed as parameters to the query are determined by
+%% `RecName:'#insert_fields/0'. The result is ignored and only the
+%% count is returned.
+-spec cinsert(db_rec()) -> {ok, integer()} | {error, _}.
+cinsert(Rec) ->
+    RecName = rec_name(Rec),
+    InsertFields = RecName:'#insert_fields'(),
+    Values = rec_to_vlist(Rec, InsertFields),
+    cquery(RecName, insert, Values).
+
 
 %% @doc Update record `Rec'. Uses the prepared query with name
 %% `RecName_update'. Assumes an `id' field and corresponding column
