@@ -56,7 +56,11 @@
      {fetch_null_last_names,
       ["SELECT id, kitchen_id, name, auth_token, auth_token_bday, ",
        "ssh_pub_key, first_name, last_name, email FROM cookers "
-       "WHERE last_name IS NULL AND kitchen_id = $1"]}].
+       "WHERE last_name IS NULL AND kitchen_id = $1"]},
+     {update_email_to_null, ["update cookers set email=null"]},
+     {update_all_emails, ["update cookers set email=$1"]},
+     {fetch_null_emails, ["select * from cookers where email is null"]}
+    ].
 
 '#table_name'() ->
     "cookers".
