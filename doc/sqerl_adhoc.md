@@ -13,7 +13,7 @@ __Authors:__ Jean-Philippe Langlois ([`jpl@opscode.com`](mailto:jpl@opscode.com)
 
 ## Description ##
 
- 
+
 Copyright 2011-2012 Opscode, Inc. All Rights Reserved.
 
 
@@ -175,10 +175,10 @@ Note: Validates that parameters are safe.
   {<<"SELECT id FROM t WHERE (id < ? OR id > ?)">>, [5,10]}
   Group By Clause
   ---------------
-  Form: {groupby, Fields}
+  Form: {group_by, Fields}
   Order By Clause
   ---------------
-  Form: {orderby, Fields | {Fields, asc|desc}}
+  Form: {order_by, Fields | {Fields, asc|desc}}
   Limit/Offset Clause
   --------------------
   Form: {limit, Limit} | {limit, {Limit, offset, Offset}}
@@ -213,5 +213,3 @@ not supported.
   1> update(<<"users">>, [{<<"last_name">>, <<"Toto">>}], {<<"id">>, equals, 1}, qmark).
   {<<"UPDATE users SET last_name = ? WHERE id = ?">>, [<<"Toto">>, 1]}
 ```
-
-

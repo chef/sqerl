@@ -141,10 +141,10 @@ Execute an adhoc select query with additional clauses.
 ```
   Group By Clause
   ---------------
-  Form: {groupby, Fields}
+  Form: {group_by, Fields}
   Order By Clause
   ---------------
-  Form: {orderby, Fields | {Fields, asc|desc}}
+  Form: {order_by, Fields | {Fields, asc|desc}}
   Limit/Offset Clause
   --------------------
   Form: {limit, Limit} | {limit, {Limit, offset, Offset}}
@@ -285,5 +285,3 @@ Returns {Columns, RowsValues}.
 ### with_db/1 ###
 
 `with_db(Call) -> any()`
-
-
