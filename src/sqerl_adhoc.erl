@@ -80,17 +80,17 @@
 %%
 %% Group By Clause
 %% ---------------
-%% Form: {groupby, Fields}
+%% Form: {group_by, Fields}
 %%
 %% Order By Clause
 %% ---------------
-%% Form: {orderby, Fields | {Fields, asc|desc}}
+%% Form: {order_by, Fields | {Fields, asc|desc}}
 %%
 %% Limit/Offset Clause
 %% --------------------
 %% Form: {limit, Limit} | {limit, {Limit, offset, Offset}}
 %%
-%% ParamStyle is qmark (?, ?, ... for e.g. mysql) 
+%% ParamStyle is qmark (?, ?, ... for e.g. mysql)
 %% or dollarn ($1, $2, etc. for e.g. pgsql)
 %% '''
 -spec select([sql_word()], sql_word(), [] | [sql_clause()], atom()) -> {binary(), list()}.
@@ -157,7 +157,7 @@ limit_sql({Limit, offset, Offset}) when is_integer(Limit), is_integer(Offset) ->
 %% @doc Generate UPDATE statement.
 %%
 %% Update is given under the form of a Row (proplist).
-%% Uses the same Where specifications as select/4 except for "all" which is 
+%% Uses the same Where specifications as select/4 except for "all" which is
 %% not supported.
 %%
 %% ```
@@ -357,14 +357,14 @@ where_subs([Where|WhereList], ParamStyle, ParamPosOffset, WherePartsAcc, ValuesA
 %% Walks io lists.
 %% Returns safe binary value (converts atoms and strings to binary).
 ensure_safe(Value) when is_binary(Value) ->
-    {match, _} = re:run(Value, ?SAFE_VALUE_RE), 
+    {match, _} = re:run(Value, ?SAFE_VALUE_RE),
     Value;
 ensure_safe([Char|_]=Str) when is_integer(Char) ->
     %% string
     ensure_safe(list_to_binary(Str));
 ensure_safe(Value) when is_atom(Value) ->
     ensure_safe(list_to_binary(atom_to_list(Value)));
-ensure_safe([H]) -> 
+ensure_safe([H]) ->
     [ensure_safe(H)];
 ensure_safe([H|T]) ->
     [ensure_safe(H)|ensure_safe(T)].
