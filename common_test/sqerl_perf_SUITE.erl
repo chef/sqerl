@@ -21,7 +21,6 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
--include("sqerl.hrl").
 
 -compile([export_all]).
 
@@ -33,7 +32,7 @@ init_per_testcase(_, Config) ->
     pgsql_test_buddy:setup_env(),
     Config.
 
-perf_test(Config) ->
+perf_test(_Config) ->
     adhoc_insert(10000, 1),
     adhoc_insert(10000, 10),
     adhoc_insert(10000, 100),
