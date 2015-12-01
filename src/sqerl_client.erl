@@ -156,7 +156,11 @@ handle_cast(_Msg, #state{timeout=Timeout}=State) ->
 handle_info(timeout, #state{cb_mod=CBMod, cb_state=CBState, timeout=Timeout}=State) ->
     case CBMod:is_connected(CBState) of
         {true, CBState1} ->
-            {noreply, State#state{cb_state=CBState1}, Timeout};
+            %% Kill active connections that timeout. This fixes issues related to
+            %% the record the CNAME points to changing and needing to re-resolve.
+            error_logger:warning_msg("Timeout reached for active connection. Shutting down ~p~n",
+                                     [self()]),
+            {stop, shutdown, CBState1};
         false ->
             error_logger:warning_msg("Failed to verify idle connection. Shutting down ~p~n",
                                      [self()]),
