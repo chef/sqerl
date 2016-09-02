@@ -108,19 +108,19 @@ start_link(CB) ->
 init({Pool, none}) ->
     init({Pool, drivermod()});
 init({Pool, CallbackMod}) ->
-    Statements = read_statements_from_config(Pool),
     Cfg = pool_config(Pool),
+    Statements = read_statements_from_config(Pool),
     IdleCheck = envy:proplist_get(idle_check, non_neg_integer, Cfg, 1000),
     Host = envy:proplist_get(db_host, string, Cfg),
     Config = [{host, envy_parse:parse_host_to_ip(sqerl, Host)},
-              {port, envy:proplist_get(db_port, pos_integer, Cfg)}, % pos_integer
-              {user, envy:proplist_get(db_user, string, Cfg)},      % string
-              {pass, envy:proplist_get(db_pass, string, Cfg )},     % string
-              {db, envy:proplist_get(db_name, string, Cfg)}, % string
-              {timeout, envy:proplist_get(db_timeout, pos_integer, Cfg, 1000)}, %post_integer
-              {idle_check, IdleCheck},% non_neg_integer
+              {port, envy:proplist_get(db_port, pos_integer, Cfg)},
+              {user, envy:proplist_get(db_user, string, Cfg)},
+              {pass, envy:proplist_get(db_pass, string, Cfg )},
+              {db, envy:proplist_get(db_name, string, Cfg)},
+              {timeout, envy:proplist_get(db_timeout, pos_integer, Cfg, 1000)},
+              {idle_check, IdleCheck},
               {prepared_statements, Statements},
-              {column_transforms, envy:proplist_get(column_transforms, list, Cfg, [])} %list
+              {column_transforms, envy:proplist_get(column_transforms, list, Cfg, [])}
              ],
     case CallbackMod:init(Config) of
         {ok, CallbackState} ->
@@ -210,8 +210,8 @@ sql_parameter_style() ->
 %% translates.
 -spec drivermod() -> atom().
 drivermod() ->
-    case envy:get(sqerl, db_driver_mod, undefined, atom) of
-        undefined ->
+    case envy:get(sqerl, db_driver_mod, unknown, atom) of
+        unknown ->
             case envy:get(sqerl, db_type, sqerl_pgsql_client, atom) of
                 pgsql ->
                     %% default pgsql driver mod
@@ -265,4 +265,15 @@ maybe_log(_, _) ->
     ok.
 
 pool_config(Pool) ->
-    envy:proplist_get(Pool, list, envy:get(sqerl, databases, list)).
+    % Support backward compatibility for configurations that do not specify
+    % 'databases'.
+    C = case envy:get(sqerl, databases, none, list) of
+        none ->
+            application:get_all_env(sqerl);
+        Databases ->
+            envy:proplist_get(Pool, list, Databases)
+    end,
+    io:fwrite("C: ~p", [C]),
+    C.
+
+
