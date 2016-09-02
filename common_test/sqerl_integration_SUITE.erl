@@ -14,7 +14,7 @@
 
 all() -> [pool_overflow, insert_data, insert_returning, select_data, select_data_as_record,
             select_first_number_zero, delete_data, update_datablob, select_boolean, update_created,
-            select_simple, adhoc_select, adhoc_insert, insert_select_gzip_data, array_test,
+            select_simple, select_simple_pool2, adhoc_select, adhoc_insert, insert_select_gzip_data, array_test,
             select_timeout, execute_timeout].
 
 init_per_testcase(_, Config) ->
@@ -133,11 +133,17 @@ select_simple(Config) ->
     {ok, Count} = sqerl:execute(SqlCount),
     [[{<<"num_users">>, 5}]] = Count,
 
+
+
     %% select_simple_with_parameters() ->
     Sql = <<"select id from users where last_name = $1">>,
     {ok, Rows} = sqerl:execute(Sql, ["Smith"]),
     ExpectedRows = [[{<<"id">>,1}]],
     ?assertEqual(ExpectedRows, Rows).
+
+select_simple_pool2(_Config) ->
+    {ok, Count} = sqerl_mp:execute(pool2, <<"SELECT COUNT(*) FROM only_in_itest_pool2_db">>),
+    ?assertEqual(0, Count).
 
 adhoc_select(Config) ->
     insert_data(Config),

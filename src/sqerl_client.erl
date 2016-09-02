@@ -1,8 +1,9 @@
 %% -*- erlang-indent-level: 4;indent-tabs-mode: nil; fill-column: 92 -*-
 %% ex: ts=4 sw=4 et
 %% @author Kevin Smith <kevin@opscode.com>
+%% @author Marc Paradise <marc@chef.io>
 %% @doc Abstraction around interacting with SQL databases
-%% Copyright 2011-2012 Opscode, Inc. All Rights Reserved.
+%% Copyright 2011-2015 Chef Software, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -24,24 +25,6 @@
 -include_lib("sqerl.hrl").
 
 -behaviour(gen_server).
-
--define(LOG_STATEMENT(Name, Args), case envy:get(sqerl, log_statements, ok, boolean) of
-                                       ok ->
-                                           ok;
-                                       false ->
-                                           ok;
-                                       true ->
-                                           error_logger:info_msg("(~p) Executing statement ~p with args ~p~n", [self(), Name, Args])
-                                   end).
-
--define(LOG_RESULT(Result), case envy:get(sqerl, log_statements, ok, boolean) of
-                                ok ->
-                                    ok;
-                                false ->
-                                    ok;
-                                true ->
-                                    error_logger:info_msg("(~p) Result: ~p~n", [self(), Result])
-                            end).
 
 %% API
 -export([start_link/0,
@@ -67,6 +50,7 @@
 
 -record(state, {cb_mod,
                 cb_state,
+                pool :: atom(),
                 timeout = 5000 :: pos_integer()}).
 
 %% behavior callback definitions
@@ -114,34 +98,40 @@ close(Cn) ->
 
 
 start_link() ->
-    gen_server:start_link(?MODULE, [], []).
-start_link(DbType) ->
-    gen_server:start_link(?MODULE, [DbType], []).
+    gen_server:start_link(?MODULE, {sqerl, none}, []).
 
-init([]) ->
-    init(drivermod());
-init(CallbackMod) ->
-    IdleCheck = envy:get(sqerl,idle_check, 1000, non_neg_integer),
+start_link({pool, Pool}) ->
+    gen_server:start_link(?MODULE,{Pool, none}, []);
+start_link(CB) ->
+    gen_server:start_link(?MODULE, {sqerl, CB}, []).
 
-    Statements = read_statements_from_config(),
-
-    %% The ip_mode key in the sqerl clause determines if we parse db_host as IPv4 or IPv6
-    Config = [{host, envy_parse:host_to_ip(sqerl, db_host)},
-              {port, envy:get(sqerl, db_port, pos_integer)},
-              {user, envy:get(sqerl, db_user, string)},
-              {pass, envy:get(sqerl, db_pass, string)},
-              {db, envy:get(sqerl, db_name, string)},
-              {timeout, envy:get(sqerl,db_timeout, 5000, pos_integer)},
-              {idle_check, IdleCheck},
+init({Pool, none}) ->
+    init({Pool, drivermod()});
+init({Pool, CallbackMod}) ->
+    % TODO staements!
+    Statements = read_statements_from_config(Pool),
+    Cfg = pool_config(Pool),
+    IdleCheck = envy:proplist_get(idle_check, non_neg_integer, Cfg, 1000),
+    Host = envy:proplist_get(db_host, string, Cfg),
+    Config = [{host, envy_parse:parse_host_to_ip(sqerl, Host)},
+              {port, envy:proplist_get(db_port, pos_integer, Cfg)}, % pos_integer
+              {user, envy:proplist_get(db_user, string, Cfg)},      % string
+              {pass, envy:proplist_get(db_pass, string, Cfg )},     % string
+              {db, envy:proplist_get(db_name, string, Cfg)}, % string
+              {timeout, envy:proplist_get(db_timeout, pos_integer, Cfg, 1000)}, %post_integer
+              {idle_check, IdleCheck},% non_neg_integer
               {prepared_statements, Statements},
-              {column_transforms, envy:get(sqerl, column_transforms, list)}],
+              {column_transforms, envy:proplist_get(column_transforms, list, [], Cfg)} %list
+             ],
     case CallbackMod:init(Config) of
         {ok, CallbackState} ->
-            {ok, #state{cb_mod=CallbackMod, cb_state=CallbackState,
+            {ok, #state{pool=Pool,
+                        cb_mod=CallbackMod, cb_state=CallbackState,
                         timeout=IdleCheck}, IdleCheck};
         Error ->
             {stop, Error}
     end.
+
 
 handle_call({Call, QueryOrStatementName, Args}, From, State) ->
     exec_driver({Call, QueryOrStatementName, Args}, From, State);
@@ -173,11 +163,14 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% @doc Call DB driver process
 exec_driver({Call, QueryOrName, Args}, _From, #state{cb_mod=CBMod, cb_state=CBState, timeout=Timeout}=State) ->
-    ?LOG_STATEMENT(QueryOrName, Args),
+    % Don't keep logging flag in state, so that it can be easily
+    % switched on for debug.
+    % TODO - logging per-pool?
+    LogIt = envy:get(sqerl, log_statements, false, boolean),
+    maybe_log(LogIt, QueryOrName, Args),
     {Result, NewCBState} = apply(CBMod, Call, [QueryOrName, Args, CBState]),
-    ?LOG_RESULT(Result),
+    maybe_log(LogIt, Result),
     {reply, Result, State#state{cb_state=NewCBState}, Timeout}.
-
 
 %% @doc Prepared statements can be provides as a list of `{atom(), binary()}' tuples, as a
 %% path to a file that can be consulted for such tuples, or as `{M, F, A}' such that
@@ -241,14 +234,8 @@ drivermod() ->
             log_and_error({invalid_application_config, sqerl, db_driver_mod, Error})
     end.
 
-%% Helper function to report and error
-
-log_and_error(Msg) ->
-    error_logger:error_report(Msg),
-    error(Msg).
-
-read_statements_from_config() ->
-    StatementSource = envy:get(sqerl, prepared_statements, any),
+read_statements_from_config(Pool) ->
+    StatementSource = envy:proplist_get(prepared_statements, any, pool_config(Pool)),
     try
         read_statements(StatementSource)
     catch
@@ -257,3 +244,23 @@ read_statements_from_config() ->
             error_logger:error_report(Msg),
             error(Msg)
     end.
+
+
+%% Helper function to report and error
+
+log_and_error(Msg) ->
+    error_logger:error_report(Msg),
+    error(Msg).
+
+maybe_log(true, QueryOrName, Args) ->
+    error_logger:info_msg("(~p) Executing statement ~p with args ~p~n", [self(), QueryOrName, Args]);
+maybe_log(_, _, _) ->
+    ok.
+
+maybe_log(true, Results) ->
+    error_logger:info_msg("(~p) Result: ~p~n", [self(), Results]);
+maybe_log(_, _) ->
+    ok.
+
+pool_config(Pool) ->
+    envy:proplist_get(Pool, list, envy:get(sqerl, databases, list)).

@@ -24,25 +24,32 @@
 
 clean() ->
     [ os:cmd(io_lib:format(?DB_CMD, [Cmd])) || Cmd <- [
-        "drop database if exists itest",
-        "drop database if exists itest2",
-        "drop user if exists itest",
-        "drop user if exists itest2"
+        "drop database if exists itest_sqerl1",
+        "drop database if exists itest_sqerl2",
+        "drop user if exists itest_sqerl1",
+        "drop user if exists itest_sqerl2"
     ]].
 
-create(Config) ->
+config_file(Config, File) ->
     Dir = lists:reverse(filename:split(?config(data_dir, Config))),
     {_, Good} = lists:split(1, Dir),
-    File = filename:join(lists:reverse(Good) ++ ["pgsql_create.sql"]),
-    ct:pal("File: ~s", [File]),
-    os:cmd(io_lib:format(?DB_PIPE_CMD, [File])).
+    filename:join(lists:reverse(Good) ++ [File]).
+
+create(Config) ->
+    File1 = config_file(Config, "pgsql_create_itest2.sql"),
+    ct:pal("SQL File 1/2: ~s", [File1]),
+    os:cmd(io_lib:format(?DB_PIPE_CMD, [File1])),
+    File2 = config_file(Config, "pgsql_create.sql"),
+    ct:pal("SQL File 222: ~s", [File2]),
+    os:cmd(io_lib:format(?DB_PIPE_CMD, [File2])).
 
 setup_env() ->
     application:stop(sasl),
     % By default we're going to set up multi-pool - this gives defacto verification
     % that nothing gets broken in existing code (or tests) when the pool name is not
     % specified.
-    EnvCfg = config([{sqerl, "itest_sqerl"}, {pool1, "itest_sqerl_pool1"}]),
+    EnvCfg = config([{sqerl, "itest_sqerl1"},
+                     {poo12, "itest_sqerl2"}]),
     set_env_for(sqerl, ?config(sqerl, EnvCfg)),
     set_env_for(pooler, ?config(pooler, EnvCfg)),
     ct:pal("Environment configuration: ~p", [[{sqerl, application:get_all_env(sqerl)},
@@ -72,24 +79,22 @@ config(DBInfo) ->
               {databases, [ sqerl_db_config(Id, Name) || {Id, Name} <- DBInfo ]}
              ]},
      {pooler, [
-               {pools, [ pool_config(Id) || {Id, _} <- DBInfo ]},
-               {metrics_module, folsom_metrics}
+               {pools, [ pool_config(Id) || {Id, _} <- DBInfo ]}
+               %{metrics_module, folsom_metrics}
               ]
     }].
 
 sqerl_db_config(Id, TheName) ->
-    {Id,  [{db_driver_mod, sqerl_pgsql_client},
-           {ip_mode, [ipv4]},
-           {db_host, "127.0.0.1"},
+    {Id,  [{db_host, "127.0.0.1"},
            {db_port, 5432 },
            {db_user, TheName},
            {db_pass, TheName},
            {db_name, TheName},
            {db_timeout, 5000},
            {idle_check, 1000},
-           {column_transforms, []},
-           {prepared_statements,  {obj_user, '#statements', []}}
-          ]
+           {column_transforms,  [{<<"created">>,
+                                  fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}]},
+           {prepared_statements,  {obj_user, '#statements', []}} ]
     }.
 
 pool_config(Id) ->

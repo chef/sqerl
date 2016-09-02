@@ -1,10 +1,10 @@
-CREATE USER itest_sqerl WITH ENCRYPTED PASSWORD 'itest_sqerl';
+CREATE USER itest_sqerl1 WITH ENCRYPTED PASSWORD 'itest_sqerl1';
 
 
-CREATE DATABASE itest_sqerl OWNER itest_sqerl;
-GRANT ALL PRIVILEGES ON DATABASE itest_sqerl TO itest_sqerl;
+CREATE DATABASE itest_sqerl1 OWNER itest_sqerl1;
+GRANT ALL PRIVILEGES ON DATABASE itest_sqerl1 TO itest_sqerl1;
 
-\c itest_sqerl;
+\c itest_sqerl1;
 CREATE SEQUENCE users_id_sequence;
 /* Create test tables */
 CREATE TABLE users (
@@ -17,8 +17,8 @@ CREATE TABLE users (
        created timestamp
 );
 
-GRANT ALL PRIVILEGES ON TABLE users TO itest_sqerl;
-GRANT ALL PRIVILEGES ON SEQUENCE users_id_sequence TO itest_sqerl;
+GRANT ALL PRIVILEGES ON TABLE users TO itest_sqerl1;
+GRANT ALL PRIVILEGES ON SEQUENCE users_id_sequence TO itest_sqerl1;
 
 CREATE TABLE nodes (
        id char(32) PRIMARY KEY,
@@ -32,7 +32,7 @@ CREATE TABLE nodes (
        updated_at timestamp NOT NULL
 );
 
-GRANT ALL PRIVILEGES ON TABLE nodes TO itest_sqerl;
+GRANT ALL PRIVILEGES ON TABLE nodes TO itest_sqerl1;
 
 CREATE OR REPLACE FUNCTION insert_users(varchar[],
     varchar[],
@@ -59,7 +59,7 @@ CREATE TABLE uuids (
        id uuid UNIQUE NOT NULL
 );
 
-GRANT ALL PRIVILEGES ON TABLE uuids TO itest_sqerl;
+GRANT ALL PRIVILEGES ON TABLE uuids TO itest_sqerl1;
 
 CREATE OR REPLACE FUNCTION insert_ids(uuid[])
 RETURNS VOID AS

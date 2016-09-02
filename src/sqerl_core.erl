@@ -34,9 +34,9 @@
          execute_statement/5,
          bulk_insert/6,
          parse_error/1,
-         param_style/0,
          parse_statement_results/1,
-         parse_select_results/1]).
+         parse_select_results/1,
+         extract_insert_data/1]).
 
 checkout(Pool) ->
     pooler:take_member(Pool, envy:get(sqerl, pooler_timeout, 0, integer)).
@@ -107,7 +107,7 @@ execute(Pool, QueryOrStatement, Parameters) ->
 
 bulk_insert(Pool, Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= BatchSize ->
     Inserter = make_batch_inserter(Table, Columns, RowsValues, NumRows, BatchSize),
-    sqerl_core:with_db(Pool, Inserter).
+    with_db(Pool, Inserter).
 
 %% @doc Returns a function to call via sqerl_core:with_db/1.
 %%
@@ -119,12 +119,14 @@ bulk_insert(Pool, Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >
 %% unpreparing must all be done against the same DB connection.
 %%
 make_batch_inserter(Table, Columns, RowsValues, NumRows, BatchSize) ->
-    SQL = sqerl_adhoc:insert(Table, Columns, BatchSize, sqerl_client:sql_parameter_style()),
+    ParamStyle = sqerl_client:sql_parameter_style(),
+    SQL = sqerl_adhoc:insert(Table, Columns, BatchSize, ParamStyle),
+
     fun(Cn) ->
         ok = sqerl_client:prepare(Cn, ?SQERL_ADHOC_INSERT_STMT_ATOM, SQL),
         try
             insert_batches(Cn, ?SQERL_ADHOC_INSERT_STMT_ATOM,
-                           Table, Columns, RowsValues, NumRows, BatchSize)
+                           Table, Columns, RowsValues, NumRows, BatchSize, ParamStyle)
         after
             sqerl_client:unprepare(Cn, ?SQERL_ADHOC_INSERT_STMT_ATOM)
         end
@@ -132,31 +134,31 @@ make_batch_inserter(Table, Columns, RowsValues, NumRows, BatchSize) ->
 
 
 %% @doc Insert data with insert statement already prepared.
-insert_batches(Cn, StmtName, Table, Columns, RowsValues, NumRows, BatchSize) ->
-    insert_batches(Cn, StmtName, Table, Columns, RowsValues, NumRows, BatchSize, 0).
+insert_batches(Cn, StmtName, Table, Columns, RowsValues, NumRows, BatchSize, ParamStyle) ->
+    insert_batches(Cn, StmtName, Table, Columns, RowsValues, NumRows, BatchSize, 0, ParamStyle).
 
 %% @doc Tail-recursive function iterates over batches and inserts them.
 %% Also inserts the remaining rows (if any) in one shot.
 %% Returns {ok, InsertedCount}.
-insert_batches(Cn, StmtName, Table, Columns, RowsValues, NumRows, BatchSize, CountSoFar)
+insert_batches(Cn, StmtName, Table, Columns, RowsValues, NumRows, BatchSize, CountSoFar, ParamStyle)
         when NumRows >= BatchSize ->
     {RowsValuesToInsert, Rest} = lists:split(BatchSize, RowsValues),
     {ok, Count} = insert_oneshot(Cn, StmtName, RowsValuesToInsert),
-    insert_batches(Cn, StmtName, Table, Columns, Rest, NumRows - Count, BatchSize, CountSoFar + Count);
-insert_batches(Cn, _StmtName, Table, Columns, RowsValues, _NumRows, _BatchSize, CountSoFar) ->
+    insert_batches(Cn, StmtName, Table, Columns, Rest, NumRows - Count, BatchSize, CountSoFar + Count, ParamStyle);
+insert_batches(Cn, _StmtName, Table, Columns, RowsValues, _NumRows, _BatchSize, CountSoFar, ParamStyle) ->
     %% We have fewer rows than fit in a batch, so we'll do a one-shot insert for those.
-    {ok, InsertCount} = adhoc_insert_oneshot(Cn, Table, Columns, RowsValues),
+    {ok, InsertCount} = adhoc_insert_oneshot(Cn, Table, Columns, RowsValues, ParamStyle),
     {ok, CountSoFar + InsertCount}.
 
 %% @doc Insert all given rows in one shot.
 %% Creates one SQL statement to insert all the rows at once,
 %% then executes.
 %% Returns {ok, InsertedCount}.
-adhoc_insert_oneshot(_Cn, _Table, _Columns, []) ->
+adhoc_insert_oneshot(_Cn, _Table, _Columns, [], _ParamStyle) ->
     %% 0 rows means nothing to do!
     {ok, 0};
-adhoc_insert_oneshot(Cn, Table, Columns, RowsValues) ->
-    SQL = sqerl_adhoc:insert(Table, Columns, length(RowsValues), param_style()),
+adhoc_insert_oneshot(Cn, Table, Columns, RowsValues, ParamStyle) ->
+    SQL = sqerl_adhoc:insert(Table, Columns, length(RowsValues), ParamStyle),
     insert_oneshot(Cn, SQL, RowsValues).
 
 %% @doc Insert all rows at once using given
@@ -170,6 +172,27 @@ insert_oneshot(Cn, StmtOrSQL, RowsValues) ->
     %% to a flat list of parameters to the query
     Parameters = lists:flatten(RowsValues),
     sqerl_client:execute(Cn, StmtOrSQL, Parameters).
+
+%% @doc Extract insert data from Rows.
+%%
+%% Assumes all rows have the same format.
+%% Returns {Columns, RowsValues}.
+%%
+%% ```
+%% 1> extract_insert_data([
+%%                         [{<<"id">>, 1}, {<<"name">>, <<"Joe">>}],
+%%                         [{<<"id">>, 2}, {<<"name">>, <<"Jeff">>}],
+%%                        ]).
+%% {[<<"id">>,<<"name">>],[[1,<<"Joe">>],[2,<<"Jeff">>]]}
+%% '''
+%%
+-spec extract_insert_data(sqerl_rows()) -> {[binary()], [[term()]]}.
+extract_insert_data([]) ->
+    {[], []};
+extract_insert_data(Rows) ->
+    Columns = [C || {C, _V} <- hd(Rows)],
+    RowsValues = [[V || {_C, V} <- Row] || Row <- Rows],
+    {Columns, RowsValues}.
 
 parse_select_results({ok, []}) ->
     {ok, none};
@@ -232,9 +255,5 @@ do_parse_error({Code, Message}, CodeList) ->
             {error, {Code, Message}}
     end.
 
-
-%% @doc Shortcut for sqerl_client:parameter_style()
--spec param_style() -> atom().
-param_style() -> sqerl_client:sql_parameter_style().
 
 
