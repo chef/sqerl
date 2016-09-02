@@ -36,25 +36,17 @@ config_file(Config, File) ->
     filename:join(lists:reverse(Good) ++ [File]).
 
 create(Config) ->
-    File1 = config_file(Config, "pgsql_create_itest2.sql"),
-    ct:pal("SQL File 1/2: ~s", [File1]),
-    os:cmd(io_lib:format(?DB_PIPE_CMD, [File1])),
-    File2 = config_file(Config, "pgsql_create.sql"),
-    ct:pal("SQL File 222: ~s", [File2]),
-    os:cmd(io_lib:format(?DB_PIPE_CMD, [File2])).
+    File1 = config_file(Config, "pgsql_create.sql"),
+    ct:pal("Results of loading ~s", [File1]),
+    ct:pal( os:cmd(io_lib:format(?DB_PIPE_CMD, [File1]))).
 
 setup_env() ->
     application:stop(sasl),
     % By default we're going to set up multi-pool - this gives defacto verification
     % that nothing gets broken in existing code (or tests) when the pool name is not
     % specified.
-    EnvCfg = config([{sqerl, "itest_sqerl1"},
-                     {poo12, "itest_sqerl2"}]),
-    set_env_for(sqerl, ?config(sqerl, EnvCfg)),
-    set_env_for(pooler, ?config(pooler, EnvCfg)),
-    ct:pal("Environment configuration: ~p", [[{sqerl, application:get_all_env(sqerl)},
-                                              {pooler, application:get_all_env(pooler)}]]),
-
+    %
+    setup_config(),
     Apps = [crypto, asn1, public_key, ssl, epgsql, pooler],
     [ application:start(A) || A <- Apps ],
 
@@ -71,30 +63,42 @@ teardown_env() ->
     [application:stop(A) || A <- Apps].
 
 
+setup_config() ->
+
+    Pool1Extras = [{column_transforms,  [{<<"created">>, fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}]},
+                       {prepared_statements,  {obj_user, '#statements', []}} ],
+    Pool2Extras = [{column_transforms, []}, {prepared_statements, none}],
+    EnvCfg = config([
+                     {other, "itest_sqerl2", Pool2Extras},
+                     {sqerl, "itest_sqerl1", Pool1Extras}
+                    ]),
+    set_env_for(sqerl, ?config(sqerl, EnvCfg)),
+    set_env_for(pooler, ?config(pooler, EnvCfg)),
+    ct:pal("Environment configuration: ~p", [[{sqerl, application:get_all_env(sqerl)},
+                                              {pooler, application:get_all_env(pooler)}]]).
 config(DBInfo) ->
     [{sqerl, [
               {ip_mode, [ ipv4 ] },
               {db_driver_mod, sqerl_pgsql_client},
               {pooler_timeout, ?POOLER_TIMEOUT},
-              {databases, [ sqerl_db_config(Id, Name) || {Id, Name} <- DBInfo ]}
+              {databases, [ sqerl_db_config(Id, Name, Extras) || {Id, Name, Extras} <- DBInfo ]}
              ]},
      {pooler, [
-               {pools, [ pool_config(Id) || {Id, _} <- DBInfo ]}
+               {pools, [ pool_config(Id) || {Id, _, _} <- DBInfo ]}
                %{metrics_module, folsom_metrics}
               ]
     }].
 
-sqerl_db_config(Id, TheName) ->
-    {Id,  [{db_host, "127.0.0.1"},
-           {db_port, 5432 },
-           {db_user, TheName},
-           {db_pass, TheName},
-           {db_name, TheName},
-           {db_timeout, 5000},
-           {idle_check, 1000},
-           {column_transforms,  [{<<"created">>,
-                                  fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}]},
-           {prepared_statements,  {obj_user, '#statements', []}} ]
+sqerl_db_config(Id, TheName, Extras) ->
+    {Id,  lists:flatten([{db_host, "127.0.0.1"},
+                         {db_port, 5432},
+                         {db_user, TheName},
+                         {db_pass, TheName},
+                         {db_name, TheName},
+                         {db_timeout, 5000},
+                         {idle_check, 1000},
+                         {id, Id}, % debugging
+                         Extras ])
     }.
 
 pool_config(Id) ->

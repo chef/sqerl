@@ -1,10 +1,20 @@
 CREATE USER itest_sqerl1 WITH ENCRYPTED PASSWORD 'itest_sqerl1';
+CREATE USER itest_sqerl2 WITH ENCRYPTED PASSWORD 'itest_sqerl2';
 
 
 CREATE DATABASE itest_sqerl1 OWNER itest_sqerl1;
-GRANT ALL PRIVILEGES ON DATABASE itest_sqerl1 TO itest_sqerl1;
+CREATE DATABASE itest_sqerl2 OWNER itest_sqerl2;
+
+\c itest_sqerl2;
+GRANT ALL PRIVILEGES ON DATABASE itest_sqerl2 TO itest_sqerl2;
+CREATE TABLE only_in_itest_sqerl2_db ( name VARCHAR(128));
+GRANT ALL PRIVILEGES ON TABLE only_in_itest_sqerl2_db TO itest_sqerl2;
 
 \c itest_sqerl1;
+GRANT ALL PRIVILEGES ON DATABASE itest_sqerl1 TO itest_sqerl1;
+CREATE TABLE only_in_itest_sqerl1_db ( name VARCHAR(128));
+GRANT ALL PRIVILEGES ON TABLE only_in_itest_sqerl1_db TO itest_sqerl1;
+
 CREATE SEQUENCE users_id_sequence;
 /* Create test tables */
 CREATE TABLE users (
