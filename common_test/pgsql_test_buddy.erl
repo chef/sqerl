@@ -9,10 +9,10 @@
 % NOTE - do not merge.  Doing this because kitchen isn't syncing up my local changes
 % and spending my time debugging secondary issues (or completely cycling the kitchen boxes
 % for each test) isn't something I'm inclined to do at the moment..
-%-define(DB_PIPE_CMD, "psql -q -d postgres -h localhost -p 5432 -U " ++ ?USER ++ " -f - < ~s").
-%-define(DB_CMD, "psql -h localhost -p 5432 -U " ++ ?USER ++ " -d postgres -w -c '~s'").
--define(DB_PIPE_CMD, "sudo -u postgres psql -q -d postgres -f - < ~s").
--define(DB_CMD, "psql -d postgres -w -c '~s'").
+-define(DB_PIPE_CMD, "psql -q -d postgres -h localhost -p 5432 -U " ++ ?USER ++ " -f - < ~s").
+-define(DB_CMD, "psql -h localhost -p 5432 -U " ++ ?USER ++ " -d postgres -w -c '~s'").
+%-define(DB_PIPE_CMD, "sudo -u postgres psql -q -d postgres -f - < ~s").
+%-define(DB_CMD, "psql -d postgres -w -c '~s'").
 % END NOTE
 
 
