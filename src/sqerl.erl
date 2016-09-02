@@ -39,6 +39,7 @@
          adhoc_delete/2]).
 
 -include("sqerl.hrl").
+-define(DEFAULT_POOL, sqerl).
 
 select(StmtName, StmtArgs) ->
     select(StmtName, StmtArgs, identity, []).
@@ -49,7 +50,7 @@ select(StmtName, StmtArgs, XformName) ->
     select(StmtName, StmtArgs, XformName, []).
 
 select(StmtName, StmtArgs, XformName, XformArgs) ->
-    Results = sqerl_core:execute_statement(sqerl, StmtName, StmtArgs, XformName, XformArgs),
+    Results = sqerl_core:execute_statement(?DEFAULT_POOL, StmtName, StmtArgs, XformName, XformArgs),
     sqerl_core:parse_select_results(Results).
 
 
@@ -60,7 +61,7 @@ statement(StmtName, StmtArgs, XformName) ->
     statement(StmtName, StmtArgs, XformName, []).
 
 statement(StmtName, StmtArgs, XformName, XformArgs) ->
-    Results = sqerl_core:execute_statement(sqerl, StmtName, StmtArgs, XformName, XformArgs),
+    Results = sqerl_core:execute_statement(?DEFAULT_POOL, StmtName, StmtArgs, XformName, XformArgs),
     sqerl_core:parse_statement_results(Results).
 
 
@@ -68,7 +69,7 @@ statement(StmtName, StmtArgs, XformName, XformArgs) ->
 %% See execute/2 for return info.
 -spec execute(sqerl_query()) -> sqerl_results().
 execute(QueryOrStatement) ->
-    sqerl_core:execute(sqerl, QueryOrStatement, []).
+    sqerl_core:execute(?DEFAULT_POOL, QueryOrStatement, []).
 
 %% @doc Execute query or statement with parameters.
 %% ```
@@ -88,7 +89,7 @@ execute(QueryOrStatement) ->
 %%
 -spec execute(sqerl_query(), [] | [term()]) -> sqerl_results().
 execute(QueryOrStatement, Parameters) ->
-    sqerl_core:execute(sqerl, QueryOrStatement, Parameters).
+    sqerl_core:execute(?DEFAULT_POOL, QueryOrStatement, Parameters).
 
 
 %% @doc Execute an adhoc select query.
@@ -138,7 +139,7 @@ adhoc_select(Columns, Table, Where, Clauses) ->
                                        Table,
                                        [{where, Where}|Clauses],
                                        sqerl_client:sql_parameter_style()),
-    sqerl_core:execute(sqerl, SQL, Values).
+    sqerl_core:execute(?DEFAULT_POOL, SQL, Values).
 
 
 %% @doc Utility for generating specific message tuples from database-specific error
@@ -199,7 +200,7 @@ adhoc_insert(Table, Columns, RowsValues, BatchSize) when BatchSize > 0 ->
 
 %% @doc Bulk insert rows. Returns {ok, InsertedCount}.
 bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= BatchSize ->
-    sqerl_core:bulk_insert(sqerl, Table, Columns, RowsValues, NumRows, BatchSize) .
+    sqerl_core:bulk_insert(?DEFAULT_POOL, Table, Columns, RowsValues, NumRows, BatchSize) .
 
 
 
@@ -212,5 +213,5 @@ bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= Batc
 -spec adhoc_delete(binary(), term()) -> {ok, integer()} | {error, any()}.
 adhoc_delete(Table, Where) ->
     {SQL, Values} = sqerl_adhoc:delete(Table, Where, sqerl_client:sql_parameter_style()),
-    sqerl_core:execute(sqerl, SQL, Values).
+    sqerl_core:execute(?DEFAULT_POOL, SQL, Values).
 

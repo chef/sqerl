@@ -23,6 +23,7 @@
 
 -include("sqerl.hrl").
 -define(MAX_RETRIES, 5).
+
 %% See http://www.postgresql.org/docs/current/static/errcodes-appendix.html
 -define(PGSQL_ERROR_CODES, [{<<"23505">>, conflict}, {<<"23503">>, foreign_key}]).
 
