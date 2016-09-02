@@ -36,3 +36,6 @@
 -else.
 -type sqerl_dict() :: dict().
 -endif.
+
+-define(SQERL_DEFAULT_BATCH_SIZE, 100).
+-define(SQERL_ADHOC_INSERT_STMT_ATOM, '__adhoc_insert').

@@ -1,8 +1,10 @@
-CREATE USER itest WITH ENCRYPTED PASSWORD 'itest';
-CREATE DATABASE itest OWNER itest;
-GRANT ALL PRIVILEGES ON DATABASE itest TO itest;
+CREATE USER itest_sqerl WITH ENCRYPTED PASSWORD 'itest_sqerl';
 
-\c itest;
+
+CREATE DATABASE itest_sqerl OWNER itest_sqerl;
+GRANT ALL PRIVILEGES ON DATABASE itest_sqerl TO itest_sqerl;
+
+\c itest_sqerl;
 CREATE SEQUENCE users_id_sequence;
 /* Create test tables */
 CREATE TABLE users (
@@ -15,8 +17,8 @@ CREATE TABLE users (
        created timestamp
 );
 
-GRANT ALL PRIVILEGES ON TABLE users TO itest;
-GRANT ALL PRIVILEGES ON SEQUENCE users_id_sequence TO itest;
+GRANT ALL PRIVILEGES ON TABLE users TO itest_sqerl;
+GRANT ALL PRIVILEGES ON SEQUENCE users_id_sequence TO itest_sqerl;
 
 CREATE TABLE nodes (
        id char(32) PRIMARY KEY,
@@ -30,7 +32,7 @@ CREATE TABLE nodes (
        updated_at timestamp NOT NULL
 );
 
-GRANT ALL PRIVILEGES ON TABLE nodes TO itest;
+GRANT ALL PRIVILEGES ON TABLE nodes TO itest_sqerl;
 
 CREATE OR REPLACE FUNCTION insert_users(varchar[],
     varchar[],
@@ -57,7 +59,7 @@ CREATE TABLE uuids (
        id uuid UNIQUE NOT NULL
 );
 
-GRANT ALL PRIVILEGES ON TABLE uuids TO itest;
+GRANT ALL PRIVILEGES ON TABLE uuids TO itest_sqerl;
 
 CREATE OR REPLACE FUNCTION insert_ids(uuid[])
 RETURNS VOID AS
@@ -72,5 +74,4 @@ BEGIN
 END;
 $$
 LANGUAGE plpgsql;
-
 

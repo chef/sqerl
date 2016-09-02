@@ -1,9 +1,7 @@
 %% -*- erlang-indent-level: 4;indent-tabs-mode: nil; fill-column: 92 -*-
 %% ex: ts=4 sw=4 et
-%% @author Seth Falcon <seth@chef.io>
-%% @author Mark Anderson <mark@chef.io>
 %% @author Marc Paradise <marc.paradise@chef.io>
-%% Copyright 2011-2015 Chef Software, Inc.
+%% Copyright 2015 Chef Software, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -18,58 +16,53 @@
 %% KIND, either express or implied.  See the License for the
 %% specific language governing permissions and limitations
 %% under the License.
-%%
-
-
--module(sqerl).
-
--export([select/2,
-         select/3,
-         select/4,
-         statement/2,
-         statement/3,
-         statement/4,
-         execute/1,
-         execute/2,
-         adhoc_select/3,
-         adhoc_select/4,
-         adhoc_insert/2,
-         adhoc_insert/3,
-         adhoc_insert/4,
-         extract_insert_data/1,
-         adhoc_delete/2]).
-
+-module(sqerl_mp).
 -include("sqerl.hrl").
 
-select(StmtName, StmtArgs) ->
-    select(StmtName, StmtArgs, identity, []).
+-export([select/3,
+         select/4,
+         select/5,
+         statement/3,
+         statement/4,
+         statement/5,
+         execute/3,
+         execute/2,
+         adhoc_select/4,
+         adhoc_select/5,
+         adhoc_insert/3,
+         adhoc_insert/4,
+         adhoc_insert/5,
+         adhoc_delete/3]).
 
-select(StmtName, StmtArgs, {XformName, XformArgs}) ->
-    select(StmtName, StmtArgs, XformName, XformArgs);
-select(StmtName, StmtArgs, XformName) ->
-    select(StmtName, StmtArgs, XformName, []).
+select(Pool, StmtName, StmtArgs) ->
+    select(Pool, StmtName, StmtArgs, identity, []).
 
-select(StmtName, StmtArgs, XformName, XformArgs) ->
-    Results = sqerl_core:execute_statement(sqerl, StmtName, StmtArgs, XformName, XformArgs),
+select(Pool, StmtName, StmtArgs, {XformName, XformArgs}) ->
+    select(Pool, StmtName, StmtArgs, XformName, XformArgs);
+select(Pool, StmtName, StmtArgs, XformName) ->
+    select(Pool, StmtName, StmtArgs, XformName, []).
+
+select(Pool, StmtName, StmtArgs, XformName, XformArgs) ->
+    Results = sqerl_core:execute_statement(Pool, StmtName, StmtArgs, XformName, XformArgs),
     sqerl_core:parse_select_results(Results).
 
 
-statement(StmtName, StmtArgs) ->
-    statement(StmtName, StmtArgs, identity, []).
+statement(Pool, StmtName, StmtArgs) ->
+    statement(Pool, StmtName, StmtArgs, identity, []).
 
-statement(StmtName, StmtArgs, XformName) ->
-    statement(StmtName, StmtArgs, XformName, []).
+statement(Pool, StmtName, StmtArgs, XformName) ->
+    statement(Pool, StmtName, StmtArgs, XformName, []).
 
-statement(StmtName, StmtArgs, XformName, XformArgs) ->
-    Results = sqerl_core:execute_statement(sqerl, StmtName, StmtArgs, XformName, XformArgs),
+statement(Pool, StmtName, StmtArgs, XformName, XformArgs) ->
+    Results = sqerl_core:execute_statement(Pool, StmtName, StmtArgs, XformName, XformArgs),
     sqerl_core:parse_statement_results(Results).
 
 
 %% @doc Execute query or statement with no parameters.
 %% See execute/2 for return info.
--spec execute(sqerl_query()) -> sqerl_results().
-execute(QueryOrStatement) ->
-    sqerl_core:execute(sqerl, QueryOrStatement, []).
+-spec execute(atom(), sqerl_query()) -> sqerl_results().
+execute(Pool, QueryOrStatement) ->
+    sqerl_core:execute(Pool, QueryOrStatement, []).
 
 %% @doc Execute query or statement with parameters.
 %% ```
@@ -87,9 +80,9 @@ execute(QueryOrStatement) ->
 %% parameters.
 %% '''
 %%
--spec execute(sqerl_query(), [] | [term()]) -> sqerl_results().
-execute(QueryOrStatement, Parameters) ->
-    sqerl_core:execute(sqerl, QueryOrStatement, Parameters).
+-spec execute(atom(), sqerl_query(), [] | [term()]) -> sqerl_results().
+execute(Pool, QueryOrStatement, Parameters) ->
+    sqerl_core:execute(Pool, QueryOrStatement, Parameters).
 
 
 %% @doc Execute an adhoc select query.
@@ -113,9 +106,9 @@ execute(QueryOrStatement, Parameters) ->
 %% adhoc_select/4 takes an additional Clauses argument which
 %% is a list of additional clauses for the query.
 %% '''
--spec adhoc_select([binary() | string()], binary() | string(), atom() | tuple()) -> sqerl_results().
-adhoc_select(Columns, Table, Where) ->
-    adhoc_select(Columns, Table, Where, []).
+-spec adhoc_select(atom(), [binary() | string()], binary() | string(), atom() | tuple()) -> sqerl_results().
+adhoc_select(Pool, Columns, Table, Where) ->
+    adhoc_select(Pool, Columns, Table, Where, []).
 
 %% @doc Execute an adhoc select query with additional clauses.
 %% ```
@@ -133,13 +126,13 @@ adhoc_select(Columns, Table, Where) ->
 %% '''
 %% See itest:adhoc_select_complex/0 for an example of a complex query
 %% that uses several clauses.
--spec adhoc_select([binary() | string()], binary() | string(), atom() | tuple(), [] | [atom() | tuple()]) -> sqerl_results().
-adhoc_select(Columns, Table, Where, Clauses) ->
+-spec adhoc_select(atom(), [binary() | string()], binary() | string(), atom() | tuple(), [] | [atom() | tuple()]) -> sqerl_results().
+adhoc_select(Pool, Columns, Table, Where, Clauses) ->
     {SQL, Values} = sqerl_adhoc:select(Columns,
                                        Table,
                                        [{where, Where}|Clauses],
                                        sqerl_client:sql_parameter_style()),
-    sqerl_core:execute(sqerl, SQL, Values).
+    sqerl_core:execute(Pool, SQL, Values).
 
 
 %% @doc Utility for generating specific message tuples from database-specific error
@@ -148,8 +141,8 @@ adhoc_select(Columns, Table, Where, Clauses) ->
 %% parameter directly.
 %% @doc Insert Rows into Table with default batch size.
 %% @see adhoc_insert/3.
-adhoc_insert(Table, Rows) ->
-    adhoc_insert(Table, Rows, ?SQERL_DEFAULT_BATCH_SIZE).
+adhoc_insert(Pool, Table, Rows) ->
+    adhoc_insert(Pool, Table, Rows, ?SQERL_DEFAULT_BATCH_SIZE).
 
 %% @doc Insert Rows into Table with given batch size.
 %%
@@ -165,10 +158,10 @@ adhoc_insert(Table, Rows) ->
 %% Returns {ok, InsertCount}
 %%
 %% @see adhoc_insert/4.
-adhoc_insert(Table, Rows, BatchSize) ->
+adhoc_insert(Pool, Table, Rows, BatchSize) ->
     %% reformat Rows to desired format
     {Columns, RowsValues} = sqerl_core:extract_insert_data(Rows),
-    adhoc_insert(Table, Columns, RowsValues, BatchSize).
+    adhoc_insert(Pool, Table, Columns, RowsValues, BatchSize).
 
 %% @doc Insert records defined by {Columns, RowsValues}
 %% into Table using given BatchSize.
@@ -189,18 +182,18 @@ adhoc_insert(Table, Rows, BatchSize) ->
 %% {ok, 2}
 %% '''
 %%
-adhoc_insert(_Table, _Columns, [], _BatchSize) ->
+adhoc_insert(_Pool, _Table, _Columns, [], _BatchSize) ->
     %% empty list of rows means nothing to do
     {ok, 0};
-adhoc_insert(Table, Columns, RowsValues, BatchSize) when BatchSize > 0 ->
+adhoc_insert(Pool, Table, Columns, RowsValues, BatchSize) when BatchSize > 0 ->
     NumRows = length(RowsValues),
     %% Avoid the case where NumRows < BatchSize
     EffectiveBatchSize = erlang:min(NumRows, BatchSize),
-    bulk_insert(Table, Columns, RowsValues, NumRows, EffectiveBatchSize).
+    bulk_insert(Pool, Table, Columns, RowsValues, NumRows, EffectiveBatchSize).
 
 %% @doc Bulk insert rows. Returns {ok, InsertedCount}.
-bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= BatchSize ->
-    sqerl_core:bulk_insert(sqerl, Table, Columns, RowsValues, NumRows, BatchSize) .
+bulk_insert(Pool, Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= BatchSize ->
+    sqerl_core:bulk_insert(Pool, Table, Columns, RowsValues, NumRows, BatchSize) .
 
 
 
@@ -210,24 +203,7 @@ bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= Batc
 %% Uses the same Where specifications as adhoc_select/3.
 %% Returns {ok, Count} or {error, ErrorInfo}.
 %%
--spec adhoc_delete(binary(), term()) -> {ok, integer()} | {error, any()}.
-adhoc_delete(Table, Where) ->
+-spec adhoc_delete(atom(), binary(), term()) -> {ok, integer()} | {error, any()}.
+adhoc_delete(Pool, Table, Where) ->
     {SQL, Values} = sqerl_adhoc:delete(Table, Where, sqerl_client:sql_parameter_style()),
-    sqerl_core:execute(sqerl, SQL, Values).
-
-%% The following illustrates how we could also implement adhoc update
-%% if ever desired.
-%%
-%% %@doc Adhoc update.
-%% Updates records matching Where specifications with
-%% fields and values in given Row.
-%% Uses the same Where specifications as adhoc_select/3.
-%% Returns {ok, Count} or {error, ErrorInfo}.
-%%
-%%-spec adhoc_update(binary(), list(), term()) -> {ok, integer()} | {error, any()}.
-%%adhoc_update(Table, Row, Where) ->
-%%    {SQL, Values} = sqerl_adhoc:update(Table, Row, Where, sqerl_client:sql_parameter_style()),
-%%    execute(SQL, Values).
-
-
-
+    sqerl_core:execute(Pool, SQL, Values).

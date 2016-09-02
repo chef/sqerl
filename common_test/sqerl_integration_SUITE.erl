@@ -380,7 +380,7 @@ adhoc_insert_delete_test(Table, Columns, Data, BatchSize) ->
     Values = [Value || [Value|_] <- Data],
     Where = {Field, in, Values},
     {ok, Rows} = sqerl:adhoc_select(Columns, Table, Where),
-    {ReturnedColumns, ReturnedData} = sqerl:extract_insert_data(Rows),
+    {ReturnedColumns, ReturnedData} = sqerl_core:extract_insert_data(Rows),
     %% clean up before asserts
     {ok, DeleteCount} = sqerl:adhoc_delete(Table, Where),
     %% now verify...

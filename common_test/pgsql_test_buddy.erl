@@ -6,8 +6,15 @@
 -compile([export_all]).
 
 -define(USER, string:strip(os:cmd("echo $USER"), right, $\n)).
--define(DB_PIPE_CMD, "psql -q -d postgres -h localhost -p 5432 -U " ++ ?USER ++ " -f - < ~s").
--define(DB_CMD, "psql -h localhost -p 5432 -U " ++ ?USER ++ " -d postgres -w -c '~s'").
+% NOTE - do not merge.  Doing this because kitchen isn't syncing up my local changes
+% and spending my time debugging secondary issues (or completely cycling the kitchen boxes
+% for each test) isn't something I'm inclined to do at the moment..
+%-define(DB_PIPE_CMD, "psql -q -d postgres -h localhost -p 5432 -U " ++ ?USER ++ " -f - < ~s").
+%-define(DB_CMD, "psql -h localhost -p 5432 -U " ++ ?USER ++ " -d postgres -w -c '~s'").
+-define(DB_PIPE_CMD, "sudo -u postgres psql -q -d postgres -f - < ~s").
+-define(DB_CMD, "psql -d postgres -w -c '~s'").
+% END NOTE
+
 
 -define(POOL_NAME, sqerl).
 -define(POOLER_TIMEOUT, 500).
@@ -18,7 +25,9 @@
 clean() ->
     [ os:cmd(io_lib:format(?DB_CMD, [Cmd])) || Cmd <- [
         "drop database if exists itest",
-        "drop user if exists itest"
+        "drop database if exists itest2",
+        "drop user if exists itest",
+        "drop user if exists itest2"
     ]].
 
 create(Config) ->
@@ -30,8 +39,15 @@ create(Config) ->
 
 setup_env() ->
     application:stop(sasl),
-    set_env_for(sqerl, sqerl_config()),
-    set_env_for(pooler, pooler_config()),
+    % By default we're going to set up multi-pool - this gives defacto verification
+    % that nothing gets broken in existing code (or tests) when the pool name is not
+    % specified.
+    EnvCfg = config([{sqerl, "itest_sqerl"}, {pool1, "itest_sqerl_pool1"}]),
+    set_env_for(sqerl, ?config(sqerl, EnvCfg)),
+    set_env_for(pooler, ?config(pooler, EnvCfg)),
+    ct:pal("Environment configuration: ~p", [[{sqerl, application:get_all_env(sqerl)},
+                                              {pooler, application:get_all_env(pooler)}]]),
+
     Apps = [crypto, asn1, public_key, ssl, epgsql, pooler],
     [ application:start(A) || A <- Apps ],
 
@@ -48,29 +64,40 @@ teardown_env() ->
     [application:stop(A) || A <- Apps].
 
 
-sqerl_config() ->
-    [{db_driver_mod, sqerl_pgsql_client},
-     {ip_mode, [ipv4]},
-     {db_host, "127.0.0.1" },
-     {db_port, 5432 },
-     {db_user, "itest" },
-     {db_pass, "itest" },
-     {db_name, "itest" },
-     {idle_check, 1000},
-     {column_transforms,[{<<"created">>,
-                          fun sqerl_transformers:convert_YMDHMS_tuple_to_datetime/1}]},
-     {pooler_timeout, ?POOLER_TIMEOUT},
-     {prepared_statements,  {obj_user, '#statements', []}}
-    ].
-pooler_config() ->
-    [{pools,
-     [[{name, sqerl},
-       {max_count,  ?MAX_POOL_COUNT},
-       {init_count, 1},
-       {start_mfa, {sqerl_client, start_link, []}}
-      ]
-     ]
+config(DBInfo) ->
+    [{sqerl, [
+              {ip_mode, [ ipv4 ] },
+              {db_driver_mod, sqerl_pgsql_client},
+              {pooler_timeout, ?POOLER_TIMEOUT},
+              {databases, [ sqerl_db_config(Id, Name) || {Id, Name} <- DBInfo ]}
+             ]},
+     {pooler, [
+               {pools, [ pool_config(Id) || {Id, _} <- DBInfo ]},
+               {metrics_module, folsom_metrics}
+              ]
     }].
+
+sqerl_db_config(Id, TheName) ->
+    {Id,  [{db_driver_mod, sqerl_pgsql_client},
+           {ip_mode, [ipv4]},
+           {db_host, "127.0.0.1"},
+           {db_port, 5432 },
+           {db_user, TheName},
+           {db_pass, TheName},
+           {db_name, TheName},
+           {db_timeout, 5000},
+           {idle_check, 1000},
+           {column_transforms, []},
+           {prepared_statements,  {obj_user, '#statements', []}}
+          ]
+    }.
+
+pool_config(Id) ->
+   [{name, Id},
+    {max_count, ?MAX_POOL_COUNT},
+    {init_count, 1},
+    {start_mfa, {sqerl_client, start_link, [{pool, Id}]}},
+    {queue_max, 5}].
 
 kill_pool() -> kill_pool(?MAX_POOL_COUNT).
 kill_pool(1) ->
