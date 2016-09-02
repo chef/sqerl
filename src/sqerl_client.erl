@@ -267,13 +267,9 @@ maybe_log(_, _) ->
 pool_config(Pool) ->
     % Support backward compatibility for configurations that do not specify
     % 'databases'.
-    C = case envy:get(sqerl, databases, none, list) of
+    case envy:get(sqerl, databases, none, list) of
         none ->
             application:get_all_env(sqerl);
         Databases ->
             envy:proplist_get(Pool, list, Databases)
-    end,
-    io:fwrite("C: ~p", [C]),
-    C.
-
-
+    end.
