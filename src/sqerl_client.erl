@@ -108,7 +108,6 @@ start_link(CB) ->
 init({Pool, none}) ->
     init({Pool, drivermod()});
 init({Pool, CallbackMod}) ->
-    % TODO staements!
     Statements = read_statements_from_config(Pool),
     Cfg = pool_config(Pool),
     IdleCheck = envy:proplist_get(idle_check, non_neg_integer, Cfg, 1000),
@@ -121,7 +120,7 @@ init({Pool, CallbackMod}) ->
               {timeout, envy:proplist_get(db_timeout, pos_integer, Cfg, 1000)}, %post_integer
               {idle_check, IdleCheck},% non_neg_integer
               {prepared_statements, Statements},
-              {column_transforms, envy:proplist_get(column_transforms, list, [], Cfg)} %list
+              {column_transforms, envy:proplist_get(column_transforms, list, Cfg, [])} %list
              ],
     case CallbackMod:init(Config) of
         {ok, CallbackState} ->
@@ -175,10 +174,13 @@ exec_driver({Call, QueryOrName, Args}, _From, #state{cb_mod=CBMod, cb_state=CBSt
 %% @doc Prepared statements can be provides as a list of `{atom(), binary()}' tuples, as a
 %% path to a file that can be consulted for such tuples, or as `{M, F, A}' such that
 %% `apply(M, F, A)' returns the statements tuples.
--spec read_statements([{atom(), term()}]
+-spec read_statements(none
+                      |[{atom(), term()}]
                       | string()
                       | {atom(), atom(), list()})
                      -> [{atom(), binary()}].
+read_statements(none) ->
+    [];
 read_statements({Mod, Fun, Args}) ->
     apply(Mod, Fun, Args);
 read_statements(L = [{Label, SQL}|_T]) when is_atom(Label) andalso is_binary(SQL) ->
