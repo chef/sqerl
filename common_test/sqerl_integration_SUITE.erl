@@ -443,7 +443,7 @@ adhoc_insert(Config) ->
     end(),
     ok.
 
-insert_select_gzip_data(Config) ->
+insert_select_gzip_data(_Config) ->
     Text = <<"data to compress with gzip">>,
     GzipData = zlib:gzip(Text),
     Row = [{last_name, <<"gzip">>}, {datablob, GzipData}],

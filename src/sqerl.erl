@@ -193,11 +193,11 @@ adhoc_select(Columns, Table, Where) ->
 %% ```
 %% Group By Clause
 %% ---------------
-%% Form: {groupby, Fields}
+%% Form: {group_by, Fields}
 %%
 %% Order By Clause
 %% ---------------
-%% Form: {orderby, Fields | {Fields, asc|desc}}
+%% Form: {order_by, Fields | {Fields, asc|desc}}
 %%
 %% Limit/Offset Clause
 %% --------------------

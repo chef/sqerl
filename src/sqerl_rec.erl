@@ -341,7 +341,15 @@ statements(RecList) ->
     RecList2 = lists:usort(lists:flatten([ expand_if_app(Term) || Term <- RecList])),
     lists:flatten([ statements_for(RecName) || RecName <- RecList2 ]).
 
+ensure_application_spec_loaded(App) ->
+    case application:load(App) of
+        {error, {already_loaded, App}} -> ok;
+        Other -> Other
+    end.
+
 expand_if_app({app, App}) ->
+    %% Ensure that the application spec is loaded before trying to read its module list
+    ok = ensure_application_spec_loaded(App),
     {ok, Mods} = application:get_key(App, modules),
     %% We use the built-in function `Mod:module_info/1` to lookup the attributes
     %% of the module, then check if the sqerl_rec behaviour is present.

@@ -20,7 +20,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 make_name(Prefix) ->
-    V = io_lib:format("~B.~B.~B", erlang:tuple_to_list(erlang:now())),
+    V = io_lib:format("~B.~B.~B", erlang:tuple_to_list(os:timestamp())),
     erlang:iolist_to_binary([Prefix, V]).
 
 statements_test_() ->
