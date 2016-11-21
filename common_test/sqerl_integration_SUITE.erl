@@ -142,8 +142,8 @@ select_simple(Config) ->
     ?assertEqual(ExpectedRows, Rows).
 
 select_simple_multipool_(_Config) ->
-    [ ?_assertMatch(ok, 0), sqerl_mp:execute(other, <<"SELECT COUNT(*) FROM only_in_itest_sqerl2_db">>),
-      ?_assertMatch(ok, 0), sqerl_mp:execute(sqerl, <<"SELECT COUNT(*) FROM only_in_itest_sqerl2_db">>)].
+    [ ?_assertMatch(ok, 0), sqerl:execute_with(sqerl:make_context(other), <<"SELECT COUNT(*) FROM only_in_itest_sqerl2_db">>),
+      ?_assertMatch(ok, 0), sqerl:execute_with(sqerl:make_context(sqerl), <<"SELECT COUNT(*) FROM only_in_itest_sqerl1_db">>)].
 
 adhoc_select(Config) ->
     insert_data(Config),
@@ -369,7 +369,7 @@ adhoc_select(Config) ->
     end(),
     %% adhoc_select_limit
     fun() ->
-        {ok, Rows} = sqerl_mp:adhoc_select(sqerl, [<<"id">>], <<"users">>, all, [{order_by, [<<"id">>]}, {limit, 2}]),
+        {ok, Rows} = sqerl:adhoc_select_with(sqerl:make_context(sqerl), [<<"id">>], <<"users">>, all, [{order_by, [<<"id">>]}, {limit, 2}]),
         ExpectedRows = [
                         [{<<"id">>, 1}],
                         [{<<"id">>, 2}]

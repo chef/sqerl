@@ -23,7 +23,10 @@
 
 -module(sqerl).
 
--export([select/2,
+%% Original API exports. These will execute
+%% all queries against the default `sqerl` pool.
+-export([
+         select/2,
          select/3,
          select/4,
          statement/2,
@@ -36,10 +39,37 @@
          adhoc_insert/2,
          adhoc_insert/3,
          adhoc_insert/4,
-         adhoc_delete/2]).
+         adhoc_delete/2
+         ]).
+
+%% Context-based API functions which currently
+%% allows multipool support. These functions are identicial
+%% to their counterparts above, but each accepts a context as the
+%% first argument.
+-export([make_context/1,
+         select_with/3,
+         select_with/4,
+         select_with/5,
+         statement_with/3,
+         statement_with/4,
+         statement_with/5,
+         execute_with/3,
+         execute_with/2,
+         adhoc_select_with/4,
+         adhoc_select_with/5,
+         adhoc_insert_with/3,
+         adhoc_insert_with/4,
+         adhoc_insert_with/5,
+         adhoc_delete_with/3]).
 
 -include("sqerl.hrl").
 -define(DEFAULT_POOL, sqerl).
+
+%% TODO: consider accepting a proplist (or map if we go 17+) here so that
+%%       we can extend it without requiring people to change everywhere
+%%       they reference it...
+make_context(Pool) ->
+    #sqerl_ctx{pool = Pool}.
 
 select(StmtName, StmtArgs) ->
     select(StmtName, StmtArgs, identity, []).
@@ -50,9 +80,22 @@ select(StmtName, StmtArgs, XformName) ->
     select(StmtName, StmtArgs, XformName, []).
 
 select(StmtName, StmtArgs, XformName, XformArgs) ->
-    Results = sqerl_core:execute_statement(?DEFAULT_POOL, StmtName, StmtArgs, XformName, XformArgs),
-    sqerl_core:parse_select_results(Results).
+    select_with(make_context(?DEFAULT_POOL), StmtName, StmtArgs, XformName, XformArgs).
 
+%% @doc as select/2 with context added
+select_with(#sqerl_ctx{} = Context, StmtName, StmtArgs) ->
+    select_with(Context, StmtName, StmtArgs, identity, []).
+
+%% @doc as select/3 with context added
+select_with(#sqerl_ctx{} = Context, StmtName, StmtArgs, {XformName, XformArgs}) ->
+    select_with(Context, StmtName, StmtArgs, XformName, XformArgs);
+select_with(#sqerl_ctx{} = Context, StmtName, StmtArgs, XformName) ->
+    select_with(Context, StmtName, StmtArgs, XformName, []).
+
+%% @doc as select/4 with context added
+select_with(#sqerl_ctx{} = Context, StmtName, StmtArgs, XformName, XformArgs) ->
+    Results = sqerl_core:execute_statement(Context, StmtName, StmtArgs, XformName, XformArgs),
+    sqerl_core:parse_select_results(Results).
 
 statement(StmtName, StmtArgs) ->
     statement(StmtName, StmtArgs, identity, []).
@@ -61,15 +104,25 @@ statement(StmtName, StmtArgs, XformName) ->
     statement(StmtName, StmtArgs, XformName, []).
 
 statement(StmtName, StmtArgs, XformName, XformArgs) ->
-    Results = sqerl_core:execute_statement(?DEFAULT_POOL, StmtName, StmtArgs, XformName, XformArgs),
+    statement_with(make_context(?DEFAULT_POOL), StmtName, StmtArgs, XformName, XformArgs).
+
+statement_with(#sqerl_ctx{} = Context, StmtName, StmtArgs) ->
+    statement_with(Context, StmtName, StmtArgs, identity, []).
+
+statement_with(#sqerl_ctx{} = Context, StmtName, StmtArgs, XformName) ->
+    statement_with(Context, StmtName, StmtArgs, XformName, []).
+
+statement_with(#sqerl_ctx{} = Context, StmtName, StmtArgs, XformName, XformArgs) ->
+    Results = sqerl_core:execute_statement(Context, StmtName, StmtArgs, XformName, XformArgs),
     sqerl_core:parse_statement_results(Results).
+
 
 
 %% @doc Execute query or statement with no parameters.
 %% See execute/2 for return info.
 -spec execute(sqerl_query()) -> sqerl_results().
 execute(QueryOrStatement) ->
-    sqerl_core:execute(?DEFAULT_POOL, QueryOrStatement, []).
+    execute(QueryOrStatement, []).
 
 %% @doc Execute query or statement with parameters.
 %% ```
@@ -89,7 +142,19 @@ execute(QueryOrStatement) ->
 %%
 -spec execute(sqerl_query(), [] | [term()]) -> sqerl_results().
 execute(QueryOrStatement, Parameters) ->
-    sqerl_core:execute(?DEFAULT_POOL, QueryOrStatement, Parameters).
+    execute_with(make_context(?DEFAULT_POOL), QueryOrStatement, Parameters).
+
+
+%% @doc as execute/1, adds a sqerl_ctx() as its first argument.
+%% See execute/1 for return info.
+-spec execute_with(sqerl_ctx(), sqerl_query()) -> sqerl_results().
+execute_with(#sqerl_ctx{} = Context, QueryOrStatement) ->
+    sqerl_core:execute(Context, QueryOrStatement, []).
+
+%% @doc as execute/2, adds a sqerl_ctx() as its first argument
+-spec execute_with(sqerl_ctx(), sqerl_query(), [] | [term()]) -> sqerl_results().
+execute_with(#sqerl_ctx{} = Context, QueryOrStatement, Parameters) ->
+    sqerl_core:execute(Context, QueryOrStatement, Parameters).
 
 
 %% @doc Execute an adhoc select query.
@@ -135,18 +200,32 @@ adhoc_select(Columns, Table, Where) ->
 %% that uses several clauses.
 -spec adhoc_select([binary() | string()], binary() | string(), atom() | tuple(), [] | [atom() | tuple()]) -> sqerl_results().
 adhoc_select(Columns, Table, Where, Clauses) ->
+    adhoc_select_with(make_context(?DEFAULT_POOL), Columns, Table, Where, Clauses).
+
+
+%% @doc as adhoc_select/3,
+%% @see adhoc_select/3
+-spec adhoc_select_with(sqerl_ctx(), [binary() | string()], binary() | string(), atom() | tuple()) -> sqerl_results().
+adhoc_select_with(#sqerl_ctx{} = Context, Columns, Table, Where) ->
+    adhoc_select_with(Context, Columns, Table, Where, []).
+
+%% @doc as adhoc_select/4, adds a #sqerl_ctx as the first argument.
+%% @see adhoc_select/4
+-spec adhoc_select_with(sqerl_ctx(), [binary() | string()], binary() | string(), atom() | tuple(), [] | [atom() | tuple()]) -> sqerl_results().
+adhoc_select_with(#sqerl_ctx{} = Context, Columns, Table, Where, Clauses) ->
     {SQL, Values} = sqerl_adhoc:select(Columns,
                                        Table,
                                        [{where, Where}|Clauses],
                                        sqerl_client:sql_parameter_style()),
-    sqerl_core:execute(?DEFAULT_POOL, SQL, Values).
+    sqerl_core:execute(Context, SQL, Values).
+
 
 
 %% @doc Utility for generating specific message tuples from database-specific error
 %% messages.  The 1-argument form determines which database is being used by querying
 %% Sqerl's configuration at runtime, while the 2-argument form takes the database type as a
 %% parameter directly.
-%% @doc Insert Rows into Table with default batch size.
+%% @doc Inser Rows into Table with default batch size.
 %% @see adhoc_insert/3.
 adhoc_insert(Table, Rows) ->
     adhoc_insert(Table, Rows, ?SQERL_DEFAULT_BATCH_SIZE).
@@ -189,21 +268,34 @@ adhoc_insert(Table, Rows, BatchSize) ->
 %% {ok, 2}
 %% '''
 %%
-adhoc_insert(_Table, _Columns, [], _BatchSize) ->
-    %% empty list of rows means nothing to do
+adhoc_insert(Table, Columns, RowsValues, BatchSize) ->
+    adhoc_insert_with(make_context(?DEFAULT_POOL), Table, Columns, RowsValues, BatchSize).
+
+%% @doc As adhoc_insert/2, adds a #sqerl_ctx as the first argument.
+%% @see adhoc_insert/2.
+adhoc_insert_with(#sqerl_ctx{} = Context, Table, Rows) ->
+    adhoc_insert_with(Context, Table, Rows, ?SQERL_DEFAULT_BATCH_SIZE).
+
+%% @doc As adhoc_insert/3,adds a #sqerl_ctx as the first argument.
+%% @see adhoc_insert/3.
+adhoc_insert_with(#sqerl_ctx{} = Context, Table, Rows, BatchSize) ->
+    %% reformat Rows to desired format
+    {Columns, RowsValues} = sqerl_core:extract_insert_data(Rows),
+    adhoc_insert_with(Context, Table, Columns, RowsValues, BatchSize).
+
+%% @doc as adhoc_insert/4, adds a #sqerl_ctx as the first argument.
+%% @see adhoc_insert/4
+adhoc_insert_with(_Context, _Table, _Columns, [], _BatchSize) ->
     {ok, 0};
-adhoc_insert(Table, Columns, RowsValues, BatchSize) when BatchSize > 0 ->
+adhoc_insert_with(#sqerl_ctx{} = Context, Table, Columns, RowsValues, BatchSize) when BatchSize > 0 ->
     NumRows = length(RowsValues),
     %% Avoid the case where NumRows < BatchSize
     EffectiveBatchSize = erlang:min(NumRows, BatchSize),
-    bulk_insert(Table, Columns, RowsValues, NumRows, EffectiveBatchSize).
+    bulk_insert_with(Context, Table, Columns, RowsValues, NumRows, EffectiveBatchSize).
 
-%% @doc Bulk insert rows. Returns {ok, InsertedCount}.
-bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= BatchSize ->
-    sqerl_core:bulk_insert(?DEFAULT_POOL, Table, Columns, RowsValues, NumRows, BatchSize) .
-
-
-
+%% @doc Bulk insert rows using the provided context. Returns {ok, InsertedCount}.
+bulk_insert_with(#sqerl_ctx{} = Context, Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= BatchSize ->
+    sqerl_core:bulk_insert(Context, Table, Columns, RowsValues, NumRows, BatchSize) .
 
 
 %% @doc Adhoc delete.
@@ -212,6 +304,13 @@ bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= Batc
 %%
 -spec adhoc_delete(binary(), term()) -> {ok, integer()} | {error, any()}.
 adhoc_delete(Table, Where) ->
-    {SQL, Values} = sqerl_adhoc:delete(Table, Where, sqerl_client:sql_parameter_style()),
-    sqerl_core:execute(?DEFAULT_POOL, SQL, Values).
+    adhoc_delete_with(make_context(?DEFAULT_POOL), Table, Where).
 
+%% @doc Adhoc delete.
+%% Uses the same Where specifications as adhoc_select/3.
+%% Returns {ok, Count} or {error, ErrorInfo}.
+%%
+-spec adhoc_delete_with(sqerl_ctx(), binary(), term()) -> {ok, integer()} | {error, any()}.
+adhoc_delete_with(#sqerl_ctx{} = Context, Table, Where) ->
+    {SQL, Values} = sqerl_adhoc:delete(Table, Where, sqerl_client:sql_parameter_style()),
+    sqerl_core:execute(Context, SQL, Values).

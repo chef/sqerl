@@ -31,6 +31,9 @@
                          {ok, integer(), sqerl_rows()} |
                          {error, atom() | tuple()}.
 
+-record(sqerl_ctx, { pool :: atom() }).
+-type sqerl_ctx() :: #sqerl_ctx{}.
+
 -ifdef(namespaced_types).
 -type sqerl_dict() :: dict:dict().
 -else.

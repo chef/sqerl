@@ -1,9 +1,9 @@
 %% -*- erlang-indent-level: 4;indent-tabs-mode: nil; fill-column: 92 -*-
 %% ex: ts=4 sw=4 et
-%% @author Mark Paradise <marc.paradise@chef.io>
+%% @author Marc Paradise <marc.paradise@chef.io>
 %% @author Seth Falcon <seth@chef.io>
-%% @author Marc Anderson <mark@chef.io>
-%% Copyright 2011-2015 Chef Software, Inc.
+%% @author Mark Anderson <mark@chef.io>
+%% Copyright 2011-2016 Chef Software, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -39,19 +39,19 @@
          parse_select_results/1,
          extract_insert_data/1]).
 
-checkout(Pool) ->
+checkout(#sqerl_ctx{pool = Pool}) ->
     pooler:take_member(Pool, envy:get(sqerl, pooler_timeout, 0, integer)).
 
-checkin(Pool, Connection) ->
+checkin(#sqerl_ctx{pool = Pool}, Connection) ->
     pooler:return_member(Pool, Connection).
 
-with_db(Pool, Call) ->
-    with_db(Pool, Call, ?MAX_RETRIES).
+with_db(Context, Call) ->
+    with_db(Context, Call, ?MAX_RETRIES).
 
-with_db(_Pool, _Call, 0) ->
+with_db(_Context, _Call, 0) ->
     {error, no_connections};
-with_db(Pool, Call, Retries) ->
-    case checkout(Pool) of
+with_db(#sqerl_ctx{} = Context, Call, Retries) ->
+    case checkout(Context) of
         error_no_members ->
             {error, no_connections};
         Cn when is_pid(Cn) ->
@@ -66,13 +66,13 @@ with_db(Pool, Call, Retries) ->
                     sqerl_client:close(Cn),
                     with_db(Call, Retries - 1);
                 Result ->
-                    checkin(Pool, Cn),
+                    checkin(Context, Cn),
                     Result
             end
     end.
 
-execute_statement(Pool, StmtName, StmtArgs, XformName, XformArgs) ->
-    case execute(Pool, StmtName, StmtArgs) of
+execute_statement(Context, StmtName, StmtArgs, XformName, XformArgs) ->
+    case execute(Context, StmtName, StmtArgs) of
         {ok, Results} ->
             Xformer = erlang:apply(sqerl_transformers, XformName, XformArgs),
             Xformer(Results);
@@ -101,14 +101,14 @@ execute_statement(Pool, StmtName, StmtArgs, XformName, XformArgs) ->
 %% parameters.
 %% '''
 %%
--spec execute(atom(), sqerl_query(), [] | [term()]) -> sqerl_results().
-execute(Pool, QueryOrStatement, Parameters) ->
+-spec execute(sqerl_ctx(), sqerl_query(), [] | [term()]) -> sqerl_results().
+execute(Context, QueryOrStatement, Parameters) ->
     F = fun(Cn) -> sqerl_client:execute(Cn, QueryOrStatement, Parameters) end,
-    with_db(Pool, F).
+    with_db(Context, F).
 
-bulk_insert(Pool, Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= BatchSize ->
+bulk_insert(Context, Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= BatchSize ->
     Inserter = make_batch_inserter(Table, Columns, RowsValues, NumRows, BatchSize),
-    with_db(Pool, Inserter).
+    with_db(Context, Inserter).
 
 %% @doc Returns a function to call via sqerl_core:with_db/1.
 %%
