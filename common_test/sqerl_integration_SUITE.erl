@@ -14,7 +14,7 @@
 
 all() -> [pool_overflow, insert_data, insert_returning, select_data, select_data_as_record,
             select_first_number_zero, delete_data, update_datablob, select_boolean, update_created,
-            select_simple, adhoc_select, adhoc_insert, insert_select_gzip_data, array_test,
+            select_simple, select_simple_multipool_, adhoc_select, adhoc_insert, insert_select_gzip_data, array_test,
             select_timeout, execute_timeout].
 
 init_per_testcase(_, Config) ->
@@ -133,11 +133,17 @@ select_simple(Config) ->
     {ok, Count} = sqerl:execute(SqlCount),
     [[{<<"num_users">>, 5}]] = Count,
 
+
+
     %% select_simple_with_parameters() ->
     Sql = <<"select id from users where last_name = $1">>,
     {ok, Rows} = sqerl:execute(Sql, ["Smith"]),
     ExpectedRows = [[{<<"id">>,1}]],
     ?assertEqual(ExpectedRows, Rows).
+
+select_simple_multipool_(_Config) ->
+    [ ?_assertMatch(ok, 0), sqerl:execute_with(sqerl:make_context(other), <<"SELECT COUNT(*) FROM only_in_itest_sqerl2_db">>),
+      ?_assertMatch(ok, 0), sqerl:execute_with(sqerl:make_context(sqerl), <<"SELECT COUNT(*) FROM only_in_itest_sqerl1_db">>)].
 
 adhoc_select(Config) ->
     insert_data(Config),
@@ -361,6 +367,15 @@ adhoc_select(Config) ->
                        ],
         ?assertEqual(ExpectedRows, Rows)
     end(),
+    %% adhoc_select_limit
+    fun() ->
+        {ok, Rows} = sqerl:adhoc_select_with(sqerl:make_context(sqerl), [<<"id">>], <<"users">>, all, [{order_by, [<<"id">>]}, {limit, 2}]),
+        ExpectedRows = [
+                        [{<<"id">>, 1}],
+                        [{<<"id">>, 2}]
+                       ],
+        ?assertEqual(ExpectedRows, Rows)
+    end(),
 
     %% adhoc_select_offset
     fun() ->
@@ -380,7 +395,7 @@ adhoc_insert_delete_test(Table, Columns, Data, BatchSize) ->
     Values = [Value || [Value|_] <- Data],
     Where = {Field, in, Values},
     {ok, Rows} = sqerl:adhoc_select(Columns, Table, Where),
-    {ReturnedColumns, ReturnedData} = sqerl:extract_insert_data(Rows),
+    {ReturnedColumns, ReturnedData} = sqerl_core:extract_insert_data(Rows),
     %% clean up before asserts
     {ok, DeleteCount} = sqerl:adhoc_delete(Table, Where),
     %% now verify...

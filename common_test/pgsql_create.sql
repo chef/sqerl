@@ -1,8 +1,20 @@
-CREATE USER itest;
-CREATE DATABASE itest OWNER itest;
-GRANT ALL PRIVILEGES ON DATABASE itest TO itest;
+CREATE USER itest_sqerl1 WITH ENCRYPTED PASSWORD 'itest_sqerl1';
+CREATE USER itest_sqerl2 WITH ENCRYPTED PASSWORD 'itest_sqerl2';
 
-\c itest;
+
+CREATE DATABASE itest_sqerl1 OWNER itest_sqerl1;
+CREATE DATABASE itest_sqerl2 OWNER itest_sqerl2;
+
+\c itest_sqerl2;
+GRANT ALL PRIVILEGES ON DATABASE itest_sqerl2 TO itest_sqerl2;
+CREATE TABLE only_in_itest_sqerl2_db ( name VARCHAR(128));
+GRANT ALL PRIVILEGES ON TABLE only_in_itest_sqerl2_db TO itest_sqerl2;
+
+\c itest_sqerl1;
+GRANT ALL PRIVILEGES ON DATABASE itest_sqerl1 TO itest_sqerl1;
+CREATE TABLE only_in_itest_sqerl1_db ( name VARCHAR(128));
+GRANT ALL PRIVILEGES ON TABLE only_in_itest_sqerl1_db TO itest_sqerl1;
+
 CREATE SEQUENCE users_id_sequence;
 /* Create test tables */
 CREATE TABLE users (
@@ -15,8 +27,8 @@ CREATE TABLE users (
        created timestamp
 );
 
-GRANT ALL PRIVILEGES ON TABLE users TO itest;
-GRANT ALL PRIVILEGES ON SEQUENCE users_id_sequence TO itest;
+GRANT ALL PRIVILEGES ON TABLE users TO itest_sqerl1;
+GRANT ALL PRIVILEGES ON SEQUENCE users_id_sequence TO itest_sqerl1;
 
 CREATE TABLE nodes (
        id char(32) PRIMARY KEY,
@@ -30,7 +42,7 @@ CREATE TABLE nodes (
        updated_at timestamp NOT NULL
 );
 
-GRANT ALL PRIVILEGES ON TABLE nodes TO itest;
+GRANT ALL PRIVILEGES ON TABLE nodes TO itest_sqerl1;
 
 CREATE OR REPLACE FUNCTION insert_users(varchar[],
     varchar[],
@@ -57,7 +69,7 @@ CREATE TABLE uuids (
        id uuid UNIQUE NOT NULL
 );
 
-GRANT ALL PRIVILEGES ON TABLE uuids TO itest;
+GRANT ALL PRIVILEGES ON TABLE uuids TO itest_sqerl1;
 
 CREATE OR REPLACE FUNCTION insert_ids(uuid[])
 RETURNS VOID AS
@@ -72,5 +84,4 @@ BEGIN
 END;
 $$
 LANGUAGE plpgsql;
-
 

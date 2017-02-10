@@ -31,8 +31,14 @@
                          {ok, integer(), sqerl_rows()} |
                          {error, atom() | tuple()}.
 
+-record(sqerl_ctx, { pool :: atom() }).
+-type sqerl_ctx() :: #sqerl_ctx{}.
+
 -ifdef(namespaced_types).
 -type sqerl_dict() :: dict:dict().
 -else.
 -type sqerl_dict() :: dict().
 -endif.
+
+-define(SQERL_DEFAULT_BATCH_SIZE, 100).
+-define(SQERL_ADHOC_INSERT_STMT_ATOM, '__adhoc_insert').
