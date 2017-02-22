@@ -65,6 +65,8 @@
 -compile([export_all]).
 -endif.
 
+-type secrets_fun() :: fun((atom()) -> term()).
+
 -record(state, {cb_mod,
                 cb_state,
                 timeout = 5000 :: pos_integer()}).
@@ -119,17 +121,18 @@ start_link(DbType) ->
     gen_server:start_link(?MODULE, [DbType], []).
 
 init([]) ->
-    init(drivermod());
-init(CallbackMod) ->
-    IdleCheck = envy:get(sqerl,idle_check, 1000, non_neg_integer),
+    init(drivermod(), secretsmod()).
+
+init(CallbackMod, SecretsFun) ->
+    IdleCheck = envy:get(sqerl, idle_check, 1000, non_neg_integer),
 
     Statements = read_statements_from_config(),
 
     %% The ip_mode key in the sqerl clause determines if we parse db_host as IPv4 or IPv6
     Config = [{host, envy_parse:host_to_ip(sqerl, db_host)},
               {port, envy:get(sqerl, db_port, pos_integer)},
-              {user, envy:get(sqerl, db_user, string)},
-              {pass, envy:get(sqerl, db_pass, string)},
+              {user, SecretsFun(db_user)},
+              {pass, SecretsFun(db_pass)},
               {db, envy:get(sqerl, db_name, string)},
               {timeout, envy:get(sqerl,db_timeout, 5000, pos_integer)},
               {idle_check, IdleCheck},
@@ -240,6 +243,27 @@ drivermod() ->
         Error ->
             log_and_error({invalid_application_config, sqerl, db_driver_mod, Error})
     end.
+
+%% @doc Returns secrets function based on application config. Defaults to
+%% using envy to lookup.
+-spec secretsmod() -> secrets_fun().
+secretsmod() ->
+    case envy:get(sqerl, secrets_mod, undefined, atom) of
+        undefined ->
+            fun envy/1;
+        Mod when is_atom(Mod) ->
+            case code:which(Mod) of
+                non_existing ->
+                    log_and_error({does_not_exist, sqerl, secrets_mod, Mod});
+                _  ->
+                    fun Mod:get/1
+            end;
+        Error ->
+            log_and_error({invalid_application_config, sqerl, secrets_mod, Error})
+    end.
+
+%% Default config function
+envy(Key) -> envy:get(sqerl, Key, string).
 
 %% Helper function to report and error
 
