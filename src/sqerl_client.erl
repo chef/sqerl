@@ -65,9 +65,11 @@
 -compile([export_all]).
 -endif.
 
+-define(DEFAULT_TIMEOUT, 5000).
+
 -record(state, {cb_mod,
                 cb_state,
-                timeout = 5000 :: pos_integer()}).
+                timeout = ?DEFAULT_TIMEOUT :: pos_integer()}).
 
 %% behavior callback definitions
 -callback init(Config :: [{atom(), term()}]) ->
@@ -121,11 +123,11 @@ start_link(DbType) ->
 init([]) ->
     init(drivermod(), config()).
 
-init(CallbackMod, Config) ->
-    IdleCheck = proplists:get_value(idle_check, Config),
-    case CallbackMod:init(Config) of
+init(DriverMod, Config) ->
+    IdleCheck = proplists:get_value(idle_check, Config, ?DEFAULT_TIMEOUT),
+    case DriverMod:init(Config) of
         {ok, CallbackState} ->
-            {ok, #state{cb_mod=CallbackMod, cb_state=CallbackState,
+            {ok, #state{cb_mod=DriverMod, cb_state=CallbackState,
                         timeout=IdleCheck}, IdleCheck};
         Error ->
             {stop, Error}
@@ -228,8 +230,8 @@ config() ->
                 _  ->
                     MFA
             end;
-        Error ->
-            log_and_error({invalid_application_config, sqerl, config_cb, Error})
+        AnythingElse ->
+            log_and_error({invalid_config_mfa, sqerl, config_cb, AnythingElse})
     end,
     erlang:apply(M, F, A).
 
