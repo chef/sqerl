@@ -65,9 +65,11 @@
 -compile([export_all]).
 -endif.
 
+-define(DEFAULT_TIMEOUT, 5000).
+
 -record(state, {cb_mod,
                 cb_state,
-                timeout = 5000 :: pos_integer()}).
+                timeout = ?DEFAULT_TIMEOUT :: pos_integer()}).
 
 %% behavior callback definitions
 -callback init(Config :: [{atom(), term()}]) ->
@@ -119,25 +121,13 @@ start_link(DbType) ->
     gen_server:start_link(?MODULE, [DbType], []).
 
 init([]) ->
-    init(drivermod());
-init(CallbackMod) ->
-    IdleCheck = envy:get(sqerl,idle_check, 1000, non_neg_integer),
+    init(drivermod(), config()).
 
-    Statements = read_statements_from_config(),
-
-    %% The ip_mode key in the sqerl clause determines if we parse db_host as IPv4 or IPv6
-    Config = [{host, envy_parse:host_to_ip(sqerl, db_host)},
-              {port, envy:get(sqerl, db_port, pos_integer)},
-              {user, envy:get(sqerl, db_user, string)},
-              {pass, envy:get(sqerl, db_pass, string)},
-              {db, envy:get(sqerl, db_name, string)},
-              {timeout, envy:get(sqerl,db_timeout, 5000, pos_integer)},
-              {idle_check, IdleCheck},
-              {prepared_statements, Statements},
-              {column_transforms, envy:get(sqerl, column_transforms, list)}],
-    case CallbackMod:init(Config) of
+init(DriverMod, Config) ->
+    IdleCheck = proplists:get_value(idle_check, Config, ?DEFAULT_TIMEOUT),
+    case DriverMod:init(Config) of
         {ok, CallbackState} ->
-            {ok, #state{cb_mod=CallbackMod, cb_state=CallbackState,
+            {ok, #state{cb_mod=DriverMod, cb_state=CallbackState,
                         timeout=IdleCheck}, IdleCheck};
         Error ->
             {stop, Error}
@@ -177,23 +167,6 @@ exec_driver({Call, QueryOrName, Args}, _From, #state{cb_mod=CBMod, cb_state=CBSt
     {Result, NewCBState} = apply(CBMod, Call, [QueryOrName, Args, CBState]),
     ?LOG_RESULT(Result),
     {reply, Result, State#state{cb_state=NewCBState}, Timeout}.
-
-
-%% @doc Prepared statements can be provides as a list of `{atom(), binary()}' tuples, as a
-%% path to a file that can be consulted for such tuples, or as `{M, F, A}' such that
-%% `apply(M, F, A)' returns the statements tuples.
--spec read_statements([{atom(), term()}]
-                      | string()
-                      | {atom(), atom(), list()})
-                     -> [{atom(), binary()}].
-read_statements({Mod, Fun, Args}) ->
-    apply(Mod, Fun, Args);
-read_statements(L = [{Label, SQL}|_T]) when is_atom(Label) andalso is_binary(SQL) ->
-    L;
-read_statements(Path) when is_list(Path) ->
-    {ok, Statements} = file:consult(Path),
-    Statements.
-
 
 
 %% @doc Returns SQL parameter style atom, e.g. qmark, dollarn.
@@ -241,19 +214,29 @@ drivermod() ->
             log_and_error({invalid_application_config, sqerl, db_driver_mod, Error})
     end.
 
+%% @doc Returns the config, based on configured config_cb MFA. Defaults to
+%% using sqerl_config_env:config/0, which will use the application environment.
+-spec config() -> [{atom(), term()}].
+config() ->
+    {M, F, A} = case envy:get(sqerl, config_cb, undefined, any) of
+        undefined ->
+            {sqerl_config_env, config, []};
+        {Mod, Fun, Args} = MFA when is_atom(Mod) andalso
+                                    is_atom(Fun) andalso
+                                    is_list(Args) ->
+            case code:which(Mod) of
+                non_existing ->
+                    log_and_error({does_not_exist, sqerl, config_cb, Mod});
+                _  ->
+                    MFA
+            end;
+        AnythingElse ->
+            log_and_error({invalid_config_mfa, sqerl, config_cb, AnythingElse})
+    end,
+    erlang:apply(M, F, A).
+
 %% Helper function to report and error
 
 log_and_error(Msg) ->
     error_logger:error_report(Msg),
     error(Msg).
-
-read_statements_from_config() ->
-    StatementSource = envy:get(sqerl, prepared_statements, any),
-    try
-        read_statements(StatementSource)
-    catch
-        error:Reason ->
-            Msg = {incorrect_application_config, sqerl, {prepared_statements, Reason, erlang:get_stacktrace()}},
-            error_logger:error_report(Msg),
-            error(Msg)
-    end.
