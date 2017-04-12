@@ -28,18 +28,23 @@
          select/2,
          select/3,
          select/4,
+         select/5,
          statement/2,
          statement/3,
          statement/4,
          execute/1,
          execute/2,
+         execute/3,
          adhoc_select/3,
          adhoc_select/4,
+         adhoc_select/5,
          adhoc_insert/2,
          adhoc_insert/3,
          adhoc_insert/4,
+         adhoc_insert/5,
          extract_insert_data/1,
-         adhoc_delete/2]).
+         adhoc_delete/2,
+         adhoc_delete/3]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("sqerl.hrl").
@@ -90,7 +95,10 @@ select(StmtName, StmtArgs, XformName) ->
     select(StmtName, StmtArgs, XformName, []).
 
 select(StmtName, StmtArgs, XformName, XformArgs) ->
-    case execute_statement(StmtName, StmtArgs, XformName, XformArgs) of
+    with_db(fun (Cn) -> select(Cn, StmtName, StmtArgs, XformName, XformArgs) end).
+
+select(Cn, StmtName, StmtArgs, XformName, XformArgs) ->
+    case execute_statement(Cn, StmtName, StmtArgs, XformName, XformArgs) of
         {ok, []} ->
             {ok, none};
         {ok, Results} ->
@@ -108,7 +116,12 @@ statement(StmtName, StmtArgs, XformName) ->
     statement(StmtName, StmtArgs, XformName, []).
 
 statement(StmtName, StmtArgs, XformName, XformArgs) ->
-    case execute_statement(StmtName, StmtArgs, XformName, XformArgs) of
+    with_db(fun (Cn) ->
+                    statement(Cn, StmtName, StmtArgs, XformName, XformArgs)
+            end).
+
+statement(Cn, StmtName, StmtArgs, XformName, XformArgs) ->
+    case execute_statement(Cn, StmtName, StmtArgs, XformName, XformArgs) of
         {ok, 0} ->
             {ok, none};
         {ok, N} when is_number(N) ->
@@ -122,8 +135,8 @@ statement(StmtName, StmtArgs, XformName, XformArgs) ->
             parse_error(Reason)
     end.
 
-execute_statement(StmtName, StmtArgs, XformName, XformArgs) ->
-    case execute(StmtName, StmtArgs) of
+execute_statement(Cn, StmtName, StmtArgs, XformName, XformArgs) ->
+    case execute(Cn, StmtName, StmtArgs) of
         {ok, Results} ->
             Xformer = erlang:apply(sqerl_transformers, XformName, XformArgs),
             Xformer(Results);
@@ -163,6 +176,9 @@ execute(QueryOrStatement, Parameters) ->
     F = fun(Cn) -> sqerl_client:execute(Cn, QueryOrStatement, Parameters) end,
     with_db(F).
 
+-spec execute(pid(), sqerl_query(), [] | [term()]) -> sqerl_results().
+execute(Cn, QueryOrStatement, Parameters) ->
+    sqerl_client:execute(Cn, QueryOrStatement, Parameters).
 
 %% @doc Execute an adhoc select query.
 %% ```
@@ -207,9 +223,13 @@ adhoc_select(Columns, Table, Where) ->
 %% that uses several clauses.
 -spec adhoc_select([binary() | string()], binary() | string(), atom() | tuple(), [] | [atom() | tuple()]) -> sqerl_results().
 adhoc_select(Columns, Table, Where, Clauses) ->
+    with_db(fun (Cn) -> adhoc_select(Cn, Columns, Table, Where, Clauses) end).
+
+-spec adhoc_select(pid(), [binary() | string()], binary() | string(), atom() | tuple(), [] | [atom() | tuple()]) -> sqerl_results().
+adhoc_select(Cn, Columns, Table, Where, Clauses) ->
     {SQL, Values} = sqerl_adhoc:select(Columns, Table,
                       [{where, Where}|Clauses], param_style()),
-    execute(SQL, Values).
+    execute(Cn, SQL, Values).
 
 
 -define(SQERL_DEFAULT_BATCH_SIZE, 100).
@@ -260,19 +280,22 @@ adhoc_insert(Table, Rows, BatchSize) ->
 %% {ok, 2}
 %% '''
 %%
-adhoc_insert(_Table, _Columns, [], _BatchSize) ->
+adhoc_insert(Table, Columns, RowsValues, BatchSize) ->
+    with_db(fun (Cn) -> adhoc_insert(Cn, Table, Columns, RowsValues, BatchSize) end).
+
+adhoc_insert(_Cn, _Table, _Columns, [], _BatchSize) ->
     %% empty list of rows means nothing to do
     {ok, 0};
-adhoc_insert(Table, Columns, RowsValues, BatchSize) when BatchSize > 0 ->
+adhoc_insert(Cn, Table, Columns, RowsValues, BatchSize) when BatchSize > 0 ->
     NumRows = length(RowsValues),
     %% Avoid the case where NumRows < BatchSize
     EffectiveBatchSize = erlang:min(NumRows, BatchSize),
-    bulk_insert(Table, Columns, RowsValues, NumRows, EffectiveBatchSize).
+    bulk_insert(Cn, Table, Columns, RowsValues, NumRows, EffectiveBatchSize).
 
 %% @doc Bulk insert rows. Returns {ok, InsertedCount}.
-bulk_insert(Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= BatchSize ->
+bulk_insert(Cn, Table, Columns, RowsValues, NumRows, BatchSize) when NumRows >= BatchSize ->
     Inserter = make_batch_inserter(Table, Columns, RowsValues, NumRows, BatchSize),
-    with_db(Inserter).
+    Inserter(Cn).
 
 %% @doc Returns a function to call via with_db/1.
 %%
@@ -363,8 +386,11 @@ extract_insert_data(Rows) ->
 %%
 -spec adhoc_delete(binary(), term()) -> {ok, integer()} | {error, any()}.
 adhoc_delete(Table, Where) ->
+    with_db(fun (Cn) -> adhoc_delete(Cn, Table, Where) end).
+
+adhoc_delete(Cn, Table, Where) ->
     {SQL, Values} = sqerl_adhoc:delete(Table, Where, param_style()),
-    execute(SQL, Values).
+    execute(Cn, SQL, Values).
 
 %% The following illustrates how we could also implement adhoc update
 %% if ever desired.

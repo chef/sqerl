@@ -32,7 +32,7 @@
     typed_record = false :: boolean(), %% Is the record typed?
     append_ast = [] :: list(), %% Append AST
     debug_output = false :: boolean(), % Debug output
-    all_records_typed = ?TYPED_RECORDS
+    all_records_typed = ?TYPED_RECORDS :: boolean()
 }).
 
 %% Debug Macros, set below to 'true' to see output
