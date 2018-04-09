@@ -189,10 +189,7 @@ init(Config) ->
     {timeout, Timeout} = lists:keyfind(timeout, 1, Config),
     {db, Db} = lists:keyfind(db, 1, Config),
     {prepared_statements, Statements} = lists:keyfind(prepared_statements, 1, Config),
-    ExtraOptions = case lists:keyfind(extra_options, 1, Config) of
-                       {extra_options, EO} -> EO;
-                       false -> []
-                   end,
+    {extra_options, ExtraOptions}  = lists:keyfind(extra_options, 1, Config),
     %% req_timeout indicates how long the client side will wait for a request to complete.
     %% It is set to the same as statement timeout (default_timeout in state) +250ms to provide time for
     %% wire latency in a server-side cancel.  Postgres will get back to us to either cancel or finish the
