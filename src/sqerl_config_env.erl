@@ -36,6 +36,7 @@ config() ->
      {user, envy:get(sqerl, db_user, string)},
      {pass, envy:get(sqerl, db_pass, string)},
      {db, envy:get(sqerl, db_name, string)},
+     {extra_options, envy:get(sqerl, db_options, [], list)},
      {timeout, envy:get(sqerl,db_timeout, 5000, pos_integer)},
      {idle_check, IdleCheck},
      {prepared_statements, Statements},
