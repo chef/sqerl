@@ -173,7 +173,7 @@ exec_driver({Call, QueryOrName, Args}, _From, #state{cb_mod=CBMod, cb_state=CBSt
         {WorkerPid, {Result, NewCBState}} ->
             ?LOG_RESULT(Result),
             {reply, Result, State#state{cb_state=NewCBState}, Timeout}
-    after Timeout ->
+    after Timeout + 1000 ->
             error_logger:warning_msg("Operation timeout. Shutting down ~p~n", [self()]),
             {stop, shutdown, State}
     end.
