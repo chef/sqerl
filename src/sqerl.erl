@@ -46,13 +46,14 @@
          adhoc_delete/2,
          adhoc_delete/3]).
 
+-ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
--include_lib("sqerl.hrl").
+-endif.
+
+-include("sqerl.hrl").
+-include_lib("epgsql/include/epgsql.hrl").
 
 -define(MAX_RETRIES, 5).
-
-%% See http://www.postgresql.org/docs/current/static/errcodes-appendix.html
--define(PGSQL_ERROR_CODES, [{<<"23505">>, conflict}, {<<"23503">>, foreign_key}]).
 
 checkout() ->
     pooler:take_member(sqerl, envy:get(sqerl, pooler_timeout, 0, integer)).
@@ -423,36 +424,22 @@ param_style() -> sqerl_client:sql_parameter_style().
 parse_error(Reason) ->
     parse_error(pgsql, Reason).
 
--spec parse_error(pgsql,
-                  'no_connections' |
-                  {'error', 'error', _, _, _} |
-                  {'error', {'error', _, _, _, _}}) -> sqerl_error().
+-spec parse_error(pgsql, 'no_connections' | #error{} | {error, #error{}} | {error, any()}) ->
+                         sqerl_error().
 parse_error(_DbType, no_connections) ->
     {error, no_connections};
 parse_error(_DbType, {error, Reason} = Error) when is_atom(Reason) ->
     Error;
-parse_error(pgsql, {error, error, Code, Message, _Extra}) ->
-    do_parse_error({Code, Message}, ?PGSQL_ERROR_CODES);
-parse_error(pgsql, {error,               % error from sqerl
-                    {error,              % error record marker from epgsql
-                     _Severity,          % Severity
-                     Code, Message, _Extra}}) ->
-    do_parse_error({Code, Message}, ?PGSQL_ERROR_CODES);
+parse_error(pgsql, #error{code=Code, message=Msg, codename=undefined}) ->
+    {error, {Code, Msg}};
+parse_error(pgsql, #error{codename=CodeName}) ->
+    {error, CodeName};
+parse_error(pgsql, {error, Error=#error{}}) ->
+    parse_error(pgsql, Error);
 parse_error(_, Error) ->
     case Error of
         {error, _} ->
             Error;
         _ ->
             {error, Error}
-    end.
-
-do_parse_error({Code, Message}, CodeList) ->
-    case lists:keyfind(Code, 1, CodeList) of
-        {_, ErrorType} ->
-            {ErrorType, Message};
-        false ->
-            %% People of the Future!
-            %% For Postgres, sqerl_pgsql_errors:translate_code is available
-            %% turning Postgres codes to human-readable tuples
-            {error, {Code, Message}}
     end.
