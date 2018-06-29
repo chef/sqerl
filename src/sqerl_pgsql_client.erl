@@ -328,7 +328,7 @@ prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
               output_fields = ColumnData,
               stmt = Statement},
             {ok, P};
-        {error, {error, error, _ErrorCode, Msg, Position}} ->
+        {error, #error{message=Msg, extra=Position}} ->
             {error, {syntax, {Msg, Position}}};
         Error ->
             %% TODO: Discover what errors can flow out of this, and write tests.

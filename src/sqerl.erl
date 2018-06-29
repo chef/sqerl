@@ -25,6 +25,7 @@
 -export([checkout/0,
          checkin/1,
          with_db/1,
+         with_db/3,
          select/2,
          select/3,
          select/4,
@@ -56,18 +57,31 @@
 -define(MAX_RETRIES, 5).
 
 checkout() ->
-    pooler:take_member(sqerl, envy:get(sqerl, pooler_timeout, 0, integer)).
+    checkout(sqerl).
+
+checkout(PoolName) ->
+    pooler:take_member(PoolName, envy:get(sqerl, pooler_timeout, 0, integer)).
 
 checkin(Connection) ->
-    pooler:return_member(sqerl, Connection).
+    checkin(sqerl, Connection).
+
+checkin(PoolName, Connection) ->
+    pooler:return_member(PoolName, Connection).
 
 with_db(Call) ->
-    with_db(Call, ?MAX_RETRIES).
+    with_db(sqerl, Call, ?MAX_RETRIES).
 
-with_db(_Call, 0) ->
+-spec with_db(PoolName, Call, Retries) -> Result when
+      PoolName :: pid() | atom()
+      , Call :: fun ((Connection) -> CallResult)
+      , Retries :: non_neg_integer()
+      , Connection :: pid()
+      , Result :: {error, no_connections} | CallResult
+      , CallResult :: any().
+with_db(_PoolName, _Call, 0) ->
     {error, no_connections};
-with_db(Call, Retries) ->
-    case checkout() of
+with_db(PoolName, Call, Retries) ->
+    case checkout(PoolName) of
         error_no_members ->
             {error, no_connections};
         Cn when is_pid(Cn) ->
@@ -80,9 +94,9 @@ with_db(Call, Retries) ->
                     %% to shutdown. pooler will get notified and
                     %% remove the connection from the pool.
                     sqerl_client:close(Cn),
-                    with_db(Call, Retries - 1);
+                    with_db(PoolName, Call, Retries - 1);
                 Result ->
-                    checkin(Cn),
+                    checkin(PoolName, Cn),
                     Result
             end
     end.
