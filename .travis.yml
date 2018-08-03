@@ -4,7 +4,6 @@ otp_release:
   - 19.3
   - 18.3
   - 17.0 # 17.5 concrete PLT has some issues; dig into them
-  - R16B03 # Who uses R16 and sqerl?
 
 addons:
   postgresql: "9.3"
