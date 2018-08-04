@@ -8,6 +8,12 @@
 %% @doc Parse transform for generating record access functions and
 %% sqerl_rec wrapper functions
 
+-ifdef(typed_records).
+-define(TYPED_RECORDS, true).
+-else.
+-define(TYPED_RECORDS, false).
+-endif.
+
 -record(state, {
     module :: atom(), %% What module did we find?
     record :: atom(), %% What record did we find?
@@ -25,7 +31,8 @@
     record_line :: integer(), %% What line did we find the record we care about?
     typed_record = false :: boolean(), %% Is the record typed?
     append_ast = [] :: list(), %% Append AST
-    debug_output = false :: boolean() % Debug output
+    debug_output = false :: boolean(), % Debug output
+    all_records_typed = ?TYPED_RECORDS :: boolean()
 }).
 
 %% Debug Macros, set below to 'true' to see output
@@ -93,8 +100,24 @@ inspect_ast([{attribute, _L, module, Module}|T], TheState) ->
 %% Found a record, is it THE record?
 %% see how we're pattern matching for RecName and module?
 inspect_ast([{attribute, Line, record, {RecName, Fields}}|T],
-                          #state{module=RecName} = TheState) ->
+                          #state{module=RecName, all_records_typed=false} = TheState) ->
     inspect_ast(T, TheState#state{record = RecName, fields = Fields, record_line=Line});
+inspect_ast([{attribute, Line, record, {RecName, Fields}}|Tail],
+                          #state{module=RecName,
+                                 all_records_typed=true,
+                                 types=TypeAcc} = TheState) ->
+    Type = lists:map(
+             fun({typed_record_field, {record_field,_,{atom,_,A}}, T}) ->
+                     {A, T};
+                ({typed_record_field, {record_field,_,{atom,_,A},_}, T}) ->
+                     {A, T};
+                ({record_field, _, {atom,L,A}, _}) ->
+                     {A, t_any(L)};
+            ({record_field, _, {atom,L,A}}) ->
+                     {A, t_any(L)}
+             end, Fields),
+
+    inspect_ast(Tail, TheState#state{record = RecName, fields = Fields, record_line=Line, types=lists:flatten([Type|TypeAcc]), typed_record=true});
 %% This line is here to see if the record is typed
 inspect_ast([{attribute, _Line, type, {{record, R}, RType,_}}|Tail],
                    #state{types=TypeAcc, record=R}=TheState) ->
@@ -129,7 +152,10 @@ walk_ast(Acc, [{attribute, L, module, Module}=H|T], TheState) ->
 %% Here's the record, as good a place as any to add our stuff, but only for untyped records
 walk_ast(Acc,
          [{attribute, Line, record, {Name, _Fields}}=H|T],
-         #state{typed_record=false, record=Name}=TheState) ->
+         #state{typed_record=TR,
+                all_records_typed=ORT,
+                record=Name}=TheState) when TR == false
+                                            orelse ORT == true ->
     ASTAddOns = generate_types(Line, TheState),
     walk_ast(ASTAddOns ++ [H|Acc], T, TheState);
 %% Do the same thing here for typed records
@@ -347,8 +373,13 @@ bad_record_op(L, Fname, Val, R) ->
 massage_fields(Fields) ->
     lists:map(
         fun({record_field,_, {atom,_,N}}) -> N;
-           ({record_field,_, {atom,_,N}, _}) -> N
+           ({record_field,_, {atom,_,N}, _}) -> N;
+           ({typed_record_field, {record_field,_,{atom,_,N}}, _}) ->
+                N;
+           ({typed_record_field, {record_field,_,{atom,_,N},_}, _}) ->
+                N
         end, Fields).
+
 
 field_list(Flds) ->
     erl_parse:abstract(

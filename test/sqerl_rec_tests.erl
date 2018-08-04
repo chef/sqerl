@@ -407,7 +407,7 @@ make_kitchen(Prefix) ->
 make_cook(Prefix, KitchenId) ->
     Name = make_name(Prefix),
     SSH = <<"NONE">>,
-    AuthToken = base64:encode(crypto:rand_bytes(10)),
+    AuthToken = base64:encode(crypto:strong_rand_bytes(10)),
     C = cook:fromlist([ {name, Name},
                         {kitchen_id, KitchenId},
                         {auth_token, AuthToken},

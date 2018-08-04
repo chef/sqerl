@@ -164,10 +164,19 @@ code_change(_OldVsn, State, _Extra) ->
 %% @doc Call DB driver process
 exec_driver({Call, QueryOrName, Args}, _From, #state{cb_mod=CBMod, cb_state=CBState, timeout=Timeout}=State) ->
     ?LOG_STATEMENT(QueryOrName, Args),
-    {Result, NewCBState} = apply(CBMod, Call, [QueryOrName, Args, CBState]),
-    ?LOG_RESULT(Result),
-    {reply, Result, State#state{cb_state=NewCBState}, Timeout}.
-
+    Self = self(),
+    WorkerPid = spawn_link(fun () ->
+                                   Res = apply(CBMod, Call, [QueryOrName, Args, CBState]),
+                                   Self ! {self(), Res}
+                           end),
+    receive
+        {WorkerPid, {Result, NewCBState}} ->
+            ?LOG_RESULT(Result),
+            {reply, Result, State#state{cb_state=NewCBState}, Timeout}
+    after Timeout + 1000 ->
+            error_logger:warning_msg("Operation timeout. Shutting down ~p~n", [self()]),
+            {stop, shutdown, State}
+    end.
 
 %% @doc Returns SQL parameter style atom, e.g. qmark, dollarn.
 %% Note on approach: here we rely on sqerl config in

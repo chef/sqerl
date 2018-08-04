@@ -59,16 +59,26 @@
 
 -export([
          delete/2,
+         delete/3,
          fetch/3,
+         fetch/4,
          fetch_all/1,
+         fetch_all/2,
          fetch_page/3,
+         fetch_page/4,
          first_page/0,
          insert/1,
+         insert/2,
          cinsert/1,
+         cinsert/2,
          qfetch/3,
+         qfetch/4,
          cquery/3,
+         cquery/4,
          update/1,
+         update/2,
          scalar_fetch/3,
+         scalar_fetch/4,
          statements/1,
          statements_for/1,
          gen_fetch/2,
@@ -127,9 +137,12 @@
 %% they use an appropriate RETURNING clause.
 -spec qfetch(atom(), atom_list(), [any()]) -> [db_rec()] | {error, _}.
 qfetch(RecName, Query, Vals) ->
+    sqerl:with_db(fun (Cn) -> qfetch(Cn, RecName, Query, Vals) end).
+
+qfetch(Cn, RecName, Query, Vals) ->
     RealQ = join_atoms([RecName, '_', Query]),
     CleanVals = [undef_to_null(V) || V <- Vals],
-    case sqerl:select(RealQ, CleanVals) of
+    case sqerl:select(Cn, RealQ, CleanVals, identity, []) of
         {ok, none} ->
             [];
         {ok, N} when is_integer(N) ->
@@ -150,9 +163,12 @@ qfetch(RecName, Query, Vals) ->
 %% ignored and only the count is returned. See also {@link qfetch/3}.
 -spec cquery(atom(), atom_list(), [any()]) -> {ok, integer()} | {error, _}.
 cquery(RecName, Query, Vals) ->
+    sqerl:with_db(fun (Cn) -> cquery(Cn, RecName, Query, Vals) end).
+
+cquery(Cn, RecName, Query, Vals) ->
     RealQ = join_atoms([RecName, '_', Query]),
     CleanVals = [undef_to_null(V) || V <- Vals],
-    case sqerl:select(RealQ, CleanVals) of
+    case sqerl:select(Cn, RealQ, CleanVals, identity, []) of
         {ok, N} when is_integer(N) ->
             {ok, N};
         {ok, N, _Rows} when is_integer(N) ->
@@ -172,8 +188,11 @@ cquery(RecName, Query, Vals) ->
 %% and prepends `RecName' to `Query' to match the sqerl_rec style.
 -spec scalar_fetch(atom(), atom(), [any()]) -> [any()] | {error, _}.
 scalar_fetch(RecName, Query, Params) ->
+    sqerl:with_db(fun (Cn) -> scalar_fetch(Cn, RecName, Query, Params) end).
+
+scalar_fetch(Cn, RecName, Query, Params) ->
     RealQuery = join_atoms([RecName, '_', Query]),
-    case sqerl:select(RealQuery, Params) of
+    case sqerl:select(Cn, RealQuery, Params, identity, []) of
         {ok, none} ->
             [];
         {ok, Results} ->
@@ -203,8 +222,11 @@ scalar_results(Results) ->
 %% even though a common use is to fetch a single row.
 -spec fetch(atom(), atom(), any()) -> [db_rec()] | {error, _}.
 fetch(RecName, By, Val) ->
+    sqerl:with_db(fun (Cn) -> fetch(Cn, RecName, By, Val) end).
+
+fetch(Cn, RecName, By, Val) ->
     Query = join_atoms([fetch_by, '_', By]),
-    qfetch(RecName, Query, [Val]).
+    qfetch(Cn, RecName, Query, [Val]).
 
 %% @doc Return all rows from the table associated with record module
 %% `RecName'. Results will, by default, be ordered by the name field
@@ -212,6 +234,9 @@ fetch(RecName, By, Val) ->
 -spec fetch_all(atom()) -> [db_rec()] | {error, _}.
 fetch_all(RecName) ->
     qfetch(RecName, fetch_all, []).
+
+fetch_all(Cn, RecName) ->
+    qfetch(Cn, RecName, fetch_all, []).
 
 %% @doc Fetch rows from the table associated with record module
 %% `RecName' in a paginated fashion. The default generated query, like
@@ -223,6 +248,9 @@ fetch_all(RecName) ->
 -spec fetch_page(atom(), string(), integer()) -> [db_rec()] | {error, _}.
 fetch_page(RecName, StartName, Limit) ->
     qfetch(RecName, fetch_page, [StartName, Limit]).
+
+fetch_page(Cn, RecName, StartName, Limit) ->
+    qfetch(Cn, RecName, fetch_page, [StartName, Limit]).
 
 %% @doc Return an ascii value, as a string, that sorts less or equal
 %% to any valid name.
@@ -236,10 +264,13 @@ first_page() ->
 %% (such as sequence ids and timestamps filled out).
 -spec insert(db_rec()) -> [db_rec()] | {error, _}.
 insert(Rec) ->
+    sqerl:with_db(fun (Cn) -> insert(Cn, Rec) end).
+
+insert(Cn, Rec) ->
     RecName = rec_name(Rec),
     InsertFields = RecName:'#insert_fields'(),
     Values = rec_to_vlist(Rec, InsertFields),
-    qfetch(RecName, insert, Values).
+    qfetch(Cn, RecName, insert, Values).
 
 %% @doc Insert record `Rec' using prepared query `RecName_insert'. The
 %% fields of `Rec' passed as parameters to the query are determined by
@@ -247,10 +278,13 @@ insert(Rec) ->
 %% count is returned.
 -spec cinsert(db_rec()) -> {ok, integer()} | {error, _}.
 cinsert(Rec) ->
+    sqerl:with_db(fun (Cn) -> cinsert(Cn, Rec) end).
+
+cinsert(Cn, Rec) ->
     RecName = rec_name(Rec),
     InsertFields = RecName:'#insert_fields'(),
     Values = rec_to_vlist(Rec, InsertFields),
-    cquery(RecName, insert, Values).
+    cquery(Cn, RecName, insert, Values).
 
 
 %% @doc Update record `Rec'. Uses the prepared query with name
@@ -264,11 +298,14 @@ cinsert(Rec) ->
 %% without making an additional round trip.
 -spec update(db_rec()) -> [db_rec()] | {error, _}.
 update(Rec) ->
+    sqerl:with_db(fun (Cn) -> update(Cn, Rec) end).
+
+update(Cn, Rec) ->
     RecName = rec_name(Rec),
     UpdateFields = RecName:'#update_fields'(),
     Values = rec_to_vlist(Rec, UpdateFields),
     Id = RecName:getval(id, Rec),
-    qfetch(RecName, update, Values ++ [Id]).
+    qfetch(Cn, RecName, update, Values ++ [Id]).
 
 %% @doc Delete the rows where the column identified by `By' matches
 %% the value as found in `Rec'. Typically, one would use `id' to
@@ -276,9 +313,12 @@ update(Rec) ->
 %% `RecName_delete_by_By' will be used.
 -spec delete(db_rec(), atom()) -> {ok, integer()} | {error, _}.
 delete(Rec, By) ->
+    sqerl:with_db(fun (Cn) -> delete(Cn, Rec, By) end).
+
+delete(Cn, Rec, By) ->
     RecName = rec_name(Rec),
     Id = RecName:getval(By, Rec),
-    cquery(RecName, ['delete_by_', By], [Id]).
+    cquery(Cn, RecName, ['delete_by_', By], [Id]).
 
 rec_to_vlist(Rec, Fields) ->
     RecName = rec_name(Rec),

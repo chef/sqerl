@@ -34,9 +34,7 @@
          is_connected/1,
          sql_parameter_style/0]).
 
--define(EPGSQL_TIMEOUT_ERROR, {error,error,<<"57014">>,
-                                  <<"canceling statement due to statement timeout">>,
-                                  []}).
+-define(EPGSQL_TIMEOUT_ERROR, #error{severity = error, code = <<"57014">>, codename = query_canceled}).
 -ifdef(TEST).
 -compile([export_all]).
 -endif.
@@ -322,15 +320,15 @@ pqc_fetch_internal(_Name, {ok, PrepQ}, Cache, _Con, _PrepareFun) ->
 prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
     case epgsql:parse(Connection, atom_to_list(Name), SQL, []) of
         {ok, Statement} ->
-            {ok, {statement, SName, Desc, DataTypes}} = epgsql:describe(Connection, Statement),
-            ColumnData = [ {CN, CT} || {column, CN, CT, _, _, _} <- Desc ],
+            {ok, #statement{name=SName, columns=Desc, types=DataTypes}} = epgsql:describe(Connection, Statement),
+            ColumnData = [ {CN, CT} || #column{name=CN, type=CT} <- Desc ],
             P = #prepared_statement{
               name = SName,
               input_types = DataTypes,
               output_fields = ColumnData,
               stmt = Statement},
             {ok, P};
-        {error, {error, error, _ErrorCode, Msg, Position}} ->
+        {error, #error{message=Msg, extra=Position}} ->
             {error, {syntax, {Msg, Position}}};
         Error ->
             %% TODO: Discover what errors can flow out of this, and write tests.
@@ -394,7 +392,7 @@ unpack_rows(ColumnNames, Rows) ->
 -spec extract_column_names({atom(), [#column{}]}) -> [any()].
 extract_column_names({result_column_data, Columns}) ->
     %% For column data coming from a query result
-    [Name || {column, Name, _Type, _Size, _Modifier, _Format} <- Columns];
+    [Name || #column{name=Name} <- Columns];
 extract_column_names({prepared_column_data, ColumnData}) ->
     %% For column data coming from a prepared statement
     [Name || {Name, _Type} <- ColumnData].
