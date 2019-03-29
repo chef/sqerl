@@ -19,6 +19,12 @@
 
 -define(FIRST(Record), {first_as_record, [Record, record_info(fields, Record)]}).
 
+-ifdef(fun_stacktrace).
+-define(GET_STACKTRACE, erlang:get_stacktrace()).
+-else.
+-define(GET_STACKTRACE, try throw(fake_stacktrace) catch _:_:S -> S end).
+-endif.
+
 -type sqerl_error() :: {error, term()} |
                         {conflict, term()} |
                         {foreign_key, term()}.
