@@ -19,6 +19,8 @@
 
 -module(sqerl_config_env).
 
+-include_lib("sqerl.hrl").
+
 -export([config/0]).
 
 %% utility exports
@@ -63,7 +65,7 @@ read_statements_from_config() ->
         read_statements(StatementSource)
     catch
         error:Reason ->
-            Msg = {incorrect_application_config, sqerl, {prepared_statements, Reason, erlang:get_stacktrace()}},
+            Msg = {incorrect_application_config, sqerl, {prepared_statements, Reason, ?GET_STACKTRACE}},
             error_logger:error_report(Msg),
             error(Msg)
     end.

@@ -1,6 +1,7 @@
 language: erlang
 
 otp_release:
+  - 21.0
   - 19.3
   - 18.3
   - 17.0 # 17.5 concrete PLT has some issues; dig into them
