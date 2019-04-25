@@ -14,11 +14,15 @@
 -define(TYPED_RECORDS, false).
 -endif.
 
+-type syntaxTree() :: [tuple()].
+-type record_field() :: [{record_field, integer(), {atom, integer(), atom()}}].
+-type record_types() :: [{atom(), {type, integer(), atom(), list()}}].
+
 -record(state, {
     module :: atom(), %% What module did we find?
     record :: atom(), %% What record did we find?
-    fields :: [{record_field, integer(), {atom, integer(), atom()}}], %% What fields are in the record
-    types = [] :: [{atom(), {type, integer(), atom(), list()}}], %% What types are they?
+    fields = [] :: record_field(), %% What fields are in the record
+    types = [] :: record_types(), %% What types are they?
     exports = [ %% Functions to export
         {fname(new), 0},
         {fname(get), 2},
@@ -27,12 +31,12 @@
         {fname(is), 1},
         {fname(set), 2}
     ] :: [{atom(), integer()}],
-    eof :: integer(), %% What line is EOF?
-    record_line :: integer(), %% What line did we find the record we care about?
+    eof = -1 :: integer(), %% What line is EOF?
+    record_line = -1 :: integer(), %% What line did we find the record we care about?
     typed_record = false :: boolean(), %% Is the record typed?
     append_ast = [] :: list(), %% Append AST
     debug_output = false :: boolean(), % Debug output
-    all_records_typed = ?TYPED_RECORDS :: boolean()
+    all_records_typed = false :: boolean()
 }).
 
 %% Debug Macros, set below to 'true' to see output
@@ -53,7 +57,7 @@ parse_transform(AST, Options) ->
 
     %% inspect_ast triggers a read only pass over the syntax tree to
     %% get some information about the module we're about to edit
-    InspectedState = inspect_ast(AST, #state{debug_output=Debug}),
+    InspectedState = inspect_ast(AST, #state{debug_output=Debug, all_records_typed=opaque_boolean(?TYPED_RECORDS)}),
 
     PopulatedState = who_types_the_untyped(InspectedState),
     ?DBG(Debug, "TheState: ~p", [PopulatedState]),
@@ -90,22 +94,23 @@ who_types_the_untyped(#state{types=[]}=TheState) ->
 who_types_the_untyped(TheState) ->
     TheState.
 
+-spec inspect_ast(syntaxTree(), #state{}) -> #state{}.
 inspect_ast([], TheState) -> TheState;
 inspect_ast([{eof, L}], TheState) -> TheState#state{eof=L};
-inspect_ast([{attribute, _Line, export, Exports}|T], #state{exports=Es}=TheState) ->
-    inspect_ast(T, TheState#state{exports = Es ++ Exports});
+inspect_ast([{attribute, _Line, export, Exports} | Tail], #state{exports=Es}=TheState) ->
+    inspect_ast(Tail, TheState#state{exports = Es ++ Exports});
 %% Module Directive
-inspect_ast([{attribute, _L, module, Module}|T], TheState) ->
-    inspect_ast(T, TheState#state{module=Module});
+inspect_ast([{attribute, _L, module, Module} | Tail], TheState) ->
+    inspect_ast(Tail, TheState#state{module=Module});
 %% Found a record, is it THE record?
 %% see how we're pattern matching for RecName and module?
-inspect_ast([{attribute, Line, record, {RecName, Fields}}|T],
-                          #state{module=RecName, all_records_typed=false} = TheState) ->
-    inspect_ast(T, TheState#state{record = RecName, fields = Fields, record_line=Line});
-inspect_ast([{attribute, Line, record, {RecName, Fields}}|Tail],
-                          #state{module=RecName,
-                                 all_records_typed=true,
-                                 types=TypeAcc} = TheState) ->
+inspect_ast([{attribute, Line, record, {RecName, Fields}} | Tail],
+            #state{module=RecName, all_records_typed=false} = TheState) ->
+    inspect_ast(Tail, TheState#state{record = RecName, fields = Fields, record_line=Line});
+inspect_ast([{attribute, Line, record, {RecName, Fields}} | Tail],
+            #state{module=RecName,
+                   all_records_typed=true,
+                   types=TypeAcc} = TheState) ->
     Type = lists:map(
              fun({typed_record_field, {record_field,_,{atom,_,A}}, T}) ->
                      {A, T};
@@ -113,31 +118,31 @@ inspect_ast([{attribute, Line, record, {RecName, Fields}}|Tail],
                      {A, T};
                 ({record_field, _, {atom,L,A}, _}) ->
                      {A, t_any(L)};
-            ({record_field, _, {atom,L,A}}) ->
+                ({record_field, _, {atom,L,A}}) ->
                      {A, t_any(L)}
              end, Fields),
 
     inspect_ast(Tail, TheState#state{record = RecName, fields = Fields, record_line=Line, types=lists:flatten([Type|TypeAcc]), typed_record=true});
 %% This line is here to see if the record is typed
-inspect_ast([{attribute, _Line, type, {{record, R}, RType,_}}|Tail],
-                   #state{types=TypeAcc, record=R}=TheState) ->
+inspect_ast([{attribute, _Line, type, {{record, R}, RType,_}} | Tail],
+            #state{types=TypeAcc, record=R}=TheState) ->
     Type = lists:map(
-         fun({typed_record_field, {record_field,_,{atom,_,A}}, T}) ->
-                {A, T};
-            ({typed_record_field, {record_field,_,{atom,_,A},_}, T}) ->
-                {A, T};
-            ({record_field, _, {atom,L,A}, _}) ->
-                {A, t_any(L)};
-            ({record_field, _, {atom,L,A}}) ->
-                {A, t_any(L)}
-         end, RType),
+             fun({typed_record_field, {record_field,_,{atom,_,A}}, T}) ->
+                     {A, T};
+                ({typed_record_field, {record_field,_,{atom,_,A},_}, T}) ->
+                     {A, T};
+                ({record_field, _, {atom,L,A}, _}) ->
+                     {A, t_any(L)};
+                ({record_field, _, {atom,L,A}}) ->
+                     {A, t_any(L)}
+             end, RType),
     inspect_ast(Tail, TheState#state{typed_record = true, types=lists:flatten([Type|TypeAcc])});
 %% Not the droids you're looking for, move along
-inspect_ast([_|T], TheState) ->
-    inspect_ast(T, TheState).
+inspect_ast([_|Tail], TheState) ->
+    inspect_ast(Tail, TheState).
 
 %% @private
-%%-spec walk_ast(Acc :: [syntaxTree()], [syntaxTree()], #state{}) -> {[syntaxTree()], #state{}}.
+%-spec walk_ast(Acc :: [syntaxTree()], [syntaxTree()], #state{}) -> {[syntaxTree()], #state{}}.
 walk_ast(Acc, [], _TheState) ->
     lists:reverse(Acc);
 %% EOF? Append the Sqerl_Rec abstractions
@@ -170,6 +175,7 @@ walk_ast(Acc, [H|T], TheState) ->
     walk_ast([H|Acc], T, TheState).
 
 %% Function name wrappers, in case we want to change the conventions
+-spec fname(atom()) -> atom().
 fname(new) -> '#new';
 fname(get) -> getval;
 fname(from_list) -> fromlist;
@@ -180,6 +186,7 @@ fname(Atom) when is_atom(Atom) ->
     "#" ++ atom_to_list(Atom)
   ).
 
+%-spec generate_our_functions(any(), #state{}) -> [tuple()].
 generate_our_functions(L, TheState) ->
     lists:reverse(
         lists:flatten([
@@ -347,6 +354,7 @@ f_set_(L, #state{record=RecName, fields=Fields}) ->
                                       {var, L, 'F'}]}]}]}
     ].
 
+-spec generate_types(any(),#state{}) -> [tuple()].
 generate_types(L, #state{record=RecName, fields=Fields, types=Types}) ->
     lists:reverse([
     %% Type one, the record!
@@ -370,6 +378,7 @@ bad_record_op(L, Fname, Val, R) ->
                 {cons, L, {var, L, R},
                  {nil, L}}}}]}.
 
+-spec massage_fields(record_field()) -> [any()].
 massage_fields(Fields) ->
     lists:map(
         fun({record_field,_, {atom,_,N}}) -> N;
@@ -423,3 +432,13 @@ t_list(L, Es)     -> {type, L, list, Es}.
 %t_tuple(L, Es)    -> {type, L, tuple, Es}.
 t_boolean(L)     -> {type, L, boolean, []}.
 t_record(L, A)   -> {type, L, record, [{atom, L, A}]}.
+
+%% This function exists to confuse dialyzer
+%-spec opaque_boolean(boolean()) -> boolean().
+opaque_boolean(V) ->
+    opaque_boolean_core(V, 100).
+
+opaque_boolean_core(V, 0) ->
+    V;
+opaque_boolean_core(V, X) when X > 0 ->
+    opaque_boolean_core(V xor true, X - 1).

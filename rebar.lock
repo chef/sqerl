@@ -1,0 +1,12 @@
+{"1.1.0",
+[{<<"envy">>,
+  {git,"git://github.com/manderson26/envy.git",
+       {ref,"0148fb4b7ed0e188511578e98b42d6e7dde0ebd1"}},
+  0},
+ {<<"epgsql">>,{pkg,<<"epgsql">>,<<"4.2.1">>},0},
+ {<<"pooler">>,{pkg,<<"pooler">>,<<"1.5.3">>},0}]}.
+[
+{pkg_hash,[
+ {<<"epgsql">>, <<"5B8A6C4EA3AE981E946798BE388D29434B0AC857E8B4B1E4CCB9ED726345D54B">>},
+ {<<"pooler">>, <<"898CD1FA301FC42D4A8ED598CE139B71CA85B54C16AB161152B5CC5FBDCFA1A8">>}]}
+].

@@ -19,6 +19,8 @@
 
 -module(sqerl_config_env).
 
+-include_lib("sqerl.hrl").
+
 -export([config/0]).
 
 %% utility exports
@@ -57,27 +59,13 @@ read_statements(Path) when is_list(Path) ->
     {ok, Statements} = file:consult(Path),
     Statements.
 
--ifdef(no_stacktrace).
-read_statements_from_config() ->
-    StatementSource = envy:get(sqerl, prepared_statements, any),
-    try
-        read_statements(StatementSource)
-    catch
-        error:Reason:Trace ->
-            Msg = {incorrect_application_config, sqerl, {prepared_statements, Reason, Trace}},
-            error_logger:error_report(Msg),
-            error(Msg)
-    end.
--else.
 read_statements_from_config() ->
     StatementSource = envy:get(sqerl, prepared_statements, any),
     try
         read_statements(StatementSource)
     catch
         error:Reason ->
-            Msg = {incorrect_application_config, sqerl, {prepared_statements, Reason, erlang:get_stacktrace()}},
+            Msg = {incorrect_application_config, sqerl, {prepared_statements, Reason, ?GET_STACKTRACE}},
             error_logger:error_report(Msg),
             error(Msg)
     end.
--endif.
-
