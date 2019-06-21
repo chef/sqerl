@@ -351,7 +351,7 @@ where_subs([Where|WhereList], ParamStyle, ParamPosOffset, WherePartsAcc, ValuesA
 %% Uses RE so can take string and binary as input
 %%
 
--define(SAFE_VALUE_RE, <<"^[A-Za-z0-9_() \*]*$">>).
+-define(SAFE_VALUE_RE, <<"^[A-Za-z0-9_(). \*]*$">>).
 
 %% @doc Checks that value(s) is(are) safe to use while generating SQL.
 %% Walks io lists.
