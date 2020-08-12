@@ -1,5 +1,9 @@
 language: erlang
 
+branches:
+  only:
+    - "master"
+
 otp_release:
   - 21.0
   - 19.3
@@ -7,7 +11,7 @@ otp_release:
   - 17.0 # 17.5 concrete PLT has some issues; dig into them
 
 addons:
-  postgresql: "9.3"
+  postgresql: 9.6
 
 install: true
 
