@@ -21,7 +21,7 @@
 
 -include_lib("sqerl.hrl").
 
--export([config/0]).
+-export([config/0, verify_ca/3]).
 
 %% utility exports
 -export([read_statements_from_config/0]).
@@ -31,18 +31,50 @@ config() ->
     IdleCheck = envy:get(sqerl, idle_check, 1000, non_neg_integer),
 
     Statements = read_statements_from_config(),
-
+    DbOptions = envy:get(sqerl, db_options, [], list),
+    DbOptions1 = handle_custom_ssl_options(DbOptions),
     %% The ip_mode key in the sqerl clause determines if we parse db_host as IPv4 or IPv6
     [{host, envy_parse:host_to_ip(sqerl, db_host)},
      {port, envy:get(sqerl, db_port, pos_integer)},
      {user, envy:get(sqerl, db_user, string)},
      {pass, envy:get(sqerl, db_pass, string)},
      {db, envy:get(sqerl, db_name, string)},
-     {extra_options, envy:get(sqerl, db_options, [], list)},
+     {extra_options, DbOptions1},
      {timeout, envy:get(sqerl,db_timeout, 5000, pos_integer)},
      {idle_check, IdleCheck},
      {prepared_statements, Statements},
      {column_transforms, envy:get(sqerl, column_transforms, list)}].
+
+
+-spec handle_custom_ssl_options(proplists:proplist()) -> proplists:proplist().
+handle_custom_ssl_options(DbOptions) ->
+    case proplists:get_value(ssl_opts, DbOptions) of
+        undefined ->
+            DbOptions;
+        SslOpts ->
+            case proplists:get_value(verify, SslOpts) of
+                verify_ca ->
+                    SslOptsNoVerify = proplists:delete(verify, SslOpts),
+                    SslNewOpts = [{verify, verify_peer}, {verify_fun, {fun sqerl_config_env:verify_ca/3, []}} | SslOptsNoVerify],
+                    lists:keyreplace(ssl_opts, 1, DbOptions, {ssl_opts, SslNewOpts});
+                _ ->
+                    DbOptions
+            end
+    end.
+
+verify_ca(_Cert, Event, UserState) ->
+    case Event of
+        {bad_cert, hostname_check_failed} ->
+            {valid, UserState};
+        {bad_cert, _} ->
+            {fail, Event};
+        {extension, _} ->
+            {unknown, UserState};
+        valid ->
+            {valid, UserState};
+        valid_peer ->
+            {valid, UserState}
+    end.
 
 %% @doc Prepared statements can be provides as a list of `{atom(), binary()}' tuples, as a
 %% path to a file that can be consulted for such tuples, or as `{M, F, A}' such that
