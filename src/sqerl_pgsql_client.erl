@@ -198,8 +198,9 @@ init(Config) ->
     %% and mark the connection as invalid.
     Opts = [ {database, Db},
              {port, Port},
-             {timeout, Timeout},
-             {req_timeout, Timeout + 100}
+             {timeout, Timeout}
+    %% TODO JSONB - re-sync and add this back in to epgsql
+    %%       {req_timeout, Timeout + 100}
              | ExtraOptions ],
     CTrans =
         case lists:keyfind(column_transforms, 1, Config) of
