@@ -22,7 +22,7 @@
 -module(sqerl_pgsql_client).
 
 -behaviour(sqerl_client).
-
+-compile(export_all).
 -include_lib("sqerl.hrl").
 -include_lib("epgsql/include/epgsql.hrl").
 
@@ -84,6 +84,7 @@ execute(SQL, Parameters, #state{cn=Cn}=State) when is_binary(SQL) ->
     TParameters = input_transforms(Parameters),
     case epgsql:equery(Cn, SQL, TParameters) of
         {ok, Columns, Rows} ->
+            io:fwrite("Columns: ~p ~n Rows: ~p ~n", [Columns, Rows]),
             {{ok, format_result(Columns, Rows)}, State};
         {ok, Count} ->
             {{ok, Count}, State};
@@ -112,6 +113,7 @@ execute_prepared({#prepared_statement{} = PrepStmt, Statements}, Parameters,
             % returned for update, delete, so sync db
             {ok, Count};
         [{ok, RowData}|_] when is_list(RowData) ->
+            % io:fwrite("~nPrepStmt: ~p~nRowData: ~p~n", [Stmt, RowData]),
             Rows = unpack_rows(PrepStmt, RowData),
             TRows = sqerl_transformers:by_column_name(Rows, CTrans),
             {ok, TRows};
@@ -323,8 +325,10 @@ pqc_fetch_internal(_Name, {ok, PrepQ}, Cache, _Con, _PrepareFun) ->
 prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
     case epgsql:parse(Connection, atom_to_list(Name), SQL, []) of
         {ok, Statement} ->
-            {ok, {statement, SName, Desc, DataTypes}} = epgsql:describe(Connection, Statement),
-            ColumnData = [ {CN, CT} || {column, CN, CT, _, _, _} <- Desc ],
+            % io:fwrite("OK Statement: ~p", [Statement]),
+            {ok, {statement, SName, Desc, DataTypes, _ParameterInfo}} = epgsql:describe(Connection, Statement),
+            ColumnData = [ {CN, CT} || {column, CN, CT, _, _, _, _, _, _} <- Desc ],
+            % io:fwrite("~nColumnData Prep: ~p~n", [ColumnData]),
             P = #prepared_statement{
               name = SName,
               input_types = DataTypes,
@@ -377,11 +381,14 @@ format_result(Columns, Rows) ->
 %% or from a simple query.
 -spec unpack_rows(#prepared_statement{} | [sqerl_sql()], [tuple()]) -> sqerl_rows().
 unpack_rows(#prepared_statement{output_fields=ColumnData}, Rows) ->
-    %% Takes in a prepared statement record that
-    %% holds column data that holds column names
-    Columns = extract_column_names({prepared_column_data, ColumnData}),
-    unpack_rows(Columns, Rows);
+    % io:fwrite("unpack: output_fields = ~p~n", [ColumnData]),
+     %% Takes in a prepared statement record that
+     %% holds column data that holds column names
+     Columns = extract_column_names({prepared_column_data, ColumnData}),
+      io:fwrite("unpack: Columns: ~p~n", [Columns]),
+     unpack_rows(Columns, Rows);
 unpack_rows(ColumnNames, Rows) ->
+      io:fwrite("unpack: ColumnNames: ~p~n", [ColumnNames]),
     %% Takes in a list of colum names
     [lists:zip(ColumnNames, tuple_to_list(Row)) || Row <- Rows].
 
@@ -395,9 +402,10 @@ unpack_rows(ColumnNames, Rows) ->
 -spec extract_column_names({atom(), [#column{}]}) -> [any()].
 extract_column_names({result_column_data, Columns}) ->
     %% For column data coming from a query result
-    [Name || {column, Name, _Type, _Size, _Modifier, _Format} <- Columns];
+    [Name || {column, Name, _Type, _Size, _Modifier, _Format, _, _, _} <- Columns];
 extract_column_names({prepared_column_data, ColumnData}) ->
     %% For column data coming from a prepared statement
+    %% io:fwrite("Input data: ~p~n", [ColumnData]),
     [Name || {Name, _Type} <- ColumnData].
 
 %%%
