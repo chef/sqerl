@@ -7,7 +7,7 @@
         ]).
 
 -define(TEST_DB_NAME, "sqerl_rec_test_db").
--define(TEST_DB_SCHEMA, "../test/sqerl_rec_test_db_schema.sql").
+-define(TEST_DB_SCHEMA, "test/sqerl_rec_test_db_schema.sql").
 -define(DB_HOST, "localhost").
 -define(DB_PORT, 5432).
 %% this one doesn't matter since we rely on local user authN w/ pg
