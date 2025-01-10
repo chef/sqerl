@@ -21,7 +21,7 @@
 
 -include_lib("sqerl.hrl").
 
--export([config/0, verify_ca/3]).
+-export([config/0, verify_ca/3, handle_custom_ssl_options/1]).
 
 %% utility exports
 -export([read_statements_from_config/0]).
