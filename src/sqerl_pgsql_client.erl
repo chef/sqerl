@@ -190,9 +190,17 @@ init(Config) ->
     {db, Db} = lists:keyfind(db, 1, Config),
     {prepared_statements, Statements} = lists:keyfind(prepared_statements, 1, Config),
     ExtraOptions  = proplists:get_value(extra_options, Config, []),
+    
+    %% Add PostgreSQL 16.1 specific options
+    PgOptions = [
+        {server_version, "16.1"},  %% Specify PostgreSQL 16.1 version
+        {application_name, "sqerl_pg16"},  %% Set application name for better monitoring
+        {timezone, "UTC"}  %% Ensure consistent timezone handling
+    ],
+    
     %% req_timeout indicates how long the client side will wait for a request to complete.
     %% It is set to the same as statement timeout (default_timeout in state) +250ms to provide time for
-    %% wire latency in a server-side cancel.  Postgres will get back to us to either cancel or finish the
+    %% wire latency in a server-side cancel. Postgres will get back to us to either cancel or finish the
     %% request in that time frame. Setting a slightly
     %% higher req_timeout ensures that when we've lost connectivity to postgres, we give up on the request
     %% and mark the connection as invalid.
@@ -200,27 +208,22 @@ init(Config) ->
              {port, Port},
              {timeout, Timeout},
              {req_timeout, Timeout + 100}
-             | ExtraOptions ],
+             | PgOptions ++ ExtraOptions ],
     CTrans =
         case lists:keyfind(column_transforms, 1, Config) of
             {column_transforms, CT} -> CT;
             false -> undefined
         end,
     case epgsql:connect(Host, User, Pass, Opts) of
-        %% epgsql/epgsql no longer handles connect timeouts. It's listed as a TODO in the
-        %% source
-        %% {error, timeout} ->
-        %%     {stop, timeout};
         {ok, Connection} ->
             %% Link to pid so if this process dies we clean up
             %% the socket
             erlang:link(Connection),
             {ok, Prepared} = load_statements(Statements),
             set_statement_timeout(Connection, Timeout),
+            %% Ensure we're using PostgreSQL 16 features
+            {ok, _, _} = epgsql:squery(Connection, <<"SHOW server_version">>),
             {ok, #state{cn=Connection, statements=Prepared, ctrans=CTrans, default_timeout=Timeout}};
-        %% I [jd] can't find any evidence of this clause in the wg/epgsql
-        %%{error, {syntax, Msg}} ->
-        %%    {stop, {syntax, Msg}};
         {error, Error} ->
             ErrorMsg = sqerl_pgsql_errors:translate(Error),
             error_logger:error_msg("Unable to start database connection: ~p~n", [ErrorMsg]),
