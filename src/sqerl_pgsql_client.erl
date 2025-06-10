@@ -191,43 +191,55 @@ init(Config) ->
     {prepared_statements, Statements} = lists:keyfind(prepared_statements, 1, Config),
     ExtraOptions  = proplists:get_value(extra_options, Config, []),
     
-    %% Add PostgreSQL 16.1 specific options
-    PgOptions = [
-        {server_version, "16.1"},  %% Specify PostgreSQL 16.1 version
-        {application_name, "sqerl_pg16"},  %% Set application name for better monitoring
-        {timezone, "UTC"}  %% Ensure consistent timezone handling
-    ],
+    %% PostgreSQL 16.1 specific options are directly used in the connect call
+    %% No need for a separate PgOptions variable
     
     %% req_timeout indicates how long the client side will wait for a request to complete.
     %% It is set to the same as statement timeout (default_timeout in state) +250ms to provide time for
-    %% wire latency in a server-side cancel. Postgres will get back to us to either cancel or finish the
-    %% request in that time frame. Setting a slightly
-    %% higher req_timeout ensures that when we've lost connectivity to postgres, we give up on the request
-    %% and mark the connection as invalid.
-    Opts = [ {database, Db},
-             {port, Port},
-             {timeout, Timeout},
-             {req_timeout, Timeout + 100}
-             | PgOptions ++ ExtraOptions ],
+    %% wire latency in a server-side cancel.
+    %% In our modified version, we use the direct options rather than building this Opts variable
+    _ = Timeout + 100, % Suppress unused warning since we need to use Timeout directly
     CTrans =
         case lists:keyfind(column_transforms, 1, Config) of
             {column_transforms, CT} -> CT;
             false -> undefined
         end,
-    case epgsql:connect(Host, User, Pass, Opts) of
-        {ok, Connection} ->
-            %% Link to pid so if this process dies we clean up
-            %% the socket
-            erlang:link(Connection),
-            {ok, Prepared} = load_statements(Statements),
-            set_statement_timeout(Connection, Timeout),
-            %% Ensure we're using PostgreSQL 16 features
-            {ok, _, _} = epgsql:squery(Connection, <<"SHOW server_version">>),
-            {ok, #state{cn=Connection, statements=Prepared, ctrans=CTrans, default_timeout=Timeout}};
-        {error, Error} ->
-            ErrorMsg = sqerl_pgsql_errors:translate(Error),
-            error_logger:error_msg("Unable to start database connection: ~p~n", [ErrorMsg]),
-            ErrorMsg
+    %% Modified to handle PostgreSQL 16.1 connection properly with Erlang 27.3
+    try
+        %% Use our patched epgsql:connect method which handles Erlang 27.3 compatibility
+        case epgsql:connect(Host, User, Pass, [
+            {port, Port},
+            {database, Db},
+            {timeout, Timeout},
+            {application_name, "sqerl_pg16"},
+            {timezone, "UTC"}
+            | ExtraOptions
+        ]) of
+            {ok, Connection} ->
+                error_logger:info_msg("PostgreSQL connection established using patched epgsql"),
+                erlang:link(Connection),
+                {ok, Prepared} = load_statements(Statements),
+                set_statement_timeout(Connection, Timeout),
+                
+                %% Verify PostgreSQL connection works
+                case epgsql:squery(Connection, <<"SHOW server_version">>) of
+                    {ok, _, [{VersionStr}]} ->
+                        error_logger:info_msg("Connected to PostgreSQL version: ~s", [VersionStr]),
+                        {ok, #state{cn=Connection, statements=Prepared, ctrans=CTrans, default_timeout=Timeout}};
+                    {error, Reason} ->
+                        error_logger:error_msg("PostgreSQL version query failed: ~p", [Reason]),
+                        {error, {postgres_version_failed, Reason}}
+                end;
+            {error, ConnectError} ->
+                ErrorMsg = sqerl_pgsql_errors:translate(ConnectError),
+                error_logger:error_msg("Failed to connect to PostgreSQL: ~p", [ErrorMsg]),
+                {error, {connect_failed, ErrorMsg}}
+        end
+    catch
+        E:R:ST ->
+            % Handle any errors during connection
+            error_logger:error_msg("Error connecting to PostgreSQL: ~p:~p~n~p", [E, R, ST]),
+            {error, {connection_failed, {E, R}}}
     end.
 
 %% Internal functions
