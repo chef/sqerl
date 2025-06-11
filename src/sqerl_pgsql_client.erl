@@ -392,11 +392,13 @@ extract_column_data(Desc) ->
         ({column, CN, CT, _, _, _}) -> {CN, CT};
         % New format with 7 elements (PostgreSQL 16.1)
         ({column, CN, CT, _, _, _, _}) -> {CN, CT};
-        % Special case for the ping column format with 8 elements
+        % Special case for 8 elements
         ({column, CN, CT, _, _, _, _, _}) -> {CN, CT};
+        % Special case for PostgreSQL 16.1 with 9 elements
+        ({column, CN, CT, _, _, _, _, _, _}) -> {CN, CT};
         % Fallback for any other format we might encounter
         (Other) -> 
-            error_logger:info_msg("Unknown column format: ~p", [Other]), 
+            error_logger:error_msg("Unknown column format: ~p", [Other]), 
             {undefined, undefined}
     end, Desc).
 
