@@ -390,10 +390,14 @@ extract_column_data(Desc) ->
     lists:map(fun
         % Old format with 6 elements
         ({column, CN, CT, _, _, _}) -> {CN, CT};
-        % New format with 7 or more elements (PostgreSQL 16.1)
+        % New format with 7 elements (PostgreSQL 16.1)
         ({column, CN, CT, _, _, _, _}) -> {CN, CT};
+        % Special case for the ping column format with 8 elements
+        ({column, CN, CT, _, _, _, _, _}) -> {CN, CT};
         % Fallback for any other format we might encounter
-        (Other) -> error_logger:error_msg("Unknown column format: ~p", [Other]), {undefined, undefined}
+        (Other) -> 
+            error_logger:info_msg("Unknown column format: ~p", [Other]), 
+            {undefined, undefined}
     end, Desc).
 
 %% @doc Call DB to unprepare a previously prepared statement.
