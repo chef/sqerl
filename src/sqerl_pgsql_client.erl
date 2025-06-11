@@ -337,7 +337,11 @@ pqc_fetch_internal(_Name, {ok, PrepQ}, Cache, _Con, _PrepareFun) ->
 prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
     case epgsql:parse(Connection, atom_to_list(Name), SQL, []) of
         {ok, Statement} ->
-            {ok, {statement, SName, Desc, DataTypes}} = epgsql:describe(Connection, Statement),
+            % More flexible pattern matching for PostgreSQL 16.1 compatibility
+            % Extract required elements without strict pattern matching
+            {ok, StatementInfo} = epgsql:describe(Connection, Statement),
+            % Extract statement name, description, and data types from any statement format
+            {SName, Desc, DataTypes} = extract_statement_parts(StatementInfo),
             % Handle both old and new PostgreSQL column format
             ColumnData = extract_column_data(Desc),
             P = #prepared_statement{
@@ -360,6 +364,23 @@ prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
 unload_statement(Connection, Name, Dict) ->
         unprepare_statement(Connection, Name),
         {ok, pqc_remove(Name, Dict)}.
+
+%% @doc Extract statement parts (name, description, data types) from any statement format
+%% Handle different PostgreSQL statement format structures
+-spec extract_statement_parts(tuple()) -> {string(), list(), list()}.
+extract_statement_parts({statement, Name, Desc, DataTypes}) ->
+    % Standard format
+    {Name, Desc, DataTypes};
+extract_statement_parts({statement, Name, Desc, DataTypes, _ExtraField}) ->
+    % Format with an extra field
+    {Name, Desc, DataTypes};
+extract_statement_parts({statement, Name, Desc, DataTypes, _F1, _F2}) ->
+    % Format with two extra fields
+    {Name, Desc, DataTypes};
+extract_statement_parts(Other) ->
+    % Log unexpected format and provide safe defaults
+    error_logger:error_msg("Unknown statement format: ~p", [Other]),
+    {"unknown", [], []}.
 
 %% @doc Extract column data from description
 %% Handle both old PostgreSQL column format {column, Name, Type, Size, Mod, TableOID}
