@@ -338,7 +338,8 @@ prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
     case epgsql:parse(Connection, atom_to_list(Name), SQL, []) of
         {ok, Statement} ->
             {ok, {statement, SName, Desc, DataTypes}} = epgsql:describe(Connection, Statement),
-            ColumnData = [ {CN, CT} || {column, CN, CT, _, _, _} <- Desc ],
+            % Handle both old and new PostgreSQL column format
+            ColumnData = extract_column_data(Desc),
             P = #prepared_statement{
               name = SName,
               input_types = DataTypes,
@@ -359,6 +360,20 @@ prepare_statement(Connection, Name, SQL) when is_atom(Name) ->
 unload_statement(Connection, Name, Dict) ->
         unprepare_statement(Connection, Name),
         {ok, pqc_remove(Name, Dict)}.
+
+%% @doc Extract column data from description
+%% Handle both old PostgreSQL column format {column, Name, Type, Size, Mod, TableOID}
+%% and new PostgreSQL 16 format {column, Name, Type, Size, Mod, TableOID, ColumnNum}
+-spec extract_column_data(list()) -> list().
+extract_column_data(Desc) ->
+    lists:map(fun
+        % Old format with 6 elements
+        ({column, CN, CT, _, _, _}) -> {CN, CT};
+        % New format with 7 or more elements (PostgreSQL 16.1)
+        ({column, CN, CT, _, _, _, _}) -> {CN, CT};
+        % Fallback for any other format we might encounter
+        (Other) -> error_logger:error_msg("Unknown column format: ~p", [Other]), {undefined, undefined}
+    end, Desc).
 
 %% @doc Call DB to unprepare a previously prepared statement.
 -spec unprepare_statement(connection(), atom()) -> ok.
