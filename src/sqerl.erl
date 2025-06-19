@@ -120,6 +120,8 @@ statement(StmtName, StmtArgs, XformName, XformArgs) ->
             {ok, N, Rows};
         {conflict, Message} ->
             {conflict, Message};
+        {foreign_key, Message} ->
+            {foreign_key, Message};
         {error, Reason} ->
             parse_error(Reason)
     end.
