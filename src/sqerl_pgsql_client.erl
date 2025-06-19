@@ -567,7 +567,26 @@ unpack_rows(#prepared_statement{output_fields=ColumnData}, Rows) ->
     unpack_rows(Columns, Rows);
 unpack_rows(ColumnNames, Rows) ->
     %% Takes in a list of colum names
-    [lists:zip(ColumnNames, tuple_to_list(Row)) || Row <- Rows].
+    [begin
+         RowData = tuple_to_list(Row),
+         case {length(ColumnNames), length(RowData)} of
+             {ColLen, RowLen} when ColLen =:= RowLen ->
+                 lists:zip(ColumnNames, RowData);
+             {0, _} ->
+                 %% Handle case where we have no column names
+                 error_logger:error_msg("Error: No column names available for row data: ~p", [RowData]),
+                 [];
+             {ColLen, RowLen} ->
+                 %% Handle case where column and row lengths don't match
+                 error_logger:error_msg("Error: Column names and row data length mismatch: ~p columns, ~p row values", 
+                                       [ColLen, RowLen]),
+                 %% Use min length to avoid zip error
+                 MinLen = erlang:min(ColLen, RowLen),
+                 TruncatedCols = lists:sublist(ColumnNames, MinLen),
+                 TruncatedRow = lists:sublist(RowData, MinLen),
+                 lists:zip(TruncatedCols, TruncatedRow)
+         end
+     end || Row <- Rows].
 
 %% @doc Extract column names from column data.
 %% Column data comes in two forms: as part of a result set,
