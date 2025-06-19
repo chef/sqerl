@@ -149,10 +149,11 @@ handle_error_response({error, {error, error, <<"23503">>, foreign_key_violation,
     end;
 
 handle_error_response({error,{error,error,<<"23505">>,unique_violation,
-                          Message,
+                          _Message,
                           [{constraint_name,<<"checksums_pkey">>}|_]}}) ->
-    % This is specifically for checksums_pkey constraint violations
-    {conflict, Message};
+    % Return the specific format expected by mark_checksums_as_uploaded
+    % To fix case_clause,{conflict,Message} we need to return exactly {conflict, _}
+    {conflict, <<"checksums constraint violation">>};
 
 % Handle timeout errors
 handle_error_response({error, timeout}) ->
@@ -161,9 +162,9 @@ handle_error_response({error, ?EPGSQL_TIMEOUT_ERROR}) ->
     {error, timeout};
 
 % Handle Postgres 16.1 map-based error format
-handle_error_response({error, #{code := <<"23505">>, constraint_name := <<"checksums_pkey">>, message := Message}}) ->
-    % Special handling for checksums_pkey constraint
-    {conflict, Message};
+handle_error_response({error, #{code := <<"23505">>, constraint_name := <<"checksums_pkey">>, message := _Message}}) ->
+    % Special handling for checksums_pkey constraint - consistent format
+    {conflict, <<"checksums constraint violation">>};
 
 handle_error_response({error, Error = #{code := Code, codename := _, message := Message}}) ->
     case Code of
@@ -228,9 +229,10 @@ handle_error_response([{error, {error, error, <<"23503">>, foreign_key_violation
     end;
 
 % Add special case for checksums_pkey in list context
-handle_error_response([{error, {error, error, <<"23505">>, unique_violation, Message, 
+handle_error_response([{error, {error, error, <<"23505">>, unique_violation, _Message, 
                        [{constraint_name, <<"checksums_pkey">>}|_]}}|_]) ->
-    {conflict, Message};
+    % Return consistent {conflict, _} format for checksums_pkey
+    {conflict, <<"checksums constraint violation">>};
 
 % Handle list-context Postgres 16.1 errors
 handle_error_response([{error, Error = #{code := Code, codename := _, message := Message}}|_]) ->

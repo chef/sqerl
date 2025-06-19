@@ -118,6 +118,8 @@ statement(StmtName, StmtArgs, XformName, XformArgs) ->
             {ok, N, Rows};
         {ok, N, Rows} when is_number(N) ->
             {ok, N, Rows};
+        {conflict, Message} ->
+            {conflict, Message};
         {error, Reason} ->
             parse_error(Reason)
     end.
