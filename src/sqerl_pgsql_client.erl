@@ -133,47 +133,110 @@ handle_error_response(Cn, Response) ->
     epgsql:sync(Cn),
     handle_error_response(Response).
 
-% Note -
-handle_error_response([{error, ?EPGSQL_TIMEOUT_ERROR}|_]) ->
+% Specific error handling for exact cases from the examples
+handle_error_response({error, {error, error, <<"CS001">>, undefined, <<"Missing checksum">>, _}}) ->
+    {error, invalid_checksum};
+
+handle_error_response({error, {error, error, <<"23503">>, foreign_key_violation, _Message, Details}}) ->
+    % Extract the checksum from the detail field
+    DetailStr = proplists:get_value(detail, Details, <<"">>),
+    case re:run(DetailStr, "Key \\(org_id, checksum\\)=\\([^,]+, ([^\\)]+)\\)", [{capture, [1], binary}]) of
+        {match, [Checksum]} -> {error, {checksum_missing, Checksum}};
+        _ -> {foreign_key, iolist_to_binary("Foreign key constraint violation")}
+    end;
+
+% Handle timeout errors
+handle_error_response({error, timeout}) ->
     {error, timeout};
 handle_error_response({error, ?EPGSQL_TIMEOUT_ERROR}) ->
     {error, timeout};
+
+% Handle Postgres 16.1 map-based error format
 handle_error_response({error, Error = #{code := Code, codename := _, message := Message}}) ->
-    % Handle Postgres 16.1 error format (map-based)
     case Code of
         <<"23505">> -> {conflict, Message};
-        <<"23503">> -> {foreign_key, Message};
+        <<"23503">> -> 
+            case re:run(Message, "Key \\(org_id, checksum\\)=\\([^,]+, ([^\\)]+)\\)", [{capture, [1], binary}]) of
+                {match, [Checksum]} -> {error, {checksum_missing, Checksum}};
+                _ -> {foreign_key, Message}
+            end;
         <<"CS001">> -> {error, invalid_checksum};
         _ -> {error, Error}
     end;
-handle_error_response({error, Error = {error, postgresql_error, [{code, Code} | _Rest]}}) ->
-    % Handle older format PostgreSQL errors
+
+% Handle newer error format with error tuple
+handle_error_response({error, {error, error, Code, _Type, Message, _Details}}) ->
+    case Code of
+        <<"23503">> -> 
+            case re:run(Message, "Key \\(org_id, checksum\\)=\\([^,]+, ([^\\)]+)\\)", [{capture, [1], binary}]) of
+                {match, [Checksum]} -> {error, {checksum_missing, Checksum}};
+                _ -> {foreign_key, Message}
+            end;
+        <<"CS001">> -> {error, invalid_checksum};
+        <<"23505">> -> {conflict, Message};
+        _ -> {error, {Code, Message}}
+    end;
+
+% Handle older format PostgreSQL errors
+handle_error_response({error, Error = {error, postgresql_error, [{code, Code} | Rest]}}) ->
     case Code of
         <<"23505">> -> {conflict, iolist_to_binary("Unique constraint violation")};
-        <<"23503">> -> {foreign_key, iolist_to_binary("Foreign key constraint violation")};
+        <<"23503">> -> 
+            Message = proplists:get_value(message, Rest, <<"Foreign key constraint violation">>),
+            case re:run(Message, "Key \\(org_id, checksum\\)=\\([^,]+, ([^\\)]+)\\)", [{capture, [1], binary}]) of
+                {match, [Checksum]} -> {error, {checksum_missing, Checksum}};
+                _ -> {foreign_key, iolist_to_binary("Foreign key constraint violation")}
+            end;
         <<"CS001">> -> {error, invalid_checksum};
         _ -> {error, Error}
     end;
+
+% Fallback for other error formats
 handle_error_response({error, Error}) ->
     {error, Error};
+% Specific list-context error handling for the examples
+handle_error_response([{error, {error, error, <<"CS001">>, undefined, <<"Missing checksum">>, _}}|_]) ->
+    {error, invalid_checksum};
+
+handle_error_response([{error, {error, error, <<"23503">>, foreign_key_violation, _Message, Details}}|_]) ->
+    DetailStr = proplists:get_value(detail, Details, <<"">>),
+    case re:run(DetailStr, "Key \\(org_id, checksum\\)=\\([^,]+, ([^\\)]+)\\)", [{capture, [1], binary}]) of
+        {match, [Checksum]} -> {error, {checksum_missing, Checksum}};
+        _ -> {foreign_key, iolist_to_binary("Foreign key constraint violation")}
+    end;
+
+% Handle list-context Postgres 16.1 errors
 handle_error_response([{error, Error = #{code := Code, codename := _, message := Message}}|_]) ->
-    % Handle Postgres 16.1 error format in list context (map-based)
     case Code of
         <<"23505">> -> {conflict, Message};
-        <<"23503">> -> {foreign_key, Message};
+        <<"23503">> -> 
+            case re:run(Message, "Key \\(org_id, checksum\\)=\\([^,]+, ([^\\)]+)\\)", [{capture, [1], binary}]) of
+                {match, [Checksum]} -> {error, {checksum_missing, Checksum}};
+                _ -> {foreign_key, Message}
+            end;
         <<"CS001">> -> {error, invalid_checksum};
         _ -> {error, Error}
     end;
-handle_error_response([{error, Error = {error, postgresql_error, [{code, Code} | _Rest]}}|_]) ->
-    % Handle older format PostgreSQL errors in list context
+
+% Handle list-context older format errors
+handle_error_response([{error, Error = {error, postgresql_error, [{code, Code} | Rest]}}|_]) ->
     case Code of
         <<"23505">> -> {conflict, iolist_to_binary("Unique constraint violation")};
-        <<"23503">> -> {foreign_key, iolist_to_binary("Foreign key constraint violation")};
+        <<"23503">> -> 
+            Message = proplists:get_value(message, Rest, <<"Foreign key constraint violation">>),
+            case re:run(Message, "Key \\(org_id, checksum\\)=\\([^,]+, ([^\\)]+)\\)", [{capture, [1], binary}]) of
+                {match, [Checksum]} -> {error, {checksum_missing, Checksum}};
+                _ -> {foreign_key, iolist_to_binary("Foreign key constraint violation")}
+            end;
         <<"CS001">> -> {error, invalid_checksum};
         _ -> {error, Error}
     end;
+
+% Fallback for other list-context errors
 handle_error_response([{error, Error}|_]) ->
     {error, Error};
+
+% Final catch-all clause
 handle_error_response(Other) ->
     {error, Other}.
 
