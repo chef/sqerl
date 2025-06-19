@@ -143,6 +143,7 @@ handle_error_response({error, Error = #{code := Code, codename := _, message := 
     case Code of
         <<"23505">> -> {conflict, Message};
         <<"23503">> -> {foreign_key, Message};
+        <<"CS001">> -> {error, invalid_checksum};
         _ -> {error, Error}
     end;
 handle_error_response({error, Error = {error, postgresql_error, [{code, Code} | _Rest]}}) ->
@@ -150,6 +151,7 @@ handle_error_response({error, Error = {error, postgresql_error, [{code, Code} | 
     case Code of
         <<"23505">> -> {conflict, iolist_to_binary("Unique constraint violation")};
         <<"23503">> -> {foreign_key, iolist_to_binary("Foreign key constraint violation")};
+        <<"CS001">> -> {error, invalid_checksum};
         _ -> {error, Error}
     end;
 handle_error_response({error, Error}) ->
@@ -159,6 +161,7 @@ handle_error_response([{error, Error = #{code := Code, codename := _, message :=
     case Code of
         <<"23505">> -> {conflict, Message};
         <<"23503">> -> {foreign_key, Message};
+        <<"CS001">> -> {error, invalid_checksum};
         _ -> {error, Error}
     end;
 handle_error_response([{error, Error = {error, postgresql_error, [{code, Code} | _Rest]}}|_]) ->
@@ -166,6 +169,7 @@ handle_error_response([{error, Error = {error, postgresql_error, [{code, Code} |
     case Code of
         <<"23505">> -> {conflict, iolist_to_binary("Unique constraint violation")};
         <<"23503">> -> {foreign_key, iolist_to_binary("Foreign key constraint violation")};
+        <<"CS001">> -> {error, invalid_checksum};
         _ -> {error, Error}
     end;
 handle_error_response([{error, Error}|_]) ->
