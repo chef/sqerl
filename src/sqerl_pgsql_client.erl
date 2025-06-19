@@ -138,8 +138,32 @@ handle_error_response([{error, ?EPGSQL_TIMEOUT_ERROR}|_]) ->
     {error, timeout};
 handle_error_response({error, ?EPGSQL_TIMEOUT_ERROR}) ->
     {error, timeout};
+handle_error_response({error, Error = #{code := Code, codename := _, message := Message}}) ->
+    % Handle Postgres 16.1 error format (map-based)
+    case Code of
+        <<"23505">> -> {conflict, Message};
+        _ -> {error, Error}
+    end;
+handle_error_response({error, Error = {error, postgresql_error, [{code, Code} | _Rest]}}) ->
+    % Handle older format PostgreSQL errors
+    case Code of
+        <<"23505">> -> {conflict, iolist_to_binary("Unique constraint violation")};
+        _ -> {error, Error}
+    end;
 handle_error_response({error, Error}) ->
     {error, Error};
+handle_error_response([{error, Error = #{code := Code, codename := _, message := Message}}|_]) ->
+    % Handle Postgres 16.1 error format in list context (map-based)
+    case Code of
+        <<"23505">> -> {conflict, Message};
+        _ -> {error, Error}
+    end;
+handle_error_response([{error, Error = {error, postgresql_error, [{code, Code} | _Rest]}}|_]) ->
+    % Handle older format PostgreSQL errors in list context
+    case Code of
+        <<"23505">> -> {conflict, iolist_to_binary("Unique constraint violation")};
+        _ -> {error, Error}
+    end;
 handle_error_response([{error, Error}|_]) ->
     {error, Error};
 handle_error_response(Other) ->
