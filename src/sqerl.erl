@@ -97,6 +97,10 @@ select(StmtName, StmtArgs, XformName, XformArgs) ->
             {ok, Results};
         {ok, Count, Results} ->
             {ok, Count, Results};
+        {conflict, Message} ->
+            {conflict, Message};
+        {foreign_key, Message} ->
+            {foreign_key, Message};
         {error, Reason} ->
             parse_error(Reason)
     end.
