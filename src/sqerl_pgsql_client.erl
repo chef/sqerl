@@ -160,12 +160,20 @@ handle_error_response({error, ?EPGSQL_TIMEOUT_ERROR}) ->
 
 % Handle Postgres 16.1 map-based error format
 handle_error_response({error, #{code := Code, message := Message} = Error}) ->
+    error_logger:info_msg("PG16 error format: ~p~n", [{Code, Message}]),
     case Code of
-        <<"23505">> -> {conflict, Message};
+        <<"23505">> -> 
+            error_logger:info_msg("PG16 unique violation: ~p~n", [Message]),
+            {conflict, Message};
         <<"23503">> -> 
+            error_logger:info_msg("PG16 foreign key violation: ~p~n", [Message]),
+            % Special case for cookbook version checksum missing error
             case re:run(Message, "Key \\(org_id, checksum\\)=\\([^,]+, ([^\\)]+)\\)", [{capture, [1], binary}]) of
-                {match, [Checksum]} -> {error, {checksum_missing, Checksum}};
-                _ -> {foreign_key, Message}
+                {match, [Checksum]} -> 
+                    {error, {checksum_missing, Checksum}};
+                _ -> 
+                    % Handle cookbook_versions_cookbook_id_fkey and all other foreign key violations 
+                    {foreign_key, Message}
             end;
         <<"CS001">> -> {error, invalid_checksum};
         _ -> {error, Error}
