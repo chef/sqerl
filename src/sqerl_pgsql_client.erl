@@ -144,7 +144,12 @@ handle_error_response({error, {error, error, <<"23503">>, foreign_key_violation,
     % Extract the checksum from the detail field
     DetailStr = proplists:get_value(detail, Details, <<"">>),
     case re:run(DetailStr, "Key \\(org_id, checksum\\)=\\([^,]+, ([^\\)]+)\\)", [{capture, [1], binary}]) of
-        {match, [Checksum]} -> {error, {checksum_missing, Checksum}};
+        {match, [Checksum]} ->
+            % Check for cookbook_version_checksums reference
+            case binary:match(DetailStr, <<"cookbook_version_checksums">>) of
+                nomatch -> {error, {checksum_missing, Checksum}};
+                _ -> {foreign_key, Message}
+            end;
         _ -> {foreign_key, Message}
     end;
 
@@ -166,15 +171,8 @@ handle_error_response({error, #{code := Code, message := Message} = Error}) ->
             error_logger:info_msg("PG16 unique violation: ~p~n", [Message]),
             {conflict, Message};
         <<"23503">> -> 
-            error_logger:info_msg("PG16 foreign key violation: ~p~n", [Message]),
-            % Special case for cookbook version checksum missing error
-            case re:run(Message, "Key \\(org_id, checksum\\)=\\([^,]+, ([^\\)]+)\\)", [{capture, [1], binary}]) of
-                {match, [Checksum]} -> 
-                    {error, {checksum_missing, Checksum}};
-                _ -> 
-                    % Handle cookbook_versions_cookbook_id_fkey and all other foreign key violations 
-                    {foreign_key, Message}
-            end;
+            % Return {foreign_key, Message} for all foreign key violations
+            {foreign_key, Message};
         <<"CS001">> -> {error, invalid_checksum};
         _ -> {error, Error}
     end;
