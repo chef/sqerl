@@ -180,10 +180,8 @@ handle_error_response({error, #{code := Code, message := Message} = Error}) ->
 handle_error_response({error, {error, error, Code, _Type, Message, _Details}}) ->
     case Code of
         <<"23503">> -> 
-            case re:run(Message, "Key \\(org_id, checksum\\)=\\([^,]+, ([^\\)]+)\\)", [{capture, [1], binary}]) of
-                {match, [Checksum]} -> {error, {checksum_missing, Checksum}};
-                _ -> {foreign_key, Message}
-            end;
+            % Return {foreign_key, Message} for all foreign key violations
+            {foreign_key, Message};
         <<"CS001">> -> {error, invalid_checksum};
         <<"23505">> -> {conflict, Message};
         _ -> {error, {Code, Message}}
@@ -197,10 +195,8 @@ handle_error_response({error, Error = {error, postgresql_error, [{code, Code} | 
             {conflict, Message};
         <<"23503">> -> 
             Message = proplists:get_value(message, Rest, <<"Foreign key constraint violation">>),
-            case re:run(Message, "Key \\(org_id, checksum\\)=\\([^,]+, ([^\\)]+)\\)", [{capture, [1], binary}]) of
-                {match, [Checksum]} -> {error, {checksum_missing, Checksum}};
-                _ -> {foreign_key, Message}
-            end;
+            % Return {foreign_key, Message} for all foreign key violations
+            {foreign_key, Message};
         <<"CS001">> -> {error, invalid_checksum};
         _ -> {error, Error}
     end;
@@ -212,12 +208,9 @@ handle_error_response({error, Error}) ->
 handle_error_response([{error, {error, error, <<"CS001">>, undefined, <<"Missing checksum">>, _}}|_]) ->
     {error, invalid_checksum};
 
-handle_error_response([{error, {error, error, <<"23503">>, foreign_key_violation, Message, Details}}|_]) ->
-    DetailStr = proplists:get_value(detail, Details, <<"">>),
-    case re:run(DetailStr, "Key \\(org_id, checksum\\)=\\([^,]+, ([^\\)]+)\\)", [{capture, [1], binary}]) of
-        {match, [Checksum]} -> {error, {checksum_missing, Checksum}};
-        _ -> {foreign_key, Message}
-    end;
+handle_error_response([{error, {error, error, <<"23503">>, foreign_key_violation, Message, _Details}}|_]) ->
+    % Return {foreign_key, Message} for all foreign key violations
+    {foreign_key, Message};
 
 % Handle unique constraint violations consistently in list context
 handle_error_response([{error, {error, error, <<"23505">>, unique_violation, Message, _Details}}|_]) ->
