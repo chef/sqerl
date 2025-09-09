@@ -68,6 +68,28 @@ verify_ca(_Cert, Event, UserState) ->
             {valid, UserState};
         {bad_cert, _} ->
             {fail, Event};
+        %% Subject Alternative Name - critical for hostname checking
+        {extension, {'Extension', {2,5,29,17}, _, _}} ->
+            {valid, UserState};
+        %% Basic Constraints
+        {extension, {'Extension', {2,5,29,19}, _, _}} ->
+            {valid, UserState};
+        %% Subject Key Identifier
+        {extension, {'Extension', {2,5,29,14}, _, _}} ->
+            {valid, UserState};
+        %% Authority Key Identifier
+        {extension, {'Extension', {2,5,29,35}, _, _}} ->
+            {valid, UserState};
+        %% CRL Distribution Points
+        {extension, {'Extension', {2,5,29,31}, _, _}} ->
+            {valid, UserState};
+        %% Extended Key Usage
+        {extension, {'Extension', {2,5,29,37}, _, _}} ->
+            {valid, UserState};
+        %% Key Usage
+        {extension, {'Extension', {2,5,29,15}, _, _}} ->
+            {valid, UserState};
+        %% Any other extension - mark as unknown
         {extension, _} ->
             {unknown, UserState};
         valid ->
