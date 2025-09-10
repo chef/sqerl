@@ -68,8 +68,12 @@ verify_ca(_Cert, Event, UserState) ->
             {valid, UserState};
         {bad_cert, _} ->
             {fail, Event};
+        %% customers have multiple extensions that are causing failure.  
+        %% erlang ssl is not able to verify the extensions, and neither are we - 
+        %% but we can't reject the request based on not being able to verify the extension, 
+        %% because that will break real-world usage.
         {extension, _} ->
-            {unknown, UserState};
+            {valid, UserState};
         valid ->
             {valid, UserState};
         valid_peer ->
