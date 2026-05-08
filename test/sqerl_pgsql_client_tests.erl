@@ -104,3 +104,73 @@ stub_prepare_statement(stub_pid, _Name, Query) ->
     {ok, {stub_prep_q, Query}};
 stub_prepare_statement(_, _, _) ->
     error(unexpect_stub_call).
+
+%% Tests for handle_error_response/1 with the new epgsql 6-element #error tuple format.
+%%
+%% Old epgsql #error record had 4 fields (severity, code, message, extra) -> 5-element tuple.
+%% New epgsql #error record has 5 fields (severity, code, codename, message, extra) -> 6-element tuple.
+%%
+%% execute_batch/3 returns results as a list, so errors arrive as the list form:
+%%   [{error, #error{}}]  =>  [{error, {error, Sev, Code, Codename, Msg, Extra}}]
+%%
+%% The list-form catch-all previously returned the raw 6-element tuple, which then
+%% failed all downstream pattern matches in sqerl and bifrost_db, causing a
+%% case_clause crash and a 500 instead of a 404 for non-existent authz targets.
+handle_error_response_6tuple_test_() ->
+    Msg22004 = <<"null value cannot be assigned to variable \"target_id\" declared NOT NULL">>,
+    Extra22004 = [{file, <<"pl_exec.c">>}, {line, <<"5081">>},
+                  {routine, <<"exec_assign_value">>}, {severity, <<"ERROR">>}],
+
+    [
+     %% --- list form (execute_batch path) ---
+
+     {"list-form 6-tuple: generic code (22004) extracts {Code, Message}",
+      fun() ->
+          Input = [{error, {error, error, <<"22004">>, null_value_not_allowed,
+                            Msg22004, Extra22004}}],
+          ?assertEqual({error, {<<"22004">>, Msg22004}},
+                       sqerl_pgsql_client:handle_error_response(Input))
+      end},
+
+     {"list-form 6-tuple: not_null_violation (23502) extracts {Code, Message}",
+      fun() ->
+          Msg = <<"null value in column \"foo\" violates not-null constraint">>,
+          Input = [{error, {error, error, <<"23502">>, not_null_violation, Msg, []}}],
+          ?assertEqual({error, {<<"23502">>, Msg}},
+                       sqerl_pgsql_client:handle_error_response(Input))
+      end},
+
+     {"list-form 6-tuple: unique_violation (23505) returns {conflict, Message}",
+      fun() ->
+          Msg = <<"duplicate key value violates unique constraint \"foo_pkey\"">>,
+          Input = [{error, {error, error, <<"23505">>, unique_violation, Msg, []}}],
+          ?assertEqual({conflict, Msg},
+                       sqerl_pgsql_client:handle_error_response(Input))
+      end},
+
+     {"list-form 6-tuple: foreign_key_violation (23503) returns {foreign_key, Message}",
+      fun() ->
+          Msg = <<"insert or update on table \"foo\" violates foreign key constraint">>,
+          Input = [{error, {error, error, <<"23503">>, foreign_key_violation, Msg, []}}],
+          ?assertEqual({foreign_key, Msg},
+                       sqerl_pgsql_client:handle_error_response(Input))
+      end},
+
+     %% --- single form (non-batch path) - regression guard ---
+
+     {"single-form 6-tuple: generic code (22004) extracts {Code, Message}",
+      fun() ->
+          Input = {error, {error, error, <<"22004">>, null_value_not_allowed,
+                           Msg22004, Extra22004}},
+          ?assertEqual({error, {<<"22004">>, Msg22004}},
+                       sqerl_pgsql_client:handle_error_response(Input))
+      end},
+
+     {"single-form 6-tuple: unique_violation (23505) returns {conflict, Message}",
+      fun() ->
+          Msg = <<"duplicate key value violates unique constraint \"foo_pkey\"">>,
+          Input = {error, {error, error, <<"23505">>, unique_violation, Msg, []}},
+          ?assertEqual({conflict, Msg},
+                       sqerl_pgsql_client:handle_error_response(Input))
+      end}
+    ].

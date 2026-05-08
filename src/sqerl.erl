@@ -415,10 +415,19 @@ parse_error(_DbType, {error, Reason} = Error) when is_atom(Reason) ->
     Error;
 parse_error(pgsql, {error, error, Code, Message, _Extra}) ->
     do_parse_error({Code, Message}, ?PGSQL_ERROR_CODES);
+% New epgsql added a 'codename' field to #error{}, yielding a 6-element tuple.
+% Match both old (5-element) and new (6-element) shapes.
+parse_error(pgsql, {error, error, Code, _Codename, Message, _Extra}) ->
+    do_parse_error({Code, Message}, ?PGSQL_ERROR_CODES);
 parse_error(pgsql, {error,               % error from sqerl
                     {error,              % error record marker from epgsql
                      _Severity,          % Severity
                      Code, Message, _Extra}}) ->
+    do_parse_error({Code, Message}, ?PGSQL_ERROR_CODES);
+parse_error(pgsql, {error,               % error from sqerl
+                    {error,              % error record marker from epgsql (new 6-element form)
+                     _Severity,          % Severity
+                     Code, _Codename, Message, _Extra}}) ->
     do_parse_error({Code, Message}, ?PGSQL_ERROR_CODES);
 parse_error(_, Error) ->
     case Error of

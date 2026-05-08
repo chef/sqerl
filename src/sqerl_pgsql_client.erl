@@ -248,6 +248,22 @@ handle_error_response([{error, Error = {error, postgresql_error, [{code, Code} |
         _ -> {error, Error}
     end;
 
+% Generic handler for new epgsql 6-element #error tuple in list context (execute_batch path).
+% New epgsql added a 'codename' field to #error{}, making it a 6-element tuple:
+%   {error, Severity, Code, Codename, Message, Extra}
+% vs the old 5-element:
+%   {error, Severity, Code, Message, Extra}
+% Without this clause the catch-all below returns the raw tuple, which then fails
+% all downstream pattern matches in sqerl:parse_error and bifrost_db, causing a
+% case_clause crash instead of a proper {error, {Code, Message}} that callers expect.
+handle_error_response([{error, {error, error, Code, _Codename, Message, _Details}}|_]) ->
+    case Code of
+        <<"23503">> -> {foreign_key, Message};
+        <<"CS001">> -> {error, invalid_checksum};
+        <<"23505">> -> {conflict, Message};
+        _ -> {error, {Code, Message}}
+    end;
+
 % Fallback for other list-context errors
 handle_error_response([{error, Error}|_]) ->
     {error, Error};
