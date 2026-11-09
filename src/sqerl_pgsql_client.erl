@@ -301,7 +301,11 @@ unprepare(Name, #state{cn=Cn, statements=Statements}=State) ->
 sql_parameter_style() -> dollarn.
 
 is_connected(#state{cn=Cn}=State) ->
-    case catch epgsql:squery(Cn, ?PING_QUERY) of
+    case try epgsql:squery(Cn, ?PING_QUERY)
+         catch
+             throw:Thrown -> Thrown;
+             _:_ -> false
+         end of
         {ok, _, _} ->
             {true, State};
         _ ->
